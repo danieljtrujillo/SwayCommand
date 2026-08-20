@@ -12,6 +12,8 @@ import { renderMarkdown, slugify } from './markdown.js';
 import { createSampler } from './audio/sampler.js';
 import { createSynth, PRESET_NAMES, TABLE_NAMES, MOD_SOURCES, MOD_DESTS } from './audio/synth.js';
 import { RANGES as fxRanges, DECKS as fxDecks } from './engine/fxrack.js';
+import { createTransport } from './audio/transport.js';
+import { createProjectStore } from './project/projectstore.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -855,6 +857,7 @@ function applyKnobShim() {
 
 function updateHud() {
   applyKnobShim();
+  if (state.transport) state.transport.update();
   if (state.screen === 'studio') {
     // The analyser is shared, so the meter reflects whatever source is live.
     state.audio.update(1 / 60);
@@ -1015,6 +1018,9 @@ async function main() {
   // The synth shares the sampler's routing: heard on the speakers and mixed
   // into the analyser, so playing it drives the visuals.
   state.synth = createSynth(state.audio.ctx, audioOuts);
+  // Timeline playback rides the same bus, so the backing track drives the
+  // visuals through the one analyser like every other sound in the app.
+  state.transport = createTransport(state.audio.ctx, audioOuts);
 
   // A pad strike plays its sample and feeds the visuals; the raw note plays
   // the synth, so the Sway is an instrument as well as a controller.
@@ -1038,6 +1044,29 @@ async function main() {
   state.engine.attachAudio(state.audio);
   state.engine.attachControl(state.midi.control);
 
+  state.projectStore = createProjectStore({
+    engine: state.engine,
+    audio: state.audio,
+    sampler: state.sampler,
+    synth: state.synth,
+    transport: state.transport,
+    midi: state.midi,
+    setSynthEnabled: (v) => {
+      state.synthEnabled = v;
+      const el = $('#synth-enable');
+      if (el) el.checked = v;
+    },
+  });
+  // Interim visual-lane routing until the assignment router owns it: seeks
+  // and play starts cut, clip boundaries honor the clip's transition.
+  state.transport.onVisualClip(({ clip, cause }) => {
+    if (cause === 'boundary' && clip.transition.type === 'crossfade') {
+      state.engine.setScene(clip.scene, clip.transition.duration);
+    } else {
+      state.engine.cutTo(clip.scene);
+    }
+  });
+
   // restore learned MIDI bindings
   const settings = await window.akswayj.settings.get();
   if (settings.midiOverrides) state.midi.setOverrides(settings.midiOverrides);
@@ -1049,7 +1078,16 @@ async function main() {
   // Automation handle. The page CSP admits no remote or inline script, so this
   // is reachable only from the app's own bundle and from AKSWAYJ_PROBE, which
   // is how the build is verified headlessly (see docs/ENVIRONMENT.md).
-  window.__akswayj = { state, studio, openStudio, openDocs, renderPads, renderSamples };
+  window.__akswayj = {
+    state,
+    studio,
+    openStudio,
+    openDocs,
+    renderPads,
+    renderSamples,
+    transport: state.transport,
+    projectStore: state.projectStore,
+  };
 
   wireDoctor();
   wireProjects();
