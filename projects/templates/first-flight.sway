@@ -1,0 +1,226 @@
+{
+  "format": "sway",
+  "format_version": 1,
+  "app_version": "",
+  "audio_mode": "linked",
+  "created_at": null,
+  "modified_at": null,
+  "project": {
+    "meta": {
+      "id": "first-flight",
+      "name": "First Flight",
+      "description": "The out-of-the-box show. Every scene in rotation, forgiving fades, a palette that flatters any music. Wave a hand over the Sway — or just move the mouse — and you are performing.",
+      "author": "",
+      "vibe": "welcoming",
+      "bpmHint": 0,
+      "pairsWith": null,
+      "template": true
+    },
+    "palette": [
+      "#ff2d95",
+      "#7a0bc0",
+      "#2de1fc",
+      "#f9f871",
+      "#ff6b35"
+    ],
+    "engine": {
+      "quality": "med",
+      "fxEnabled": false,
+      "autoVJ": {
+        "enabled": true,
+        "pool": [
+          "beams",
+          "swarm",
+          "ribbons",
+          "voxels",
+          "warp",
+          "nebula",
+          "mandelbulb",
+          "cymatic",
+          "vjshader"
+        ],
+        "minHold": 20,
+        "maxHold": 45,
+        "fadeTime": 5
+      },
+      "start": {
+        "scene": "beams"
+      }
+    },
+    "fx": {
+      "params": {}
+    },
+    "synth": {
+      "enabled": true,
+      "preset": "Init",
+      "patch": null
+    },
+    "media": [],
+    "sampler": {
+      "kit": {
+        "version": 1,
+        "pads": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      "knobs": {
+        "master": 0.5,
+        "cutoff": 0.5,
+        "rate": 0.5,
+        "send": 0.5
+      }
+    },
+    "timeline": {
+      "loop": {
+        "enabled": false,
+        "start": 0,
+        "end": 0
+      },
+      "locators": [],
+      "tracks": [
+        {
+          "id": "audio-1",
+          "type": "audio",
+          "name": "Audio",
+          "gain": 1,
+          "muted": false,
+          "clips": []
+        },
+        {
+          "id": "visual-1",
+          "type": "visual",
+          "name": "Scenes",
+          "clips": []
+        }
+      ]
+    },
+    "assignments": {
+      "version": 1,
+      "noteRouting": {
+        "synth": "unassigned"
+      },
+      "pads": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "knobs": [
+        {
+          "target": "engine:hue",
+          "min": 0,
+          "max": 1,
+          "curve": "detent"
+        },
+        {
+          "target": "engine:fadeTime",
+          "min": 1,
+          "max": 8,
+          "curve": "linear"
+        },
+        {
+          "target": "engine:intensity",
+          "min": 0,
+          "max": 1,
+          "curve": "linear"
+        },
+        null,
+        {
+          "target": "sampler:master",
+          "min": 0,
+          "max": 1,
+          "curve": "linear"
+        },
+        {
+          "target": "sampler:cutoff",
+          "min": 0,
+          "max": 1,
+          "curve": "linear"
+        },
+        {
+          "target": "sampler:rate",
+          "min": 0,
+          "max": 1,
+          "curve": "linear"
+        },
+        {
+          "target": "sampler:send",
+          "min": 0,
+          "max": 1,
+          "curve": "linear"
+        }
+      ],
+      "buttons": [
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        }
+      ],
+      "gestures": []
+    },
+    "midiOverrides": {}
+  }
+}
