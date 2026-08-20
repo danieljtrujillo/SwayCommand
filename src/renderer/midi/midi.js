@@ -110,6 +110,10 @@ export async function createMidi({ onEvent } = {}) {
       // CC 1 is the modulation wheel by convention; the synth uses it as a
       // mod-matrix source.
       if (d1 === 1 && onEvent) onEvent({ kind: 'mod', value: d2 / 127 });
+      // Every CC also goes out as an event: the router matches button
+      // bindings and touch-to-select on it — continuous state alone lands
+      // silently in `control`, which the UI cannot observe per-control.
+      if (onEvent) onEvent({ kind: 'cc', cc: d1, value: d2 / 127, channel: ch, target });
       pushMonitor(`CC${d1}=${d2} ch${ch + 1}${target ? ' → ' + target : ''}`);
     } else if (type === 0x90 && d2 > 0) {
       const idx = padIndexFor(d1);
@@ -122,13 +126,15 @@ export async function createMidi({ onEvent } = {}) {
         onEvent({ kind: 'pad', idx, vel: d2 / 127 });
         // The raw note goes out too: pads drive the visuals, but the synth
         // needs the actual pitch, including notes outside the pad range that
-        // the Sway's Theory Engine sends.
-        onEvent({ kind: 'note', note: d1, vel: d2 / 127, channel: ch });
+        // the Sway's Theory Engine sends. idx rides along so note routing
+        // can tell an assigned pad from a free pitch.
+        onEvent({ kind: 'note', note: d1, vel: d2 / 127, channel: ch, idx });
       }
     } else if (type === 0x80 || (type === 0x90 && d2 === 0)) {
-      // Pads decay in the engine, but a synth voice has to be released.
+      // Pads decay in the engine, but a synth voice has to be released —
+      // and a gate-mode pad needs its index to release the sampler.
       pushMonitor(`NOTE OFF ${d1} ch${ch + 1}`);
-      if (onEvent) onEvent({ kind: 'noteoff', note: d1, channel: ch });
+      if (onEvent) onEvent({ kind: 'noteoff', note: d1, channel: ch, idx: padIndexFor(d1) });
     } else if (type === 0xe0) {
       // Pitch bend: 14-bit little-endian, centre 8192 -> 0.5.
       const value = ((d2 << 7) | d1) / 16383;

@@ -87,10 +87,16 @@ export function createProjectStore(deps) {
         state.mediaLoading--;
       }
     }
-    // Pads restore once every kit sample had its chance to load.
+    // Pads restore once every kit sample had its chance to load. A filled
+    // kit pad must also fire from hardware, so it gets a sample assignment
+    // unless the project already routes that pad elsewhere.
     if (kitIds.size) {
       const result = sampler.setKit(p.sampler.kit);
       for (const name of result.missing || []) state.warnings.push(`kit: ${name} missing`);
+      const padsA = p.assignments.pads;
+      p.sampler.kit.pads.forEach((pad, i) => {
+        if (pad && pad.id && !padsA[i]) padsA[i] = { type: 'sample', pad: i };
+      });
     }
   }
 

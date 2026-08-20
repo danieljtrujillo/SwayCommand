@@ -14,6 +14,7 @@ import { createSynth, PRESET_NAMES, TABLE_NAMES, MOD_SOURCES, MOD_DESTS } from '
 import { RANGES as fxRanges, DECKS as fxDecks } from './engine/fxrack.js';
 import { createTransport } from './audio/transport.js';
 import { createProjectStore } from './project/projectstore.js';
+import { createRouter } from './control/router.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -32,6 +33,9 @@ const state = {
   midi: null,
   audio: null,
   engine: null,
+  transport: null,
+  router: null,
+  projectStore: null,
   helpVisible: false,
   monitorVisible: false,
 };
@@ -412,6 +416,12 @@ async function restoreKit(saved) {
     }
   }
   state.sampler.setKit(saved);
+  // A restored kit pad must also fire from hardware: give every filled pad a
+  // sample assignment unless the project already says otherwise.
+  const pads = state.router.getAssignments().pads;
+  (saved.pads || []).forEach((pad, i) => {
+    if (pad && pad.id && !pads[i]) pads[i] = { type: 'sample', pad: i };
+  });
   if (missing.length) {
     console.warn('[kit] missing sample files:', missing.join(', '));
   }
@@ -498,7 +508,7 @@ function renderModMatrix() {
 function wireSynth() {
   $('#synth-enable').addEventListener('change', (e) => {
     state.synthEnabled = e.target.checked;
-    if (!state.synthEnabled) state.synth.allNotesOff();
+    state.router.synthEnabled = e.target.checked;
   });
 
   $('#synth-preset').addEventListener('change', (e) => {
@@ -831,33 +841,7 @@ function startPerformance(project) {
   bumpHelpBar();
 }
 
-// Interim, replaced by the assignment router: mirror hardware knobs 0-2 onto
-// the engine params they used to be hardwired to. Change-driven so an idle
-// knob never stomps a project's fadeTime or a UI edit.
-const knobShim = { last: null };
-function applyKnobShim() {
-  const k = state.midi.control.knobs;
-  if (!knobShim.last) {
-    knobShim.last = [k[0], k[1], k[2]];
-    return;
-  }
-  if (k[0] !== knobShim.last[0]) {
-    knobShim.last[0] = k[0];
-    state.engine.params.hue = k[0] === 0.5 ? 0 : k[0];
-  }
-  if (k[1] !== knobShim.last[1]) {
-    knobShim.last[1] = k[1];
-    state.engine.autoVJ.fadeTime = 1 + k[1] * 7;
-  }
-  if (k[2] !== knobShim.last[2]) {
-    knobShim.last[2] = k[2];
-    state.engine.params.intensity = k[2];
-  }
-}
-
 function updateHud() {
-  applyKnobShim();
-  if (state.transport) state.transport.update();
   if (state.screen === 'studio') {
     // The analyser is shared, so the meter reflects whatever source is live.
     state.audio.update(1 / 60);
@@ -990,10 +974,17 @@ function wirePerform() {
       if (pad >= 0 && !e.repeat) {
         state.midi.control.pads[pad] = 0.9;
         state.midi.control.lastPad = pad;
-        state.sampler.trigger(pad, 0.9);
+        state.router.handleMidiEvent({ kind: 'pad', idx: pad, vel: 0.9 });
       }
     }
     bumpHelpBar();
+  });
+
+  // Gate-mode pads need the key release; the router no-ops for other modes.
+  window.addEventListener('keyup', (e) => {
+    if (state.screen !== 'perform') return;
+    const pad = PAD_KEYS.indexOf(e.key.toLowerCase());
+    if (pad >= 0) state.router.handleMidiEvent({ kind: 'noteoff', idx: pad });
   });
 
   $('#btn-back').addEventListener('click', () => {
@@ -1022,27 +1013,32 @@ async function main() {
   // visuals through the one analyser like every other sound in the app.
   state.transport = createTransport(state.audio.ctx, audioOuts);
 
-  // A pad strike plays its sample and feeds the visuals; the raw note plays
-  // the synth, so the Sway is an instrument as well as a controller.
+  // Every MIDI event goes to the assignment router — one dispatch path for
+  // hardware, keyboard pads, and the timeline alike.
   state.midi = await createMidi({
     onEvent: (e) => {
-      if (e.kind === 'pad' && e.idx >= 0) {
-        state.sampler.trigger(e.idx, e.vel);
-        if (state.screen === 'studio') flashPad(e.idx);
-      } else if (e.kind === 'note') {
-        if (state.synthEnabled) state.synth.noteOn(e.note, e.vel);
-      } else if (e.kind === 'noteoff') {
-        state.synth.noteOff(e.note);
-      } else if (e.kind === 'bend') {
-        state.synth.pitchBend(e.value);
-      } else if (e.kind === 'mod') {
-        state.synth.modulation(e.value);
-      }
+      if (state.router) state.router.handleMidiEvent(e);
+      if (e.kind === 'pad' && e.idx >= 0 && state.screen === 'studio') flashPad(e.idx);
     },
   });
   state.engine = createEngine({ canvas: $('#stage'), quality: 'med' });
   state.engine.attachAudio(state.audio);
   state.engine.attachControl(state.midi.control);
+
+  state.router = createRouter({
+    engine: state.engine,
+    sampler: state.sampler,
+    synth: state.synth,
+    transport: state.transport,
+    midi: state.midi,
+    onDirty: () => state.projectStore && state.projectStore.markDirty(),
+  });
+  state.router.onSynthToggle((v) => {
+    state.synthEnabled = v;
+    const el = $('#synth-enable');
+    if (el) el.checked = v;
+  });
+  state.engine.setFrameHook(state.router.frame);
 
   state.projectStore = createProjectStore({
     engine: state.engine,
@@ -1051,20 +1047,13 @@ async function main() {
     synth: state.synth,
     transport: state.transport,
     midi: state.midi,
+    router: state.router,
     setSynthEnabled: (v) => {
       state.synthEnabled = v;
+      state.router.synthEnabled = v;
       const el = $('#synth-enable');
       if (el) el.checked = v;
     },
-  });
-  // Interim visual-lane routing until the assignment router owns it: seeks
-  // and play starts cut, clip boundaries honor the clip's transition.
-  state.transport.onVisualClip(({ clip, cause }) => {
-    if (cause === 'boundary' && clip.transition.type === 'crossfade') {
-      state.engine.setScene(clip.scene, clip.transition.duration);
-    } else {
-      state.engine.cutTo(clip.scene);
-    }
   });
 
   // restore learned MIDI bindings
@@ -1087,6 +1076,7 @@ async function main() {
     renderSamples,
     transport: state.transport,
     projectStore: state.projectStore,
+    router: state.router,
   };
 
   wireDoctor();
