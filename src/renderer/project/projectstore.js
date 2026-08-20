@@ -131,7 +131,10 @@ export function createProjectStore(deps) {
     applySamplerKnobs();
 
     state.loading = false;
-    loadMediaAsync();
+    if (deps.onApplied) deps.onApplied();
+    loadMediaAsync().then(() => {
+      if (deps.onMediaLoaded) deps.onMediaLoaded();
+    });
     return warnings;
   }
 

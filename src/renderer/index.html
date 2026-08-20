@@ -9,183 +9,177 @@
 </head>
 <body>
 
-  <!-- BOOT / DOCTOR -->
-  <section id="screen-boot" class="screen">
-    <div class="boot-wrap">
-      <header class="boot-head">
-        <div class="logo">AK<span>SWAY</span>J</div>
-        <div class="tagline">Gesture VJ instrument for the Audima Labs Sway</div>
-        <div class="version" id="boot-version"></div>
-      </header>
-      <div class="boot-status" id="boot-status">Checking your system…</div>
-      <ul id="check-list" class="check-list"></ul>
-      <footer class="boot-actions">
-        <button class="btn btn-ghost" id="btn-recheck">Re-run checks</button>
-        <div class="boot-actions-right">
-          <button class="btn btn-ghost" data-open-studio>Studio</button>
-          <button class="btn btn-ghost" data-open-docs>Documentation</button>
-          <button class="btn btn-primary" id="btn-enter" disabled>Enter AKSWAYJ →</button>
-        </div>
-      </footer>
-    </div>
-  </section>
-
-  <!-- PROJECT PICKER -->
-  <section id="screen-projects" class="screen">
-    <div class="projects-wrap">
-      <header class="projects-head">
-        <div class="logo logo-small">AK<span>SWAY</span>J</div>
-        <div class="projects-hint">Pick a project. Everything is playable instantly — hand over the Sway, mouse, keys, or any MIDI controller.</div>
-        <div class="projects-actions">
-          <button class="btn btn-ghost btn-small" data-open-studio>Studio</button>
-          <button class="btn btn-ghost btn-small" data-open-docs>Documentation</button>
-        </div>
-      </header>
-      <div id="project-grid" class="project-grid"></div>
-    </div>
-  </section>
-
-  <!-- STUDIO: audio source + kit builder -->
-  <section id="screen-studio" class="screen">
-    <div class="studio-wrap">
-      <header class="studio-head">
-        <div class="logo logo-small">AK<span>SWAY</span>J</div>
-        <div class="studio-title">Studio</div>
-        <button class="btn btn-ghost btn-small" id="btn-studio-close">Close</button>
-      </header>
-
-      <div class="studio-cols">
-        <section class="panel">
-          <h2>Audio source</h2>
-          <p class="panel-hint">The analysis source that drives every scene. Triggered stems are always mixed in on top.</p>
-          <div class="source-now">
-            <span class="pill pill-on" id="studio-source">—</span>
-            <div class="meter"><i id="studio-meter"></i></div>
-          </div>
-          <ul class="source-list" id="source-list"></ul>
-          <button class="btn btn-ghost btn-small" id="btn-refresh-sources">Refresh devices</button>
-          <p class="panel-note" id="system-audio-note"></p>
-        </section>
-
-        <section class="panel">
-          <h2>Kit builder</h2>
-          <p class="panel-hint">Load stems and one-shots, then click a pad to assign the selected sample. Pads play from the Sway, from Z X C V B N M , and from this grid.</p>
-          <div class="kit-actions">
-            <button class="btn btn-primary btn-small" id="btn-add-samples">Add stems…</button>
-            <button class="btn btn-ghost btn-small" id="btn-clear-pad">Clear pad</button>
-            <button class="btn btn-ghost btn-small" id="btn-save-kit">Save kit</button>
-          </div>
-          <div class="kit-body">
-            <div>
-              <div class="kit-label">Samples</div>
-              <ul class="sample-list" id="sample-list"></ul>
-            </div>
-            <div>
-              <div class="kit-label">Pads <span id="pad-selected"></span></div>
-              <div class="pad-grid" id="pad-grid"></div>
-              <div class="pad-opts">
-                <label>Mode
-                  <select id="pad-mode">
-                    <option value="oneshot">One-shot</option>
-                    <option value="loop">Loop</option>
-                    <option value="gate">Gate</option>
-                  </select>
-                </label>
-                <label>Gain <input type="range" id="pad-gain" min="0" max="1.5" step="0.01" value="1"></label>
-                <label>Choke <input type="number" id="pad-choke" min="0" max="8" step="1" placeholder="—"></label>
-              </div>
-            </div>
-          </div>
-          <p class="panel-note" id="kit-note"></p>
-        </section>
+  <div id="cockpit">
+    <header id="topbar">
+      <div id="mark">AK<span>SWAY</span>J</div>
+      <button id="project-btn" class="cham" title="Project"></button>
+      <div id="transport">
+        <button id="t-play" class="cham" title="Play / pause (P)">▶</button>
+        <button id="t-stop" class="cham" title="Stop">■</button>
+        <span id="t-clock">00:00.0</span>
+        <button id="t-loop" class="cham" title="Loop (L)">LOOP</button>
       </div>
+      <span id="scene-now"></span>
+      <div id="status">
+        <span class="pill" id="pill-link"></span>
+        <span class="pill" id="pill-in"></span>
+        <span class="pill pill-dim" id="pill-fps"></span>
+      </div>
+      <nav id="deckbar">
+        <button class="cham" data-drawer="synth" title="S">SYNTH</button>
+        <button class="cham" data-drawer="rack" title="R">RACK</button>
+        <button class="cham" data-drawer="kit" title="E">KIT</button>
+        <button class="cham" id="btn-docs" title="D">DOCS</button>
+        <button class="cham" id="btn-help" title="H">HELP</button>
+      </nav>
+    </header>
 
-      <section class="panel fx-panel">
-        <div class="fx-head">
-          <h2>Synth</h2>
-          <label class="fx-toggle"><input type="checkbox" id="synth-enable" checked> Play from MIDI</label>
-          <label class="fx-toggle">Preset
-            <select id="synth-preset"></select>
-          </label>
-          <span class="pill pill-dim" id="synth-voices">0 voices</span>
+    <aside id="rail-left" class="framed">
+      <div class="rail-label">SCENES</div>
+      <ul id="scene-bank"></ul>
+      <div class="rail-label">AUTO</div>
+      <div id="auto-box">
+        <button id="auto-toggle" class="cham">RUN</button>
+        <label>HOLD <input type="number" id="auto-min" min="1" max="600" step="1"> – <input type="number" id="auto-max" min="1" max="1200" step="1"></label>
+        <label>FADE <input type="number" id="auto-fade" min="0" max="60" step="0.5"></label>
+      </div>
+    </aside>
+
+    <main id="stagecell">
+      <canvas id="stage"></canvas>
+      <svg id="door" viewBox="0 0 1000 560" preserveAspectRatio="none" aria-hidden="true">
+        <g id="door-left">
+          <rect x="0" y="0" width="500" height="560" fill="var(--door-fill)" />
+          <path d="M 500 0 V 200 C 420 208 420 352 500 360 V 560" fill="none" stroke="var(--line)" stroke-width="2" vector-effect="non-scaling-stroke" />
+          <path d="M 30 30 H 440 L 470 60 V 180 L 380 180" fill="none" stroke="var(--line-dim)" vector-effect="non-scaling-stroke" />
+          <path d="M 30 530 H 440 L 470 500 V 380 L 380 380" fill="none" stroke="var(--line-dim)" vector-effect="non-scaling-stroke" />
+          <path id="lock-left" d="M 470 280 C 466 200 560 200 560 280" fill="none" stroke="var(--line)" stroke-width="2" vector-effect="non-scaling-stroke" />
+        </g>
+        <g id="door-right">
+          <rect x="500" y="0" width="500" height="560" fill="var(--door-fill)" />
+          <path d="M 500 0 V 200 C 580 208 580 352 500 360 V 560" fill="none" stroke="var(--line)" stroke-width="2" vector-effect="non-scaling-stroke" />
+          <path d="M 970 30 H 560 L 530 60 V 180 L 620 180" fill="none" stroke="var(--line-dim)" vector-effect="non-scaling-stroke" />
+          <path d="M 970 530 H 560 L 530 500 V 380 L 620 380" fill="none" stroke="var(--line-dim)" vector-effect="non-scaling-stroke" />
+          <path id="lock-right" d="M 530 280 C 534 360 440 360 440 280" fill="none" stroke="var(--line)" stroke-width="2" vector-effect="non-scaling-stroke" />
+        </g>
+      </svg>
+      <div id="notice"></div>
+    </main>
+
+    <aside id="rail-right">
+      <section id="assign" class="framed">
+        <header id="assign-target"></header>
+        <div id="assign-body"></div>
+      </section>
+      <section id="input-box" class="framed">
+        <div class="rail-label">INPUT</div>
+        <button id="input-src" title="Analysis source"></button>
+        <div class="meter"><i id="input-meter"></i></div>
+        <canvas id="input-wave"></canvas>
+      </section>
+    </aside>
+
+    <section id="timeline">
+      <canvas id="tl-ruler"></canvas>
+      <div id="tl-visual" class="tl-lane" data-lane="visual"></div>
+      <canvas id="tl-audio"></canvas>
+      <div id="tl-playhead"></div>
+    </section>
+
+    <section id="swaydeck"></section>
+  </div>
+
+  <aside id="drawer" hidden>
+    <header id="drawer-head">
+      <button class="btn btn-ghost btn-small" id="drawer-close">✕</button>
+    </header>
+    <div id="drawer-body">
+      <div id="deck-synth" hidden>
+        <div class="deck-controls">
+          <label class="fx-toggle"><input type="checkbox" id="synth-enable" checked> MIDI</label>
+          <label class="fx-toggle">PRESET <select id="synth-preset"></select></label>
+          <span class="pill pill-dim" id="synth-voices">0</span>
         </div>
-        <p class="panel-hint">A wavetable synth in the box, matching the ground Vital covers — the free synth Audima recommends to first-timers. The Sway plays it; so does the on-screen keyboard below.</p>
         <div class="synth-keys" id="synth-keys"></div>
         <div class="fx-decks" id="synth-decks"></div>
         <div class="synth-matrix">
-          <div class="kit-label">Modulation matrix <button class="btn btn-ghost btn-small" id="btn-mod-add">Add row</button></div>
+          <div class="kit-label">MATRIX <button class="btn btn-ghost btn-small" id="btn-mod-add">ADD</button></div>
           <div id="mod-rows"></div>
         </div>
-      </section>
-
-      <section class="panel fx-panel">
-        <div class="fx-head">
-          <h2>Effects rack</h2>
-          <label class="fx-toggle"><input type="checkbox" id="fx-enable"> Enable</label>
-          <button class="btn btn-ghost btn-small" id="btn-fx-reset">Reset all</button>
+      </div>
+      <div id="deck-rack" hidden>
+        <div class="deck-controls">
+          <label class="fx-toggle"><input type="checkbox" id="fx-enable"> ACTIVE</label>
+          <button class="btn btn-ghost btn-small" id="btn-fx-reset">RESET</button>
         </div>
-        <p class="panel-hint">The VJ-9000 decks, applied to the finished frame. The rack stays out of the render path until enabled.</p>
         <div class="fx-decks" id="fx-decks"></div>
-      </section>
-    </div>
-  </section>
-
-  <!-- DOCUMENTATION -->
-  <section id="screen-docs" class="screen">
-    <div class="docs-layout">
-      <nav class="docs-nav">
-        <div class="docs-nav-head">
-          <div class="logo logo-small">AK<span>SWAY</span>J</div>
-          <button class="btn btn-ghost btn-small" id="btn-docs-close">Close</button>
+      </div>
+      <div id="deck-kit" hidden>
+        <div class="deck-controls">
+          <button class="btn btn-primary btn-small" id="btn-add-samples">LOAD</button>
+          <span class="panel-note" id="kit-note"></span>
         </div>
-        <ul id="docs-list" class="docs-list"></ul>
-        <div class="docs-toc-label">On this page</div>
-        <ul id="docs-toc" class="docs-toc"></ul>
-      </nav>
-      <article id="docs-body" class="docs-body"></article>
+        <ul class="sample-list" id="sample-list"></ul>
+        <p class="panel-note">Select a sample, then click a pad on the deck to place it. Drag one onto the timeline to lay a backing track. Pad settings live in the pad's panel on the right.</p>
+      </div>
     </div>
-  </section>
+  </aside>
 
-  <!-- PERFORM -->
-  <section id="screen-perform" class="screen">
-    <canvas id="stage"></canvas>
-    <div class="hud">
-      <div class="hud-left">
-        <button class="btn btn-ghost btn-small" id="btn-back">←</button>
-        <span class="hud-title" id="hud-project"></span>
-        <span class="hud-scene" id="hud-scene"></span>
-      </div>
-      <div class="hud-right">
-        <span class="pill" id="hud-auto">AUTO-VJ</span>
-        <span class="pill" id="hud-midi">MIDI</span>
-        <span class="pill" id="hud-audio">AUDIO</span>
-        <span class="pill pill-dim" id="hud-fps"></span>
+  <div id="overlays">
+    <div id="modal-docs" class="modal" hidden>
+      <div class="modal-frame docs-frame">
+        <div class="docs-layout">
+          <nav class="docs-nav">
+            <div class="docs-nav-head">
+              <button class="btn btn-ghost btn-small" id="btn-docs-close">✕</button>
+            </div>
+            <ul id="docs-list" class="docs-list"></ul>
+            <div class="docs-toc-label">ON THIS PAGE</div>
+            <ul id="docs-toc" class="docs-toc"></ul>
+          </nav>
+          <article id="docs-body" class="docs-body"></article>
+        </div>
       </div>
     </div>
-    <pre id="midi-monitor" class="midi-monitor"></pre>
-    <div id="help-bar" class="help-bar">
-      <b>1–9</b> project scenes · <b>Space</b> next · <b>A</b> auto-VJ · <b>Z–,</b> pads · <b>F</b> fullscreen · <b>H</b> help · <b>S</b> studio · <b>D</b> docs · <b>K</b> MIDI monitor · <b>Esc</b> back
-    </div>
-    <div id="help-overlay" class="help-overlay">
-      <div class="help-card">
-        <h2>Playing AKSWAYJ</h2>
+
+    <div id="modal-help" class="modal" hidden>
+      <div class="modal-frame help-card">
+        <h2>CONTROLS</h2>
         <table>
-          <tr><td>Hand over Sway (XY)</td><td>steers every scene — attractors, sweeps, tunnels, clouds</td></tr>
-          <tr><td>Pulse gesture</td><td>global brightness surge</td></tr>
-          <tr><td>Press gesture</td><td>squeeze — tightens swarms, crushes voxels, chokes the tunnel</td></tr>
-          <tr><td>Sway gesture</td><td>leans cameras and skews fields</td></tr>
-          <tr><td>Knob 1</td><td>palette hue travel</td></tr>
-          <tr><td>Knob 2</td><td>auto-VJ fade length</td></tr>
-          <tr><td>Knob 3</td><td>master intensity</td></tr>
-          <tr><td>Pads</td><td>strike scenes: beam bursts, grid ripples, ribbon jumps</td></tr>
-          <tr><td>No Sway?</td><td>mouse = hand · click = press · wheel = pulse · Z X C V B N M , = pads</td></tr>
-          <tr><td>Strike a pad in Wormhole</td><td>fires the hyperspace jump</td></tr>
-          <tr><td><b>D</b></td><td>documentation · <b>K</b> MIDI monitor · <b>1–8</b> scenes · <b>A</b> auto-VJ · <b>F</b> fullscreen</td></tr>
+          <tr><td>Hand over Sway</td><td>steers every scene; pulse surges brightness, press squeezes, sway leans the camera</td></tr>
+          <tr><td>Pads · knobs · buttons</td><td>fire whatever the deck shows — click any control on the deck, or touch it on the hardware, to change its assignment</td></tr>
+          <tr><td>No Sway</td><td>mouse = hand · click = press · wheel = pulse · <b>Z X C V B N M ,</b> = pads</td></tr>
+          <tr><td><b>1–9</b> · <b>Space</b> · <b>A</b></td><td>pool scene · next scene · auto rotation</td></tr>
+          <tr><td><b>P</b> · <b>L</b></td><td>play/pause · loop</td></tr>
+          <tr><td><b>S</b> · <b>R</b> · <b>E</b></td><td>synth · rack · kit</td></tr>
+          <tr><td><b>D</b> · <b>K</b> · <b>F</b> · <b>O</b></td><td>docs · MIDI monitor · fullscreen · solo view</td></tr>
+          <tr><td><b>Esc</b></td><td>closes the topmost panel, then clears the selection</td></tr>
         </table>
-        <p>Press <b>H</b> to close.</p>
+        <footer>
+          <button class="btn btn-ghost btn-small" id="btn-system">SYSTEM</button>
+          <span>H closes</span>
+        </footer>
       </div>
     </div>
-  </section>
+
+    <div id="modal-system" class="modal" hidden>
+      <div class="modal-frame system-card">
+        <header class="boot-head">
+          <div class="logo">AK<span>SWAY</span>J</div>
+          <div class="version" id="boot-version"></div>
+        </header>
+        <div class="boot-status" id="boot-status">Checking your system…</div>
+        <ul id="check-list" class="check-list"></ul>
+        <footer class="boot-actions">
+          <button class="btn btn-ghost" id="btn-recheck">RECHECK</button>
+          <button class="btn btn-primary" id="btn-enter" disabled>ENTER</button>
+        </footer>
+      </div>
+    </div>
+
+    <pre id="midi-monitor" class="midi-monitor"></pre>
+    <div id="popover" hidden></div>
+  </div>
 
   <script src="./renderer.bundle.js"></script>
 </body>
