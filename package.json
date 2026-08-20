@@ -1,8 +1,8 @@
 {
-  "name": "akswayj",
+  "name": "swaycommand",
   "productName": "AKSWAYJ",
   "version": "0.1.0",
-  "description": "Gesture-driven audio-visual VJ instrument for the Audima Labs Sway — auto-VJ engine, factory-map Sway integration, and a first-run doctor that makes it just work.",
+  "description": "SwayCommand — gesture VJ instrument and performance surface for the Audima Labs Sway.",
   "author": "dtrujillostyle@gmail.com",
   "license": "MIT",
   "main": "src/main/main.js",
