@@ -860,7 +860,8 @@ function updateHud() {
     midiPill.classList.toggle('pill-on', c.isSway || c.connected);
 
     const a = state.audio.state;
-    $('#hud-audio').textContent = a.source === 'input' ? 'LIVE AUDIO' : a.source === 'internal' ? 'INT. GROOVE' : 'NO AUDIO';
+    $('#hud-audio').textContent =
+      a.source === 'input' ? 'LIVE AUDIO' : a.source === 'system' ? 'SYSTEM AUDIO' : a.source === 'internal' ? 'INT. GROOVE' : 'NO AUDIO';
 
     if (state.monitorVisible) {
       $('#midi-monitor').textContent = state.midi.monitor.join('\n') || '(waiting for MIDI…)';

@@ -9,6 +9,7 @@ const { app, BrowserWindow, desktopCapturer, dialog, ipcMain, session, shell } =
 const doctor = require('./doctor');
 const audima = require('./audima');
 const driver = require('./driver-install');
+const projectfile = require('./projectfile');
 const { APP } = require('../shared/constants');
 
 let win = null;
@@ -293,6 +294,72 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('projects:list', () => listProjects());
+
+  // --- .sway project files ---
+  ipcMain.handle('project:openDialog', async () => {
+    const settings = readSettings();
+    const result = await dialog.showOpenDialog(win, {
+      title: 'Open project',
+      defaultPath: settings.lastProjectDir || projectfile.defaultProjectsDir(),
+      properties: ['openFile'],
+      filters: [{ name: 'Sway Project', extensions: ['sway'] }],
+    });
+    if (result.canceled || !result.filePaths.length) return null;
+    writeSettings({ lastProjectDir: path.dirname(result.filePaths[0]) });
+    return { path: result.filePaths[0] };
+  });
+
+  ipcMain.handle('project:saveDialog', async (_e, suggestedName) => {
+    const settings = readSettings();
+    const dir = settings.lastProjectDir || projectfile.defaultProjectsDir();
+    fs.mkdirSync(dir, { recursive: true });
+    const base = String(suggestedName || 'Untitled').replace(/[<>:"/\\|?*]/g, '');
+    const result = await dialog.showSaveDialog(win, {
+      title: 'Save project',
+      defaultPath: path.join(dir, `${base}.sway`),
+      filters: [{ name: 'Sway Project', extensions: ['sway'] }],
+    });
+    if (result.canceled || !result.filePath) return null;
+    const filePath = result.filePath.toLowerCase().endsWith('.sway') ? result.filePath : `${result.filePath}.sway`;
+    writeSettings({ lastProjectDir: path.dirname(filePath) });
+    return { path: filePath };
+  });
+
+  ipcMain.handle('project:read', (_e, filePath) => {
+    const result = projectfile.readProject(filePath);
+    const settings = readSettings();
+    writeSettings({
+      recentProjects: projectfile.pushRecent(settings.recentProjects, {
+        path: result.path,
+        name: result.doc.project.meta.name,
+      }),
+    });
+    return result;
+  });
+
+  ipcMain.handle('project:write', (_e, filePath, doc) => {
+    const result = projectfile.writeProject(filePath, doc);
+    const settings = readSettings();
+    writeSettings({
+      recentProjects: projectfile.pushRecent(settings.recentProjects, {
+        path: result.path,
+        name: (doc && doc.project && doc.project.meta && doc.project.meta.name) || path.basename(result.path, '.sway'),
+      }),
+    });
+    return result;
+  });
+
+  ipcMain.handle('project:recent', () => {
+    const settings = readSettings();
+    const pruned = projectfile.pruneRecents(settings.recentProjects);
+    if ((settings.recentProjects || []).length !== pruned.length) writeSettings({ recentProjects: pruned });
+    return pruned;
+  });
+
+  ipcMain.handle('project:templates', () => projectfile.listTemplates());
+  ipcMain.handle('project:readTemplate', (_e, id) => projectfile.readTemplate(id));
+  ipcMain.handle('files:statAudio', (_e, filePath) => projectfile.statAudio(filePath, MAX_AUDIO_BYTES));
+
   ipcMain.handle('docs:list', () => listDocs());
   ipcMain.handle('docs:read', (_e, id) => readDoc(id));
   ipcMain.handle('files:pickAudio', () => pickAudioFiles());
