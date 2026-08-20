@@ -1,0 +1,23 @@
+{
+  "name": "akswayj",
+  "productName": "AKSWAYJ",
+  "version": "0.1.0",
+  "description": "Gesture-driven audio-visual VJ instrument for the Audima Labs Sway — auto-VJ engine, factory-map Sway integration, and a first-run doctor that makes it just work.",
+  "author": "dtrujillostyle@gmail.com",
+  "license": "MIT",
+  "main": "src/main/main.js",
+  "scripts": {
+    "build:renderer": "node scripts/build-renderer.js",
+    "build:icon": "node scripts/gen-icon.js",
+    "start": "npm run build:renderer && electron .",
+    "dist:win": "npm run build:icon && npm run build:renderer && electron-builder --win",
+    "dist:mac": "npm run build:icon && npm run build:renderer && electron-builder --mac",
+    "dist:linux": "npm run build:icon && npm run build:renderer && electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.0",
+    "esbuild": "^0.25.0",
+    "three": "^0.180.0"
+  }
+}

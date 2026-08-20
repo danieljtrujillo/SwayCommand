@@ -1,0 +1,12 @@
+{
+  "id": "beam-sixteen",
+  "name": "Beam Sixteen",
+  "description": "A love letter to the hardware: sixteen light columns, one per Sway IR sensor. Sweep your hand along the surface and watch the row answer; strike pads to detonate single beams.",
+  "pairsWith": null,
+  "vibe": "anthemic",
+  "bpmHint": 0,
+  "palette": ["#dbe9ff", "#9fc5ff", "#5e8fce", "#2de1fc", "#f4f9ff"],
+  "scenes": ["beams", "nebula"],
+  "autoVJ": { "enabled": false, "minHold": 30, "maxHold": 60, "fadeTime": 6 },
+  "start": { "scene": "beams" }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "nebula-drift",
+  "name": "Nebula Drift",
+  "description": "Interstellar gas with a pulse. Glide a hand for parallax through the folds, press to condense them, strike pads to detonate shockwaves through the cloud. Atmospheric, but it moves.",
+  "pairsWith": null,
+  "vibe": "ambient",
+  "bpmHint": 0,
+  "palette": ["#0f4c5c", "#5bc0be", "#9bf6ff", "#3a506b", "#e0fbfc"],
+  "scenes": ["nebula", "ferrofluid", "chladni", "cymatic", "swarm"],
+  "autoVJ": { "enabled": true, "minHold": 40, "maxHold": 80, "fadeTime": 10 },
+  "start": { "scene": "nebula" }
+}

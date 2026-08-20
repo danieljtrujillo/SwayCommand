@@ -1,0 +1,12 @@
+{
+  "id": "hyperspace",
+  "name": "Hyperspace",
+  "description": "Deep space at the throat of a wormhole. Fall toward the aperture, bank with a hand, and strike a pad to punch the jump — charge, launch, cruise, settle. Star-streaked, chrome-cold, built for the drop.",
+  "pairsWith": null,
+  "vibe": "transluminal",
+  "bpmHint": 0,
+  "palette": ["#ffffff", "#9bf6ff", "#4361ee", "#7209b7", "#f72585"],
+  "scenes": ["warp", "vjshader", "mandelbulb", "lattice", "valley", "spectra", "swarm"],
+  "autoVJ": { "enabled": true, "minHold": 22, "maxHold": 46, "fadeTime": 3 },
+  "start": { "scene": "warp" }
+}

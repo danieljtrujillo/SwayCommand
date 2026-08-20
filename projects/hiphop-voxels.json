@@ -1,0 +1,12 @@
+{
+  "id": "hiphop-voxels",
+  "name": "Hip Hop Voxels",
+  "description": "Pairs with Audima's official Ableton Hip Hop demo pack. Head-nod tempo, heavyweight blocks: the voxel field rides the 808, pads drop ripples across the grid, golds over deep browns.",
+  "pairsWith": "Audima Ableton Hip Hop demo pack",
+  "vibe": "heavyweight",
+  "bpmHint": 88,
+  "palette": ["#ffb300", "#ff6f00", "#8d5524", "#fff3c4", "#e63946"],
+  "scenes": ["voxels", "ribbons", "nebula"],
+  "autoVJ": { "enabled": true, "minHold": 24, "maxHold": 48, "fadeTime": 5 },
+  "start": { "scene": "voxels" }
+}

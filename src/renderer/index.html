@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; media-src 'self' mediastream:" />
+  <title>AKSWAYJ</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+
+  <!-- BOOT / DOCTOR -->
+  <section id="screen-boot" class="screen">
+    <div class="boot-wrap">
+      <header class="boot-head">
+        <div class="logo">AK<span>SWAY</span>J</div>
+        <div class="tagline">Gesture VJ instrument for the Audima Labs Sway</div>
+        <div class="version" id="boot-version"></div>
+      </header>
+      <div class="boot-status" id="boot-status">Checking your system…</div>
+      <ul id="check-list" class="check-list"></ul>
+      <footer class="boot-actions">
+        <button class="btn btn-ghost" id="btn-recheck">Re-run checks</button>
+        <div class="boot-actions-right">
+          <button class="btn btn-ghost" data-open-studio>Studio</button>
+          <button class="btn btn-ghost" data-open-docs>Documentation</button>
+          <button class="btn btn-primary" id="btn-enter" disabled>Enter AKSWAYJ →</button>
+        </div>
+      </footer>
+    </div>
+  </section>
+
+  <!-- PROJECT PICKER -->
+  <section id="screen-projects" class="screen">
+    <div class="projects-wrap">
+      <header class="projects-head">
+        <div class="logo logo-small">AK<span>SWAY</span>J</div>
+        <div class="projects-hint">Pick a project. Everything is playable instantly — hand over the Sway, mouse, keys, or any MIDI controller.</div>
+        <div class="projects-actions">
+          <button class="btn btn-ghost btn-small" data-open-studio>Studio</button>
+          <button class="btn btn-ghost btn-small" data-open-docs>Documentation</button>
+        </div>
+      </header>
+      <div id="project-grid" class="project-grid"></div>
+    </div>
+  </section>
+
+  <!-- STUDIO: audio source + kit builder -->
+  <section id="screen-studio" class="screen">
+    <div class="studio-wrap">
+      <header class="studio-head">
+        <div class="logo logo-small">AK<span>SWAY</span>J</div>
+        <div class="studio-title">Studio</div>
+        <button class="btn btn-ghost btn-small" id="btn-studio-close">Close</button>
+      </header>
+
+      <div class="studio-cols">
+        <section class="panel">
+          <h2>Audio source</h2>
+          <p class="panel-hint">The analysis source that drives every scene. Triggered stems are always mixed in on top.</p>
+          <div class="source-now">
+            <span class="pill pill-on" id="studio-source">—</span>
+            <div class="meter"><i id="studio-meter"></i></div>
+          </div>
+          <ul class="source-list" id="source-list"></ul>
+          <button class="btn btn-ghost btn-small" id="btn-refresh-sources">Refresh devices</button>
+          <p class="panel-note" id="system-audio-note"></p>
+        </section>
+
+        <section class="panel">
+          <h2>Kit builder</h2>
+          <p class="panel-hint">Load stems and one-shots, then click a pad to assign the selected sample. Pads play from the Sway, from Z X C V B N M , and from this grid.</p>
+          <div class="kit-actions">
+            <button class="btn btn-primary btn-small" id="btn-add-samples">Add stems…</button>
+            <button class="btn btn-ghost btn-small" id="btn-clear-pad">Clear pad</button>
+            <button class="btn btn-ghost btn-small" id="btn-save-kit">Save kit</button>
+          </div>
+          <div class="kit-body">
+            <div>
+              <div class="kit-label">Samples</div>
+              <ul class="sample-list" id="sample-list"></ul>
+            </div>
+            <div>
+              <div class="kit-label">Pads <span id="pad-selected"></span></div>
+              <div class="pad-grid" id="pad-grid"></div>
+              <div class="pad-opts">
+                <label>Mode
+                  <select id="pad-mode">
+                    <option value="oneshot">One-shot</option>
+                    <option value="loop">Loop</option>
+                    <option value="gate">Gate</option>
+                  </select>
+                </label>
+                <label>Gain <input type="range" id="pad-gain" min="0" max="1.5" step="0.01" value="1"></label>
+                <label>Choke <input type="number" id="pad-choke" min="0" max="8" step="1" placeholder="—"></label>
+              </div>
+            </div>
+          </div>
+          <p class="panel-note" id="kit-note"></p>
+        </section>
+      </div>
+
+      <section class="panel fx-panel">
+        <div class="fx-head">
+          <h2>Synth</h2>
+          <label class="fx-toggle"><input type="checkbox" id="synth-enable" checked> Play from MIDI</label>
+          <label class="fx-toggle">Preset
+            <select id="synth-preset"></select>
+          </label>
+          <span class="pill pill-dim" id="synth-voices">0 voices</span>
+        </div>
+        <p class="panel-hint">A wavetable synth in the box, matching the ground Vital covers — the free synth Audima recommends to first-timers. The Sway plays it; so does the on-screen keyboard below.</p>
+        <div class="synth-keys" id="synth-keys"></div>
+        <div class="fx-decks" id="synth-decks"></div>
+        <div class="synth-matrix">
+          <div class="kit-label">Modulation matrix <button class="btn btn-ghost btn-small" id="btn-mod-add">Add row</button></div>
+          <div id="mod-rows"></div>
+        </div>
+      </section>
+
+      <section class="panel fx-panel">
+        <div class="fx-head">
+          <h2>Effects rack</h2>
+          <label class="fx-toggle"><input type="checkbox" id="fx-enable"> Enable</label>
+          <button class="btn btn-ghost btn-small" id="btn-fx-reset">Reset all</button>
+        </div>
+        <p class="panel-hint">The VJ-9000 decks, applied to the finished frame. The rack stays out of the render path until enabled.</p>
+        <div class="fx-decks" id="fx-decks"></div>
+      </section>
+    </div>
+  </section>
+
+  <!-- DOCUMENTATION -->
+  <section id="screen-docs" class="screen">
+    <div class="docs-layout">
+      <nav class="docs-nav">
+        <div class="docs-nav-head">
+          <div class="logo logo-small">AK<span>SWAY</span>J</div>
+          <button class="btn btn-ghost btn-small" id="btn-docs-close">Close</button>
+        </div>
+        <ul id="docs-list" class="docs-list"></ul>
+        <div class="docs-toc-label">On this page</div>
+        <ul id="docs-toc" class="docs-toc"></ul>
+      </nav>
+      <article id="docs-body" class="docs-body"></article>
+    </div>
+  </section>
+
+  <!-- PERFORM -->
+  <section id="screen-perform" class="screen">
+    <canvas id="stage"></canvas>
+    <div class="hud">
+      <div class="hud-left">
+        <button class="btn btn-ghost btn-small" id="btn-back">←</button>
+        <span class="hud-title" id="hud-project"></span>
+        <span class="hud-scene" id="hud-scene"></span>
+      </div>
+      <div class="hud-right">
+        <span class="pill" id="hud-auto">AUTO-VJ</span>
+        <span class="pill" id="hud-midi">MIDI</span>
+        <span class="pill" id="hud-audio">AUDIO</span>
+        <span class="pill pill-dim" id="hud-fps"></span>
+      </div>
+    </div>
+    <pre id="midi-monitor" class="midi-monitor"></pre>
+    <div id="help-bar" class="help-bar">
+      <b>1–9</b> project scenes · <b>Space</b> next · <b>A</b> auto-VJ · <b>Z–,</b> pads · <b>F</b> fullscreen · <b>H</b> help · <b>S</b> studio · <b>D</b> docs · <b>K</b> MIDI monitor · <b>Esc</b> back
+    </div>
+    <div id="help-overlay" class="help-overlay">
+      <div class="help-card">
+        <h2>Playing AKSWAYJ</h2>
+        <table>
+          <tr><td>Hand over Sway (XY)</td><td>steers every scene — attractors, sweeps, tunnels, clouds</td></tr>
+          <tr><td>Pulse gesture</td><td>global brightness surge</td></tr>
+          <tr><td>Press gesture</td><td>squeeze — tightens swarms, crushes voxels, chokes the tunnel</td></tr>
+          <tr><td>Sway gesture</td><td>leans cameras and skews fields</td></tr>
+          <tr><td>Knob 1</td><td>palette hue travel</td></tr>
+          <tr><td>Knob 2</td><td>auto-VJ fade length</td></tr>
+          <tr><td>Knob 3</td><td>master intensity</td></tr>
+          <tr><td>Pads</td><td>strike scenes: beam bursts, grid ripples, ribbon jumps</td></tr>
+          <tr><td>No Sway?</td><td>mouse = hand · click = press · wheel = pulse · Z X C V B N M , = pads</td></tr>
+          <tr><td>Strike a pad in Wormhole</td><td>fires the hyperspace jump</td></tr>
+          <tr><td><b>D</b></td><td>documentation · <b>K</b> MIDI monitor · <b>1–8</b> scenes · <b>A</b> auto-VJ · <b>F</b> fullscreen</td></tr>
+        </table>
+        <p>Press <b>H</b> to close.</p>
+      </div>
+    </div>
+  </section>
+
+  <script src="./renderer.bundle.js"></script>
+</body>
+</html>

@@ -1,0 +1,195 @@
+// MIDI layer — WebMIDI with Sway-first behavior:
+//   * prefers the port named exactly "Audima Labs The Sway" (substring match
+//     covers Linux/ALSA's " MIDI 1" suffix), hot-attaches on plug-in;
+//   * applies the recovered factory map (swaymap.js), tolerant of the known
+//     pad-channel ambiguity (accepts channel 1 and 16);
+//   * MIDI-learn can rebind any control, which also makes any class-compliant
+//     controller a first-class citizen;
+//   * keeps a small monitor ring buffer for the HUD.
+
+import { FACTORY_MAP, SWAY_PORT_NAME, createControlState } from './swaymap.js';
+
+const MONITOR_SIZE = 14;
+
+export async function createMidi({ onEvent } = {}) {
+  const control = createControlState();
+  const monitor = [];
+  let access = null;
+  let boundInputs = new Map(); // id -> input
+  let overrides = {}; // learned bindings: { 'knob:3': {type:'cc', num: 71}, 'xy:x': {...} }
+  let learnTarget = null;
+  let learnResolve = null;
+
+  const supported = typeof navigator.requestMIDIAccess === 'function';
+  if (supported) {
+    try {
+      access = await navigator.requestMIDIAccess({ sysex: false });
+    } catch (err) {
+      console.warn('[midi] access denied/unavailable:', err.message);
+    }
+  }
+
+  function pushMonitor(line) {
+    monitor.unshift(line);
+    if (monitor.length > MONITOR_SIZE) monitor.pop();
+  }
+
+  function ccTargetFor(cc) {
+    // learned overrides win over the factory map
+    for (const [target, bind] of Object.entries(overrides)) {
+      if (bind.type === 'cc' && bind.num === cc) return target;
+    }
+    const M = FACTORY_MAP;
+    if (cc === M.xy.x) return 'xy:x';
+    if (cc === M.xy.y) return 'xy:y';
+    if (cc === M.gestures.pulse) return 'gesture:pulse';
+    if (cc === M.gestures.press) return 'gesture:press';
+    if (cc === M.gestures.sway) return 'gesture:sway';
+    if (cc === M.xtrigYmod.x) return 'xtrig:x';
+    if (cc === M.xtrigYmod.y) return 'xtrig:y';
+    const k = M.knobs.indexOf(cc);
+    if (k >= 0) return `knob:${k}`;
+    return null;
+  }
+
+  function applyTarget(target, value01) {
+    switch (target) {
+      case 'xy:x':
+        control.xy.x = value01;
+        break;
+      case 'xy:y':
+        control.xy.y = value01;
+        break;
+      case 'gesture:pulse':
+        control.gestures.pulse = value01;
+        break;
+      case 'gesture:press':
+        control.gestures.press = value01;
+        break;
+      case 'gesture:sway':
+        control.gestures.sway = value01;
+        break;
+      case 'xtrig:x':
+        control.xtrigYmod.x = value01;
+        break;
+      case 'xtrig:y':
+        control.xtrigYmod.y = value01;
+        break;
+      default:
+        if (target && target.startsWith('knob:')) {
+          control.knobs[Number(target.slice(5))] = value01;
+        }
+    }
+  }
+
+  function padIndexFor(note) {
+    const { chromaticBase, factoryNotes } = FACTORY_MAP.pads;
+    if (note >= chromaticBase && note < chromaticBase + 16) return note - chromaticBase;
+    const fi = factoryNotes.indexOf(note);
+    return fi; // -1 when not a pad note
+  }
+
+  function handleMessage(e, portName) {
+    const [status, d1, d2] = e.data;
+    const type = status & 0xf0;
+    const ch = status & 0x0f;
+    control.lastEventAt = performance.now();
+
+    if (type === 0xb0) {
+      // CC — feed MIDI-learn first
+      if (learnTarget) {
+        overrides[learnTarget] = { type: 'cc', num: d1 };
+        const t = learnTarget;
+        learnTarget = null;
+        if (learnResolve) learnResolve({ target: t, cc: d1 });
+        pushMonitor(`LEARN ${t} ← CC${d1}`);
+        return;
+      }
+      const target = ccTargetFor(d1);
+      if (target) applyTarget(target, d2 / 127);
+      // CC 1 is the modulation wheel by convention; the synth uses it as a
+      // mod-matrix source.
+      if (d1 === 1 && onEvent) onEvent({ kind: 'mod', value: d2 / 127 });
+      pushMonitor(`CC${d1}=${d2} ch${ch + 1}${target ? ' → ' + target : ''}`);
+    } else if (type === 0x90 && d2 > 0) {
+      const idx = padIndexFor(d1);
+      if (idx >= 0) {
+        control.pads[idx] = d2 / 127;
+        control.lastPad = idx;
+      }
+      pushMonitor(`NOTE ${d1} vel${d2} ch${ch + 1}${idx >= 0 ? ' → pad' + idx : ''}`);
+      if (onEvent) {
+        onEvent({ kind: 'pad', idx, vel: d2 / 127 });
+        // The raw note goes out too: pads drive the visuals, but the synth
+        // needs the actual pitch, including notes outside the pad range that
+        // the Sway's Theory Engine sends.
+        onEvent({ kind: 'note', note: d1, vel: d2 / 127, channel: ch });
+      }
+    } else if (type === 0x80 || (type === 0x90 && d2 === 0)) {
+      // Pads decay in the engine, but a synth voice has to be released.
+      pushMonitor(`NOTE OFF ${d1} ch${ch + 1}`);
+      if (onEvent) onEvent({ kind: 'noteoff', note: d1, channel: ch });
+    } else if (type === 0xe0) {
+      // Pitch bend: 14-bit little-endian, centre 8192 -> 0.5.
+      const value = ((d2 << 7) | d1) / 16383;
+      if (onEvent) onEvent({ kind: 'bend', value });
+      pushMonitor(`BEND ${value.toFixed(3)} ch${ch + 1}`);
+    } else if (type === 0xc0) {
+      if (d1 === FACTORY_MAP.programs.sleep) control.awake = false;
+      if (d1 === FACTORY_MAP.programs.wake) control.awake = true;
+      pushMonitor(`PC ${d1} ch${ch + 1}`);
+    }
+  }
+
+  function isSwayPort(name) {
+    return !!name && name.includes(SWAY_PORT_NAME);
+  }
+
+  function rescan() {
+    if (!access) return;
+    boundInputs.forEach((input) => (input.onmidimessage = null));
+    boundInputs = new Map();
+
+    const inputs = [...access.inputs.values()];
+    const sway = inputs.find((i) => isSwayPort(i.name));
+    // Sway present: bind it (exclusively authoritative for isSway flag).
+    // Otherwise: bind ALL inputs so any controller drives the show.
+    const targets = sway ? [sway] : inputs;
+    for (const input of targets) {
+      input.onmidimessage = (e) => handleMessage(e, input.name);
+      boundInputs.set(input.id, input);
+    }
+    control.connected = targets.length > 0;
+    control.isSway = !!sway;
+    control.portName = sway ? sway.name : targets.length ? targets.map((t) => t.name).join(', ') : null;
+  }
+
+  if (access) {
+    rescan();
+    access.onstatechange = () => rescan(); // hot-plug / hot-unplug
+  }
+
+  return {
+    control,
+    monitor,
+    supported,
+    get available() {
+      return !!access;
+    },
+    // Resolves when the next CC arrives; that CC becomes the binding.
+    learn(target) {
+      learnTarget = target;
+      return new Promise((resolve) => (learnResolve = resolve));
+    },
+    cancelLearn() {
+      learnTarget = null;
+      learnResolve = null;
+    },
+    setOverrides(o) {
+      overrides = o || {};
+    },
+    getOverrides() {
+      return { ...overrides };
+    },
+  };
+}
