@@ -11,7 +11,7 @@ import { createMidi } from './midi/midi.js';
 import { renderMarkdown, slugify } from './markdown.js';
 import { createSampler } from './audio/sampler.js';
 import { createSynth, PRESET_NAMES, TABLE_NAMES, MOD_SOURCES, MOD_DESTS } from './audio/synth.js';
-import { RANGES as fxRanges } from './engine/fxrack.js';
+import { RANGES as fxRanges, DECKS as fxDecks } from './engine/fxrack.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -584,22 +584,14 @@ function studioKeyUp(e) {
 }
 
 // --- effects rack ------------------------------------------------------------
-// Controls are generated from the rack's own RANGES table, so the panel cannot
-// drift out of step with what setParam actually accepts.
-
-const FX_DECKS = [
-  { name: 'Geometrics', keys: ['mirrorX', 'mirrorY', 'kaleidoscope', 'softEdges', 'tiling', 'radialSpokes', 'feedback', 'zoomPunch'] },
-  { name: 'Corruption', keys: ['glitch', 'rgbGhost', 'rgbSplit', 'chromaAb', 'chromaAbRadial', 'waveWarp', 'pixelate', 'backskip'] },
-  { name: 'Chromatics', keys: ['hue', 'saturation', 'contrast', 'brightness', 'invert', 'edgeDetect', 'sepia', 'grayscale', 'blur', 'scanlines', 'crt', 'vignette'] },
-  { name: 'Timecode', keys: ['echoTrails', 'strobe', 'posterizeTime', 'slitScan', 'timeDisplace'] },
-  { name: 'ASCII', keys: ['ascii', 'asciiCols', 'asciiMono', 'asciiPalette'] },
-];
+// Controls are generated from the rack's own RANGES table and DECKS grouping,
+// so the panel cannot drift out of step with what setParam actually accepts.
 
 function renderFxPanel() {
   const rack = state.engine.fx;
   const ranges = fxRanges;
   const html = [];
-  for (const deck of FX_DECKS) {
+  for (const deck of fxDecks) {
     const rows = [];
     for (const key of deck.keys) {
       const spec = ranges[key];
@@ -837,7 +829,32 @@ function startPerformance(project) {
   bumpHelpBar();
 }
 
+// Interim, replaced by the assignment router: mirror hardware knobs 0-2 onto
+// the engine params they used to be hardwired to. Change-driven so an idle
+// knob never stomps a project's fadeTime or a UI edit.
+const knobShim = { last: null };
+function applyKnobShim() {
+  const k = state.midi.control.knobs;
+  if (!knobShim.last) {
+    knobShim.last = [k[0], k[1], k[2]];
+    return;
+  }
+  if (k[0] !== knobShim.last[0]) {
+    knobShim.last[0] = k[0];
+    state.engine.params.hue = k[0] === 0.5 ? 0 : k[0];
+  }
+  if (k[1] !== knobShim.last[1]) {
+    knobShim.last[1] = k[1];
+    state.engine.autoVJ.fadeTime = 1 + k[1] * 7;
+  }
+  if (k[2] !== knobShim.last[2]) {
+    knobShim.last[2] = k[2];
+    state.engine.params.intensity = k[2];
+  }
+}
+
 function updateHud() {
+  applyKnobShim();
   if (state.screen === 'studio') {
     // The analyser is shared, so the meter reflects whatever source is live.
     state.audio.update(1 / 60);

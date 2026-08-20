@@ -192,6 +192,19 @@ export const RANGES = Object.freeze({
   asciiCols: [40, 320],
 });
 
+/**
+ * UI grouping for the rack panel. Lives beside RANGES so the deck list and the
+ * parameter table cannot drift apart: every key here has a RANGES entry, and
+ * every RANGES key appears in exactly one deck.
+ */
+export const DECKS = Object.freeze([
+  { name: 'Geometrics', keys: ['mirrorX', 'mirrorY', 'kaleidoscope', 'softEdges', 'tiling', 'radialSpokes', 'feedback'] },
+  { name: 'Corruption', keys: ['glitch', 'rgbGhost', 'rgbSplit', 'chromaAb', 'chromaAbRadial', 'waveWarp', 'pixelate', 'backskip'] },
+  { name: 'Chromatics', keys: ['hue', 'saturation', 'contrast', 'brightness', 'invert', 'edgeDetect', 'sepia', 'grayscale', 'blur', 'scanlines', 'crt', 'vignette'] },
+  { name: 'Timecode', keys: ['echoTrails', 'strobe', 'posterizeTime', 'audioReactive'] },
+  { name: 'ASCII', keys: ['ascii', 'asciiCols', 'asciiMono', 'asciiAccent', 'asciiPalette'] },
+]);
+
 // ── ASCII constants — AsciilineRenderer.ts, verbatim ────────────────────────
 /** ASCILINE's 93-char ramp, dark (space) to light (@). Verbatim. */
 const RAMP = " `.-':_,^=;><+!rc*/z?sLTv)J7(|Fi{C}fI31tlu[neoZ5Yxjya]2ESwqkP6h9d4VpOGbUAKXHm8RD#$Bg0MNWQ%&@";

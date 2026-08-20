@@ -92,7 +92,16 @@ export function createEngine({ canvas, quality = 'med' }) {
   let fading = false;
   let fadeTime = 4;
 
+  function cutTo(id) {
+    if (!creators[id]) return;
+    slotA = id;
+    slotB = null;
+    mix = 0;
+    fading = false;
+  }
+
   function crossfadeTo(id, seconds) {
+    if (seconds <= 0.12) return cutTo(id);
     if (id === slotA && !fading) return;
     if (fading) {
       // settle the current fade instantly, then start the new one
@@ -102,6 +111,18 @@ export function createEngine({ canvas, quality = 'med' }) {
     slotB = id;
     fading = true;
     fadeTime = Math.max(0.1, seconds);
+  }
+
+  // Cold scene instancing builds geometry and compiles shaders mid-frame, so
+  // a project load queues its scenes here and the loop warms one per frame.
+  const warmQueue = [];
+  let warmResolvers = [];
+  function prewarm(ids = autoVJ.pool) {
+    for (const id of ids) {
+      if (creators[id] && !instances.has(id) && !warmQueue.includes(id)) warmQueue.push(id);
+    }
+    if (!warmQueue.length) return Promise.resolve();
+    return new Promise((resolve) => warmResolvers.push(resolve));
   }
 
   // --- Auto-VJ (VfxController pattern) ------------------------------------------
@@ -143,6 +164,11 @@ export function createEngine({ canvas, quality = 'med' }) {
 
   const stats = { fps: 0, frames: 0, acc: 0 };
 
+  // Engine-level performance parameters. These used to be hardwired to knobs
+  // 0/1/2 inside the frame loop; the assignment router writes them now, and
+  // io.knobs keeps mirroring the raw hardware for scenes that read it.
+  const params = { hue: 0, intensity: 0.5 };
+
   // The rack costs several fullscreen passes, so it stays out of the pipeline
   // until something actually enables it.
   let fxEnabled = false;
@@ -153,6 +179,7 @@ export function createEngine({ canvas, quality = 'med' }) {
   let last = 0;
   let audioEngine = null;
   let control = null;
+  let frameHook = null; // fn(dt, t, io) — router/transport slot, same-frame
 
   function frame(now) {
     if (!running) return;
@@ -193,10 +220,24 @@ export function createEngine({ canvas, quality = 'med' }) {
       io.lastPad = control.lastPad;
     }
 
-    // engine-reserved knobs: 0 hue shift, 1 fade-time scale, 2 master intensity
-    colorMaster.update(dt, io.knobs[0] === 0.5 ? 0 : io.knobs[0]);
-    autoVJ.fadeTime = 1 + io.knobs[1] * 7;
-    io.intensity = 0.25 + io.knobs[2] * 0.75 + io.gestures.pulse * 0.35;
+    if (frameHook) frameHook(dt, t, io);
+
+    colorMaster.update(dt, params.hue);
+    io.intensity = 0.25 + params.intensity * 0.75 + io.gestures.pulse * 0.35;
+
+    if (warmQueue.length) {
+      const id = warmQueue.shift();
+      try {
+        const inst = instance(id);
+        renderer.compile(inst.scene, inst.camera);
+      } catch (err) {
+        console.warn(`[engine] prewarm ${id} failed:`, err.message);
+      }
+      if (!warmQueue.length) {
+        for (const resolve of warmResolvers) resolve();
+        warmResolvers = [];
+      }
+    }
 
     autoVJTick(dt);
 
@@ -255,6 +296,12 @@ export function createEngine({ canvas, quality = 'med' }) {
     instances.forEach((s) => s.resize(width, height));
   }
   window.addEventListener('resize', resize);
+  // The stage lives in a grid cell now, so its box changes without a window
+  // resize (drawer, solo view, breakpoints). The window listener stays as a
+  // no-op backstop; this is the one that actually fires.
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(() => resize()).observe(canvas);
+  }
 
   return {
     sceneList,
@@ -262,6 +309,7 @@ export function createEngine({ canvas, quality = 'med' }) {
     io,
     colorMaster,
     autoVJ,
+    params,
 
     // --- effects rack (ported from the VJ-9000 decks) ---
     fx: fxRack,
@@ -302,8 +350,36 @@ export function createEngine({ canvas, quality = 'med' }) {
       crossfadeTo(first, 0.8);
     },
 
+    // .sway-format sibling of loadProject: takes a validated project object
+    // and replays the fx snapshot through the rack so the file is never
+    // trusted with raw parameter values.
+    applyProject(project) {
+      colorMaster.setPalette(project.palette, 2);
+      const eng = project.engine || {};
+      const av = eng.autoVJ || {};
+      autoVJ.pool = (av.pool || []).filter((id) => creators[id]);
+      autoVJ.enabled = !!av.enabled;
+      autoVJ.minHold = av.minHold ?? 18;
+      autoVJ.maxHold = av.maxHold ?? 40;
+      autoVJ.fadeTime = av.fadeTime ?? 4;
+      autoVJ.holdLeft = autoVJ.minHold;
+      fxEnabled = !!eng.fxEnabled;
+      fxRack.reset();
+      for (const [key, value] of Object.entries((project.fx && project.fx.params) || {})) {
+        fxRack.setParam(key, value);
+      }
+      const first = (eng.start && eng.start.scene) || autoVJ.pool[0];
+      if (first) cutTo(creators[first] ? first : autoVJ.pool[0]);
+      prewarm();
+    },
+
     setScene(id, seconds = 2.5) {
       if (creators[id]) crossfadeTo(id, seconds);
+    },
+    cutTo,
+    prewarm,
+    setFrameHook(fn) {
+      frameHook = typeof fn === 'function' ? fn : null;
     },
     nextScene(seconds = 2.5) {
       const others = autoVJ.pool.filter((id) => id !== slotA);
