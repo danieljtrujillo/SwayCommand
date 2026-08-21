@@ -132,7 +132,7 @@ async function downloadTo(url, destPath, progress) {
 async function downloadCompanion(progress) {
   const key = platformKey();
   if (!key) {
-    return { ok: false, detail: 'Audima ships no Linux companion app. Playing AKSWAYJ does not require it.' };
+    return { ok: false, detail: 'Audima ships no Linux companion app. Playing SwayCommand does not require it.' };
   }
 
   let url;

@@ -4,27 +4,27 @@ This document covers the environment variables the application reads, the render
 
 ## Environment variables
 
-All six variables are read in `src/main/main.js` at window creation. Four exist for automated verification (`AKSWAYJ_SHOT`, `AKSWAYJ_SHOT_DELAY`, `AKSWAYJ_PROBE`, `AKSWAYJ_WINDOW`); the other two preset the renderer's query parameters.
+All six variables are read in `src/main/main.js` at window creation. Four exist for automated verification (`SWAYCOMMAND_SHOT`, `SWAYCOMMAND_SHOT_DELAY`, `SWAYCOMMAND_PROBE`, `SWAYCOMMAND_WINDOW`); the other two preset the renderer's query parameters.
 
 | Variable | Value | Default | Behavior |
 |---|---|---|---|
-| `AKSWAYJ_SHOT` | Output PNG path | unset | Screenshot mode. After the renderer's `did-finish-load` event plus the configured delay, the main process captures the page (`webContents.capturePage`), writes the PNG to the given path, logs `[shot] saved <path>` (or `[shot] failed:` with the error), and quits the application in either case. |
-| `AKSWAYJ_SHOT_DELAY` | Milliseconds | `5000` | Delay between `did-finish-load` and the capture. Read only when `AKSWAYJ_SHOT` is set. |
-| `AKSWAYJ_PROBE` | JavaScript expression | unset | DOM probe. 3000 ms after `did-finish-load`, the expression is evaluated in the renderer via `webContents.executeJavaScript`; the result is logged to stdout with a `[probe]` prefix (strings verbatim, other values JSON-encoded); a failure logs `[probe] failed:` with the error message to stderr. The application keeps running. |
-| `AKSWAYJ_WINDOW` | `<width>x<height>`, e.g. `960x600` | unset | Forces the initial window size so narrow layouts can be screenshot-tested headlessly. |
-| `AKSWAYJ_AUTOPLAY` | Template id, or a `.sway` file path | unset | Forwarded to the renderer as the `autoplay` query parameter of `dist/index.html`. |
-| `AKSWAYJ_SCENE` | Scene id | unset | Forwarded to the renderer as the `scene` query parameter. |
+| `SWAYCOMMAND_SHOT` | Output PNG path | unset | Screenshot mode. After the renderer's `did-finish-load` event plus the configured delay, the main process captures the page (`webContents.capturePage`), writes the PNG to the given path, logs `[shot] saved <path>` (or `[shot] failed:` with the error), and quits the application in either case. |
+| `SWAYCOMMAND_SHOT_DELAY` | Milliseconds | `5000` | Delay between `did-finish-load` and the capture. Read only when `SWAYCOMMAND_SHOT` is set. |
+| `SWAYCOMMAND_PROBE` | JavaScript expression | unset | DOM probe. 3000 ms after `did-finish-load`, the expression is evaluated in the renderer via `webContents.executeJavaScript`; the result is logged to stdout with a `[probe]` prefix (strings verbatim, other values JSON-encoded); a failure logs `[probe] failed:` with the error message to stderr. The application keeps running. |
+| `SWAYCOMMAND_WINDOW` | `<width>x<height>`, e.g. `960x600` | unset | Forces the initial window size so narrow layouts can be screenshot-tested headlessly. |
+| `SWAYCOMMAND_AUTOPLAY` | Template id, or a `.sway` file path | unset | Forwarded to the renderer as the `autoplay` query parameter of `dist/index.html`. |
+| `SWAYCOMMAND_SCENE` | Scene id | unset | Forwarded to the renderer as the `scene` query parameter. |
 
-`AKSWAYJ_SHOT` and `AKSWAYJ_PROBE` register independent `did-finish-load` timers and can be combined; screenshot mode quits the application once its own delay elapses, so a probe result appears only when the probe timer (3000 ms) fires first. Launch examples:
+`SWAYCOMMAND_SHOT` and `SWAYCOMMAND_PROBE` register independent `did-finish-load` timers and can be combined; screenshot mode quits the application once its own delay elapses, so a probe result appears only when the probe timer (3000 ms) fires first. Launch examples:
 
 ```powershell
 # PowerShell: capture the cockpit (door open, template loaded) after 8 s
-$env:AKSWAYJ_AUTOPLAY = 'first-flight'; $env:AKSWAYJ_SHOT = "$PWD\shot.png"; $env:AKSWAYJ_SHOT_DELAY = '8000'; npm start
+$env:SWAYCOMMAND_AUTOPLAY = 'first-flight'; $env:SWAYCOMMAND_SHOT = "$PWD\shot.png"; $env:SWAYCOMMAND_SHOT_DELAY = '8000'; npm start
 ```
 
 ```sh
 # POSIX shells: open a saved project file on a specific scene
-AKSWAYJ_AUTOPLAY="$HOME/Documents/SwayCommand Projects/My Set.sway" AKSWAYJ_SCENE=warp npm start
+SWAYCOMMAND_AUTOPLAY="$HOME/Documents/SwayCommand Projects/My Set.sway" SWAYCOMMAND_SCENE=warp npm start
 ```
 
 ### ELECTRON_RUN_AS_NODE caveat
@@ -47,7 +47,7 @@ unset ELECTRON_RUN_AS_NODE             # POSIX shells
 
 ## Query parameters
 
-Both parameters are consumed once, in `main()` of `src/renderer/app.js`, from `location.search`. In normal operation they are supplied by the main process from `AKSWAYJ_AUTOPLAY` and `AKSWAYJ_SCENE`.
+Both parameters are consumed once, in `main()` of `src/renderer/app.js`, from `location.search`. In normal operation they are supplied by the main process from `SWAYCOMMAND_AUTOPLAY` and `SWAYCOMMAND_SCENE`.
 
 | Parameter | Value | Behavior |
 |---|---|---|
@@ -56,7 +56,7 @@ Both parameters are consumed once, in `main()` of `src/renderer/app.js`, from `l
 
 ## The automation handle
 
-The renderer exposes `window.__akswayj` for `AKSWAYJ_PROBE` expressions (the page CSP admits no other script path). Its shape:
+The renderer exposes `window.__swaycommand` for `SWAYCOMMAND_PROBE` expressions (the page CSP admits no other script path). Its shape:
 
 ```
 { state, studio, openStudio(tab), openDocs, renderPads, renderSamples,
@@ -67,19 +67,19 @@ The renderer exposes `window.__akswayj` for `AKSWAYJ_PROBE` expressions (the pag
 
 ```powershell
 # scene registry size and current scene
-$env:AKSWAYJ_PROBE = "JSON.stringify({ scenes: __akswayj.state.engine.sceneList.length, now: __akswayj.state.engine.currentScene.id })"
+$env:SWAYCOMMAND_PROBE = "JSON.stringify({ scenes: __swaycommand.state.engine.sceneList.length, now: __swaycommand.state.engine.currentScene.id })"
 
 # project document state: path, name, dirty flag, media count
-$env:AKSWAYJ_PROBE = "JSON.stringify({ ...__akswayj.projectStore.state, media: __akswayj.projectStore.project().media.length })"
+$env:SWAYCOMMAND_PROBE = "JSON.stringify({ ...__swaycommand.projectStore.state, media: __swaycommand.projectStore.project().media.length })"
 
 # transport clock and timeline duration
-$env:AKSWAYJ_PROBE = "JSON.stringify(__akswayj.transport.state)"
+$env:SWAYCOMMAND_PROBE = "JSON.stringify(__swaycommand.transport.state)"
 
 # assignment table: how many pads and knobs are mapped
-$env:AKSWAYJ_PROBE = "(() => { const a = __akswayj.router.getAssignments(); return JSON.stringify({ pads: a.pads.filter(Boolean).length, knobs: a.knobs.filter(Boolean).length, routes: a.gestures.length }); })()"
+$env:SWAYCOMMAND_PROBE = "(() => { const a = __swaycommand.router.getAssignments(); return JSON.stringify({ pads: a.pads.filter(Boolean).length, knobs: a.knobs.filter(Boolean).length, routes: a.gestures.length }); })()"
 
 # drive the interface: open the kit drawer and select pad 1
-$env:AKSWAYJ_PROBE = "__akswayj.openStudio('kit'); __akswayj.selectControl('pad:0'); 'ok'"
+$env:SWAYCOMMAND_PROBE = "__swaycommand.openStudio('kit'); __swaycommand.selectControl('pad:0'); 'ok'"
 ```
 
 `openProject(path)` and `saveProject()` call straight into the project store; `openStudio(tab)` opens the drawer (`synth`, `rack`, or `kit`); `renderPads` and `renderSamples` refresh the deck labels and the KIT list.
@@ -105,15 +105,15 @@ Keys in use:
 
 | Item | Location |
 |---|---|
-| `userData` (Windows) | `%APPDATA%\AKSWAYJ` |
-| `userData` (macOS) | `~/Library/Application Support/AKSWAYJ` |
-| `userData` (Linux) | `~/.config/AKSWAYJ` |
+| `userData` (Windows) | `%APPDATA%\SwayCommand` |
+| `userData` (macOS) | `~/Library/Application Support/SwayCommand` |
+| `userData` (Linux) | `~/.config/SwayCommand` |
 | Settings file | `<userData>/settings.json` |
 | Default `.sway` save directory | `~/Documents/SwayCommand Projects` (created on first save; the dialogs accept any location outside the application directory) |
 | Bundled templates | `projects/templates/*.sway` at the package root — the repository root in development, the `resources/app.asar` root when packaged |
 | Downloaded Sway Software installer | The system Downloads folder (`app.getPath('downloads')`); the file name is taken from the download URL |
 | DFU driver package | `<userData>/audima/dfu-driver.zip`, extracted to `<userData>/audima/dfu-driver/` |
-| Installed application (Windows) | `%LOCALAPPDATA%\Programs\akswayj` |
+| Installed application (Windows) | `%LOCALAPPDATA%\Programs\swaycommand` |
 | Bundled documentation read by the in-application modal | `README.md` and `docs/*.md` at the package root — the repository root in development, the `resources/app.asar` root when packaged |
 
 In-progress downloads use a `.part` suffix next to the destination and are renamed only on completion. Project saves are atomic: a `.tmp` file next to the destination, renamed into place.
@@ -122,7 +122,7 @@ In-progress downloads use a `.part` suffix next to the destination and are renam
 
 Apart from the Doctor's reachability check at startup, every request below is user-initiated: downloads run only from an explicit fix click in the SYSTEM modal, never silently.
 
-Every HTTP request the application makes goes through `audimaFetch` in `src/main/audima.js`, which refuses any URL that is not `https:` on `cdn.audima.com.au`, `audima.com.au`, or `www.audima.com.au`. Every request carries the User-Agent `AKSWAYJ/0.1 (Sway companion; +https://github.com/akswayj)`; the CDN returns 403 to curl-, python-, and Go-style User-Agents, so the custom header is required. Default request timeout is 15 s; downloads are allowed 10 min; the Doctor's reachability check uses 5 s.
+Every HTTP request the application makes goes through `audimaFetch` in `src/main/audima.js`, which refuses any URL that is not `https:` on `cdn.audima.com.au`, `audima.com.au`, or `www.audima.com.au`. Every request carries the User-Agent `SwayCommand/0.1 (Sway companion; +https://github.com/swaycommand)`; the CDN returns 403 to curl-, python-, and Go-style User-Agents, so the custom header is required. Default request timeout is 15 s; downloads are allowed 10 min; the Doctor's reachability check uses 5 s.
 
 | Endpoint | Contacted when | Purpose |
 |---|---|---|

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# install-launch.sh - AKSWAYJ from-source bootstrap (macOS / Linux)
+# install-launch.sh - SwayCommand from-source bootstrap (macOS / Linux)
 #
 # Checks for Node.js >= 18, installs npm dependencies when needed, then
 # launches the app with 'npm run start'.
 #
 # Run from a terminal:   ./install-launch.sh
-# macOS double-click:    "Install & Launch AKSWAYJ.command"
+# macOS double-click:    "Install & Launch SwayCommand.command"
 set -euo pipefail
 
 MIN_NODE_MAJOR=18
@@ -64,7 +64,7 @@ print_install_hints() {
 }
 
 echo
-echo "AKSWAYJ - Install & Launch"
+echo "SwayCommand - Install & Launch"
 echo "Folder: $SCRIPT_DIR"
 echo
 
@@ -119,5 +119,5 @@ if [ "$need_install" -eq 1 ]; then
 fi
 
 # --- Step (c): launch ---
-ok "Starting AKSWAYJ (npm run start)..."
+ok "Starting SwayCommand (npm run start)..."
 exec npm run start

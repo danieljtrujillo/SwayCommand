@@ -6,7 +6,7 @@
 // the author's own prior project theDAW (https://github.com/gantasmo/theDAW),
 // which this repository records as MIT-licensed in README.md ("theDAW by
 // GANTASMO (MIT)") and docs/RESEARCH.md. Reused here by the same author under
-// those MIT terms; AKSWAYJ is itself MIT (package.json). Files drawn on:
+// those MIT terms; SwayCommand is itself MIT (package.json). Files drawn on:
 //   • src/components/VideoOutput.tsx   — the whole 2D-canvas effect pipeline:
 //       feedback wash, tiling/kaleidoscope/mirror, softEdges gradients, the
 //       radial-spoke wheel, pixelate downscale, glitch slice tearing, rgbGhost
@@ -43,7 +43,7 @@
 //      upstream keeps a 60-frame full-resolution ring of canvases. Echo trails
 //      became an exponential accumulator (same operator, see ECHO TRAILS) and
 //      backskip a short tier-scaled ring. Both are called out at their sites.
-//   5. Additions for AKSWAYJ, all marked `// [AKSWAYJ]`: io.beat/io.gestures.pulse
+//   5. Additions for SwayCommand, all marked `// [SwayCommand]`: io.beat/io.gestures.pulse
 //      as extra strobe triggers, an optional palette-driven ASCII accent, an
 //      optional radial mode for the chromatic-aberration offset, and the
 //      audio-sweetening ARM GATE — upstream lets bass push glitch/ghost/split/
@@ -95,7 +95,7 @@
 //     chromaAb       0          0..1            Fader "Chroma Ab"
 //     pixelate       0          0..1            Fader "Pixel Destroy"
 //     backskip       0          0..1            Fader "Backskip"
-//     chromaAbRadial false      toggle          [AKSWAYJ] see CHROMA/RGB SPLIT
+//     chromaAbRadial false      toggle          [SwayCommand] see CHROMA/RGB SPLIT
 //   CHROMATICS
 //     hue            0          0..360 deg      Fader "Hue Cycle"
 //     saturation     100        0..300 %        Fader "Saturation"
@@ -118,10 +118,10 @@
 //     asciiCols      160        40..320 step 1  Fader "Density (cols)"
 //     asciiMono      false      toggle          TogglePad "Mono"
 //     asciiAccent    '#00ff41'  #rrggbb         colour input
-//     asciiPalette   true       toggle          [AKSWAYJ] accent from io.palette
+//     asciiPalette   true       toggle          [SwayCommand] accent from io.palette
 //   GLOBAL
 //     audioReactive  true       toggle          upstream default is FALSE (no
-//                                               mic guaranteed); AKSWAYJ always
+//                                               mic guaranteed); SwayCommand always
 //                                               has an audio engine, so the bass
 //                                               sweetening is armed by default.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -643,7 +643,7 @@ const FRAG_ASCII = /* glsl */ `
 // Screening images whose channels are disjoint reduces to taking each channel
 // from its own source, so the three-way blend is exact, not an approximation.
 // feOffset by (dx,dy) means result(p) = in(p - d), hence red samples at -d.
-// [AKSWAYJ] `chromaAbRadial` (default false, off = pure upstream) sends the
+// [SwayCommand] `chromaAbRadial` (default false, off = pure upstream) sends the
 // chromaAb component along the radial direction instead of a fixed diagonal —
 // the plugin registry describes this effect as "radial per-channel RGB offsets"
 // even though the implementation upstream is a uniform feOffset. Off by default
@@ -721,7 +721,7 @@ const FRAG_FINAL = /* glsl */ `
   uniform float uWarpFreq;     // 0.01 + waveWarp * 0.04, cycles/pixel
   uniform vec2  uSplitPx;      // (rgbSplit*100, 0)
   uniform vec2  uChromaPx;     // (chromaAb*20, chromaAb*15)
-  uniform float uChromaRadial; // 0/1 [AKSWAYJ]
+  uniform float uChromaRadial; // 0/1 [SwayCommand]
   uniform float uScan;         // 0/1
   uniform float uCrt;          // 0/1
   uniform float uCrtAlpha;     // 0.1 * animated opacity
@@ -796,7 +796,7 @@ const FRAG_FINAL = /* glsl */ `
     // ---- feOffset red/blue split, screen-recombined ----
     vec2 dPx = uSplitPx + uChromaPx;
     if (uChromaRadial > 0.5) {
-      // [AKSWAYJ] send the chromaAb term along the radius instead
+      // [SwayCommand] send the chromaAb term along the radius instead
       vec2 rel = (vUv - 0.5) * uRes;
       float len = length(rel);
       // Unconditional guard rather than a ?: — both sides of a GLSL ternary are
@@ -1209,7 +1209,7 @@ export function createFxRack(THREE, renderer, width, height, opts) {
       if (p.audioReactive) {
         // Bass-driven sweetening of the corruption effects. The pushed VALUES
         // are VideoOutput.tsx verbatim: max(fader, powBass * K) with K = 0.9 /
-        // 0.7 / 0.5 / 0.4. [AKSWAYJ] only the `p.X > 0` ARM GATE is added, so a
+        // 0.7 / 0.5 / 0.4. [SwayCommand] only the `p.X > 0` ARM GATE is added, so a
         // deck the VJ has parked at zero stays fully off instead of autoplaying
         // with the beat.
         //
@@ -1227,7 +1227,7 @@ export function createFxRack(THREE, renderer, width, height, opts) {
           zoomScale = 1.0 + powBass * 0.25;
         }
         if (p.strobe > 0 && powBass > 0.5) isAudioStrobe = true;
-        // [AKSWAYJ] upstream had no beat detector or gesture rig; AKSWAYJ does,
+        // [SwayCommand] upstream had no beat detector or gesture rig; SwayCommand does,
         // and a strobe deck that ignores them would feel dead on this hardware.
         if (p.strobe > 0 && (beat > 0.6 || pulse > 0.6)) isAudioStrobe = true;
         if (cBackskip > 0 && powBass > 0.8) cBackskip = Math.max(cBackskip, 0.8);
@@ -1377,7 +1377,7 @@ export function createFxRack(THREE, renderer, width, height, opts) {
         au.u_grid.value.set(cols, rows);
         au.u_source.value = src;
         au.u_mono.value = p.asciiMono ? 1 : 0;
-        // [AKSWAYJ] the mono accent is the one colour this rack injects rather
+        // [SwayCommand] the mono accent is the one colour this rack injects rather
         // than grades, so it is the one place io.palette can drive it. With
         // asciiPalette off it falls back to the upstream constant #00ff41.
         if (p.asciiPalette && io && io.palette && io.palette[4]) {

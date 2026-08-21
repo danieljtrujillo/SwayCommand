@@ -179,7 +179,7 @@ export function createScene(ctx) {
          gl_FragColor.rgb += uRidgeColor * ridge * uRidgeGain;`
       );
   };
-  landMat.customProgramCacheKey = () => 'akswayj-valley';
+  landMat.customProgramCacheKey = () => 'swaycommand-valley';
 
   const land = new THREE.Mesh(landGeo, landMat);
   land.frustumCulled = false;

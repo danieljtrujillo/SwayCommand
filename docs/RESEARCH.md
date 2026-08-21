@@ -1,6 +1,6 @@
 # Research record
 
-This document condenses the AKSWAYJ technical brief. All findings were research-verified on **2026-08-19**. Every factual claim in the [README](../README.md) and in `src/shared/constants.js` and `src/renderer/midi/swaymap.js` traces to a URL in this document. Items not officially published by Audima are marked **[recovered]**; open questions are marked **[UNCERTAIN]**.
+This document condenses the SwayCommand technical brief. All findings were research-verified on **2026-08-19**. Every factual claim in the [README](../README.md) and in `src/shared/constants.js` and `src/renderer/midi/swaymap.js` traces to a URL in this document. Items not officially published by Audima are marked **[recovered]**; open questions are marked **[UNCERTAIN]**.
 
 ## Product identity
 
@@ -75,7 +75,7 @@ Audima publishes no SDK, no public API, no GitHub organization, no OSC support, 
 
 ### Redistribution terms
 
-Audima's terms and conditions prohibit redistributing Audima content without written permission (<https://audima.com.au/terms-and-conditions/>). AKSWAYJ therefore never bundles the MSI or the driver zip; an install-time fetch onto the user's machine is compliant. The ST DFU driver alone may be bundled under SLA0048 with notices retained. Contact for partnership or permission: contactus@audima.com.au , <https://discord.com/invite/CYUrJXjjN4>.
+Audima's terms and conditions prohibit redistributing Audima content without written permission (<https://audima.com.au/terms-and-conditions/>). SwayCommand therefore never bundles the MSI or the driver zip; an install-time fetch onto the user's machine is compliant. The ST DFU driver alone may be bundled under SLA0048 with notices retained. Contact for partnership or permission: contactus@audima.com.au , <https://discord.com/invite/CYUrJXjjN4>.
 
 ## USB identity and MIDI integration
 
@@ -116,22 +116,22 @@ Integration is plain MIDI: notes, CC, Program Change, plus a per-region MPE flag
 |---|---|
 | Knob press | CC numbers unknown |
 | Mappable buttons | Defaults unknown (CC vs. notes) |
-| Pad transmit channel | The .swayproj states channel 1; the official Ableton script listens on channel 16. AKSWAYJ accepts both |
+| Pad transmit channel | The .swayproj states channel 1; the official Ableton script listens on channel 16. SwayCommand accepts both |
 | MPE | Zone and channel details unknown |
 
 ### Serial and EEPROM write prohibition
 
-Programmatic device configuration was evaluated and rejected. The Sway Software's serial protocol (Handshake, SendProjectFragment*, EEPROM upload, ACK/retry) was recovered from the Tauri executable, but the wire framing — CRC polynomial, baud rate, ACK bytes — is not statically recoverable. The `.swayproj` format is a versioned raw EEPROM image whose layout has already changed once (`FF 02` prefix). The Sway Software ships a deliberate `corrupt_eeprom` test demonstrating that bad writes **soft-brick the stored configuration**. AKSWAYJ does not write to the device; the write-prohibition policy is recorded in [SWAY_INTEGRATION.md](SWAY_INTEGRATION.md). Source: binary analysis of <https://cdn.audima.com.au/software/v1.2.0/The.Sway_1.2.0_x64_en-US.msi>.
+Programmatic device configuration was evaluated and rejected. The Sway Software's serial protocol (Handshake, SendProjectFragment*, EEPROM upload, ACK/retry) was recovered from the Tauri executable, but the wire framing — CRC polynomial, baud rate, ACK bytes — is not statically recoverable. The `.swayproj` format is a versioned raw EEPROM image whose layout has already changed once (`FF 02` prefix). The Sway Software ships a deliberate `corrupt_eeprom` test demonstrating that bad writes **soft-brick the stored configuration**. SwayCommand does not write to the device; the write-prohibition policy is recorded in [SWAY_INTEGRATION.md](SWAY_INTEGRATION.md). Source: binary analysis of <https://cdn.audima.com.au/software/v1.2.0/The.Sway_1.2.0_x64_en-US.msi>.
 
 ## Prior art
 
 ### Source projects
 
-AKSWAYJ reuses ideas from three projects.
+SwayCommand reuses ideas from three projects.
 
 #### theDAW
 
-<https://github.com/gantasmo/theDAW> (MIT). GANTASMO's local-first all-in-one AI music studio: a Python 3.10 FastAPI backend, a React 19 / Vite 7 / Tailwind 4 / Zustand 5 frontend, PyTorch on CUDA 12.8, a three.js/WebGL VJ engine ("VJ-9000"), approximately 110 auto-detected MIDI controller profiles, and a Quest 3 XR companion over ADB. Ideas reused in AKSWAYJ: MIDI learn-by-capture with controller profiles, the local-first rule that nothing downloads at startup, VJ-9000 GLSL patterns, and the installer approach. Releases: <https://github.com/gantasmo/theDAW/releases>.
+<https://github.com/gantasmo/theDAW> (MIT). GANTASMO's local-first all-in-one AI music studio: a Python 3.10 FastAPI backend, a React 19 / Vite 7 / Tailwind 4 / Zustand 5 frontend, PyTorch on CUDA 12.8, a three.js/WebGL VJ engine ("VJ-9000"), approximately 110 auto-detected MIDI controller profiles, and a Quest 3 XR companion over ADB. Ideas reused in SwayCommand: MIDI learn-by-capture with controller profiles, the local-first rule that nothing downloads at startup, VJ-9000 GLSL patterns, and the installer approach. Releases: <https://github.com/gantasmo/theDAW/releases>.
 
 #### Akvj
 
@@ -155,7 +155,7 @@ No VJ or visualizer application for the Sway has shipped. The niche is empty.
 
 ### Comparable applications
 
-Each nearest comparable implements exactly one ingredient of the combined install-to-performance flow that AKSWAYJ targets:
+Each nearest comparable implements exactly one ingredient of the combined install-to-performance flow that SwayCommand targets:
 
 | Application | Single ingredient |
 |---|---|
@@ -164,7 +164,7 @@ Each nearest comparable implements exactly one ingredient of the combined instal
 | VDMX | Per-controller templates; macOS-only (<https://docs.vidvox.net/vdmx/vdmx_templates>) |
 | Serato | On-connect driver prompt (<https://support.serato.com/hc/en-us/articles/360000156476>) |
 
-No application combines an installer, driver handling, and auto-opening controller-tuned example projects; Audima itself leaves its DFU driver as a manual zip. That combined flow is AKSWAYJ's gap.
+No application combines an installer, driver handling, and auto-opening controller-tuned example projects; Audima itself leaves its DFU driver as a manual zip. That combined flow is SwayCommand's gap.
 
 ## Risk register
 
@@ -172,9 +172,9 @@ Risks are ranked by severity.
 
 | Rank | Risk | Mitigation or resolution |
 |---|---|---|
-| 1 | Cloudflare rules on cdn.audima.com.au can change from a User-Agent blocklist to a JavaScript challenge at any time; behavior was tested from one region only | AKSWAYJ ships graceful failure and a browser fallback to <https://audima.com.au/downloads/>. Behavior of <https://cdn.audima.com.au/software/latest.json> was verified empirically 2026-08-19 |
+| 1 | Cloudflare rules on cdn.audima.com.au can change from a User-Agent blocklist to a JavaScript challenge at any time; behavior was tested from one region only | SwayCommand ships graceful failure and a browser fallback to <https://audima.com.au/downloads/>. Behavior of <https://cdn.audima.com.au/software/latest.json> was verified empirically 2026-08-19 |
 | 2 | Factory-map unknowns: knob-press CCs, mappable-button defaults, pad channel (1 vs. 16), MPE details | Resolvable with a single hardware MIDI-monitor session |
 | 3 | Format and firmware churn: `.swayproj` has changed layout once; pinned CDN version directories have been deleted before (v1.0.x is gone) | `latest.json` is preferred over pinned URLs |
 | 4 | No Audima permission yet for automated fetching; the terms and conditions are silent on automation | An email to contactus@audima.com.au would fully de-risk the practice |
 | 5 | Market size: 244 Indiegogo backers plus batch sales, an approximately 1,500-member Discord | Design rule: the Sway is the primary input, but any class-compliant MIDI controller works |
-| 6 | SmartScreen friction: Audima's MSI is unsigned | AKSWAYJ's own installer must be Authenticode-signed to avoid the same friction |
+| 6 | SmartScreen friction: Audima's MSI is unsigned | SwayCommand's own installer must be Authenticode-signed to avoid the same friction |

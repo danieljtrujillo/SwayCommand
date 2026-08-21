@@ -17,7 +17,7 @@
 //   * Upstream declares the tables with the GLSL3 constructor float[16](...),
 //     which is illegal in the GLSL1 that three.js ShaderMaterial compiles.
 //     They are emitted here as an if/else selector over the same values.
-//   * Upstream reads a real 16-band FFT. AKSWAYJ scenes receive three bands, so
+//   * Upstream reads a real 16-band FFT. SwayCommand scenes receive three bands, so
 //     the 16 bins are interpolated across bass/mid/high. The spectral-centroid
 //     mode picker and its asymmetric smoothing (0.04 down, 0.08 up) then run on
 //     that synthesized spectrum unchanged.
@@ -180,7 +180,7 @@ export function createScene(ctx) {
          gl_FragColor.rgb += uNodeColor * node * uNodeGain;`
       );
   };
-  plateMat.customProgramCacheKey = () => 'akswayj-chladni';
+  plateMat.customProgramCacheKey = () => 'swaycommand-chladni';
 
   const plate = new THREE.Mesh(plateGeo, plateMat);
   plate.frustumCulled = false;

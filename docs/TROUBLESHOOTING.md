@@ -40,14 +40,14 @@ Symptom-oriented reference for known issues. Check-by-check detection methods an
 |---|---|
 | Symptom | The Doctor's "Audima update channel" check reports `warn` with an unreachable-CDN message. |
 | Cause | The check fetches `https://cdn.audima.com.au/software/latest.json` with a 5,000 ms timeout ([`src/main/doctor.js`](../src/main/doctor.js), `checkNetwork`); no network, a firewall, or a CDN outage fails the fetch. |
-| Resolution | Playing is unaffected — AKSWAYJ operates fully offline and the `warn` does not block manual advancement. Only the download fixes (`fetch-companion`, `install-dfu-driver`) are unavailable until the CDN is reachable. The check offers a fallback fix that opens `audima.com.au/downloads/` in the system browser for manual downloads. A later re-run refreshes the check. |
+| Resolution | Playing is unaffected — SwayCommand operates fully offline and the `warn` does not block manual advancement. Only the download fixes (`fetch-companion`, `install-dfu-driver`) are unavailable until the CDN is reachable. The check offers a fallback fix that opens `audima.com.au/downloads/` in the system browser for manual downloads. A later re-run refreshes the check. |
 
 ## Manual CDN test with curl returns 403
 
 | | |
 |---|---|
 | Symptom | A manual reachability test of `cdn.audima.com.au` with curl or a script returns HTTP 403 while the Doctor's update-channel check reports `ok`. |
-| Cause | The CDN rejects generic tool User-Agents (curl-, python-, and Go-style); AKSWAYJ sends the custom User-Agent `AKSWAYJ/0.1 (Sway companion; +https://github.com/akswayj)` on every Audima request ([`src/shared/constants.js`](../src/shared/constants.js), [`src/main/audima.js`](../src/main/audima.js)). |
+| Cause | The CDN rejects generic tool User-Agents (curl-, python-, and Go-style); SwayCommand sends the custom User-Agent `SwayCommand/0.1 (Sway companion; +https://github.com/swaycommand)` on every Audima request ([`src/shared/constants.js`](../src/shared/constants.js), [`src/main/audima.js`](../src/main/audima.js)). |
 | Resolution | The 403 is expected for tool-default User-Agents and indicates nothing about connectivity. A test with a custom User-Agent (`curl -A`) or from a browser succeeds; the Doctor's check result is authoritative for the application. |
 
 ## Companion download reported as deleted

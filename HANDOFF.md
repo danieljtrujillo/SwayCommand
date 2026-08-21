@@ -1,4 +1,4 @@
-# AKSWAYJ handoff
+# SwayCommand handoff
 
 Written 2026-08-20 for the next engineer or agent, after the single-page cockpit redesign. This is an internal engineering note. It is deliberately **not** in `docs/`, not in the documentation index, and not packaged into the app — `electron-builder.yml` ships `docs/**/*.md` and `README.md` by exact name, so a root-level file never reaches an end user.
 
@@ -48,8 +48,8 @@ Changes in existing modules:
 - **fxrack.js** — exports `DECKS` beside `RANGES`; the phantom deck keys `zoomPunch` / `slitScan` / `timeDisplace` are dropped and `audioReactive` / `asciiAccent` are surfaced, so every deck key has a range entry and the UI cannot silently skip parameters.
 - **midi.js** — emits the full event set (`pad`, `note`, `noteoff`, `bend`, `mod`, `cc` with resolved target); note-offs are no longer swallowed. The router is the one `onEvent` consumer.
 - **audio.js** (analysis) — `useSystemAudio()` reads Windows WASAPI loopback correctly (video track dropped on arrival, explicit no-audio-track failure), `state.source` gained `'system'`, `state.deviceId` records the granted input, `releaseInput`/`stopInternal` exported.
-- **main.js** — IPC gained `project:*` (openDialog, saveDialog, read, write, recent, templates, readTemplate) and `files:statAudio`; `projects:list` is gone with the picker. `AKSWAYJ_AUTOPLAY` now takes a template id or a `.sway` path; `AKSWAYJ_WINDOW=WxH` forces the initial window size for layout screenshots.
-- **app.js** — rebuilt as cockpit assembly. `window.__akswayj` is now `{ state, studio, openStudio(tab), openDocs, renderPads, renderSamples, transport, projectStore, router, selectControl, openProject, saveProject }`; `state.screen` no longer exists.
+- **main.js** — IPC gained `project:*` (openDialog, saveDialog, read, write, recent, templates, readTemplate) and `files:statAudio`; `projects:list` is gone with the picker. `SWAYCOMMAND_AUTOPLAY` now takes a template id or a `.sway` path; `SWAYCOMMAND_WINDOW=WxH` forces the initial window size for layout screenshots.
+- **app.js** — rebuilt as cockpit assembly. `window.__swaycommand` is now `{ state, studio, openStudio(tab), openDocs, renderPads, renderSamples, transport, projectStore, router, selectControl, openProject, saveProject }`; `state.screen` no longer exists.
 
 Projects: the 8 legacy presets became bundled templates (`projects/templates/*.sway`, converted via `legacyToSway`), reachable from the project menu. Format reference: [docs/PROJECTS.md](docs/PROJECTS.md).
 
@@ -83,7 +83,7 @@ Hit twice before the redesign: source files edited **after** a build was cut, so
 
 1. Confirm no agent or watcher is still writing under `src/`.
 2. Run `npm run build:renderer`, then verify nothing under `src/` is newer than `dist/renderer.bundle.js`.
-3. Then `npm run dist:win` (or `dist:mac` / `dist:linux`). Output lands in `release/`; the Windows installer is one-click, per-user, `%LOCALAPPDATA%\Programs\akswayj`, silent with `/S`.
+3. Then `npm run dist:win` (or `dist:mac` / `dist:linux`). Output lands in `release/`; the Windows installer is one-click, per-user, `%LOCALAPPDATA%\Programs\swaycommand`, silent with `/S`.
 
 Docs are not bundled by the renderer build — `docs/**/*.md` and `README.md` are packaged as files — so documentation edits need only a repack, not a bundle.
 
@@ -95,19 +95,19 @@ No test suite. Verification drives the real app headlessly through env vars read
 
 | Variable | Effect |
 |---|---|
-| `AKSWAYJ_SHOT` | Capture the window to a PNG, then quit |
-| `AKSWAYJ_SHOT_DELAY` | ms before capture, default 5000 |
-| `AKSWAYJ_WINDOW` | `WxH` initial window size, for narrow-layout screenshots |
-| `AKSWAYJ_AUTOPLAY` | Template id **or** `.sway` file path; skips the SYSTEM modal |
-| `AKSWAYJ_SCENE` | Force a scene id. Bypasses navigation — never use it to judge discoverability |
-| `AKSWAYJ_PROBE` | Run JS in the page 3000 ms after load; result prints as `[probe] …` |
+| `SWAYCOMMAND_SHOT` | Capture the window to a PNG, then quit |
+| `SWAYCOMMAND_SHOT_DELAY` | ms before capture, default 5000 |
+| `SWAYCOMMAND_WINDOW` | `WxH` initial window size, for narrow-layout screenshots |
+| `SWAYCOMMAND_AUTOPLAY` | Template id **or** `.sway` file path; skips the SYSTEM modal |
+| `SWAYCOMMAND_SCENE` | Force a scene id. Bypasses navigation — never use it to judge discoverability |
+| `SWAYCOMMAND_PROBE` | Run JS in the page 3000 ms after load; result prints as `[probe] …` |
 
-`window.__akswayj` is the automation handle (shape in section 2). Standing traps, all hit during earlier work:
+`window.__swaycommand` is the automation handle (shape in section 2). Standing traps, all hit during earlier work:
 
 - **`ELECTRON_RUN_AS_NODE` may be set in agent shells.** Electron then starts as plain Node and dies with `Cannot read properties of undefined (reading 'whenReady')`. Clear it every launch.
-- **`AKSWAYJ_SHOT_DELAY` must exceed the probe's own timers**, or the app quits mid-probe and prints nothing.
-- **Env vars leak between runs.** Clear `AKSWAYJ_AUTOPLAY` / `AKSWAYJ_SCENE` explicitly.
-- **Do not read the WebGL canvas by drawing it into a 2D canvas** — the renderer runs without `preserveDrawingBuffer` and reads back pure black. Use `AKSWAYJ_SHOT` and measure the PNG.
+- **`SWAYCOMMAND_SHOT_DELAY` must exceed the probe's own timers**, or the app quits mid-probe and prints nothing.
+- **Env vars leak between runs.** Clear `SWAYCOMMAND_AUTOPLAY` / `SWAYCOMMAND_SCENE` explicitly.
+- **Do not read the WebGL canvas by drawing it into a 2D canvas** — the renderer runs without `preserveDrawingBuffer` and reads back pure black. Use `SWAYCOMMAND_SHOT` and measure the PNG.
 
 ---
 

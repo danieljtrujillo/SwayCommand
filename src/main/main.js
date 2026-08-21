@@ -1,4 +1,4 @@
-// AKSWAYJ main process — window lifecycle, permissions, IPC surface.
+// SwayCommand main process — window lifecycle, permissions, IPC surface.
 
 'use strict';
 
@@ -151,9 +151,9 @@ function readDoc(id) {
 }
 
 function createWindow() {
-  // Verification hook: AKSWAYJ_WINDOW=960x600 forces an initial size so the
+  // Verification hook: SWAYCOMMAND_WINDOW=960x600 forces an initial size so the
   // narrow-window layout can be screenshot-tested headlessly.
-  const sizeOverride = /^(\d+)x(\d+)$/.exec(process.env.AKSWAYJ_WINDOW || '');
+  const sizeOverride = /^(\d+)x(\d+)$/.exec(process.env.SWAYCOMMAND_WINDOW || '');
   win = new BrowserWindow({
     width: sizeOverride ? Number(sizeOverride[1]) : 1440,
     height: sizeOverride ? Number(sizeOverride[2]) : 900,
@@ -174,16 +174,16 @@ function createWindow() {
   win.once('ready-to-show', () => win.show());
 
   const query = {};
-  if (process.env.AKSWAYJ_AUTOPLAY) query.autoplay = process.env.AKSWAYJ_AUTOPLAY;
-  if (process.env.AKSWAYJ_SCENE) query.scene = process.env.AKSWAYJ_SCENE;
+  if (process.env.SWAYCOMMAND_AUTOPLAY) query.autoplay = process.env.SWAYCOMMAND_AUTOPLAY;
+  if (process.env.SWAYCOMMAND_SCENE) query.scene = process.env.SWAYCOMMAND_SCENE;
   win.loadFile(path.join(__dirname, '..', '..', 'dist', 'index.html'), { query });
 
-  // DOM probe for automated verification: AKSWAYJ_PROBE=<js expression>
-  if (process.env.AKSWAYJ_PROBE) {
+  // DOM probe for automated verification: SWAYCOMMAND_PROBE=<js expression>
+  if (process.env.SWAYCOMMAND_PROBE) {
     win.webContents.once('did-finish-load', () => {
       setTimeout(async () => {
         try {
-          const r = await win.webContents.executeJavaScript(process.env.AKSWAYJ_PROBE);
+          const r = await win.webContents.executeJavaScript(process.env.SWAYCOMMAND_PROBE);
           console.log('[probe]', typeof r === 'string' ? r : JSON.stringify(r));
         } catch (err) {
           console.error('[probe] failed:', err.message);
@@ -192,15 +192,15 @@ function createWindow() {
     });
   }
 
-  // Screenshot mode for automated verification: AKSWAYJ_SHOT=<out.png>
-  if (process.env.AKSWAYJ_SHOT) {
-    const delay = Number(process.env.AKSWAYJ_SHOT_DELAY || 5000);
+  // Screenshot mode for automated verification: SWAYCOMMAND_SHOT=<out.png>
+  if (process.env.SWAYCOMMAND_SHOT) {
+    const delay = Number(process.env.SWAYCOMMAND_SHOT_DELAY || 5000);
     win.webContents.once('did-finish-load', () => {
       setTimeout(async () => {
         try {
           const img = await win.webContents.capturePage();
-          fs.writeFileSync(process.env.AKSWAYJ_SHOT, img.toPNG());
-          console.log(`[shot] saved ${process.env.AKSWAYJ_SHOT}`);
+          fs.writeFileSync(process.env.SWAYCOMMAND_SHOT, img.toPNG());
+          console.log(`[shot] saved ${process.env.SWAYCOMMAND_SHOT}`);
         } catch (err) {
           console.error('[shot] failed:', err);
         }

@@ -24,7 +24,7 @@
 //   * Upstream's four named palettes are replaced by io.palette mapped onto the
 //     cyan/magenta/gold/white uniform roles, as the contract requires.
 //   * The dither/vignette ShaderPass and UnrealBloomPass are omitted: the
-//     AKSWAYJ compositor already applies its own tone curve and vignette.
+//     SwayCommand compositor already applies its own tone curve and vignette.
 //   * Instance counts scale by quality tier (upstream is a fixed 373/756).
 
 export const meta = { id: 'lattice', name: 'Quantum Lattice', mood: 'crystalline' };

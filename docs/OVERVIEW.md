@@ -1,6 +1,6 @@
 # System overview
 
-AKSWAYJ is an Electron application with two processes. The main process owns operating-system integration: window lifecycle, USB and registry inspection, downloads from Audima's CDN, driver installation, the settings file, and `.sway` project file I/O. The renderer process owns everything visible and audible: the cockpit interface, MIDI input, audio analysis, sample and synth playback, timeline transport, and the WebGL render pipeline. The two communicate over a fixed IPC surface exposed through a context-isolated preload script.
+SwayCommand is an Electron application with two processes. The main process owns operating-system integration: window lifecycle, USB and registry inspection, downloads from Audima's CDN, driver installation, the settings file, and `.sway` project file I/O. The renderer process owns everything visible and audible: the cockpit interface, MIDI input, audio analysis, sample and synth playback, timeline transport, and the WebGL render pipeline. The two communicate over a fixed IPC surface exposed through a context-isolated preload script.
 
 The application is one page — the cockpit — and it is always live. There is no screen flow: the stage renders from the first frame to quit, and every panel, drawer, and modal works on top of it without stopping the render loop. At startup the stage is covered by a line-art blast door while the SYSTEM modal runs the Doctor checks; ENTER (or auto-advance when every check passes) opens the door onto a loaded project — the most recent one, or the First Flight template on a fresh install.
 
@@ -25,7 +25,7 @@ Three surfaces overlay the cockpit:
 
 ## Purpose and scope
 
-The Sway (Audima Labs Pty Ltd) is a gesture-based MIDI controller: sixteen infrared distance sensors translate hand positions above the unit into MIDI continuous controllers and notes. Audima ships a companion application for preset editing and firmware updates, DAW integration scripts, and demo packs, but no visual-performance software. AKSWAYJ supplies that layer: a self-contained VJ instrument mapped to the Sway's factory MIDI assignments, playable immediately after installation.
+The Sway (Audima Labs Pty Ltd) is a gesture-based MIDI controller: sixteen infrared distance sensors translate hand positions above the unit into MIDI continuous controllers and notes. Audima ships a companion application for preset editing and firmware updates, DAW integration scripts, and demo packs, but no visual-performance software. SwayCommand supplies that layer: a self-contained VJ instrument mapped to the Sway's factory MIDI assignments, playable immediately after installation.
 
 The Sway is optional at every point. All Sway controls have mouse, keyboard, and generic-MIDI equivalents, and the audio-analysis layer synthesizes an internal signal when no input device is available, so every scene renders meaningful output on a machine with no peripherals at all.
 
@@ -34,7 +34,7 @@ The Sway is optional at every point. All Sway controls have mouse, keyboard, and
 | Term | Definition |
 |---|---|
 | Sway | Audima Labs' gesture MIDI controller. USB `VID 0x0483`, `PID 0x52A4` in normal operation; `PID 0xDF11` in firmware-update (DFU) mode. |
-| Sway Software | Audima's companion application for preset editing and firmware updates. Optional; not required by AKSWAYJ. |
+| Sway Software | Audima's companion application for preset editing and firmware updates. Optional; not required by SwayCommand. |
 | Doctor | The system check and remediation list shown in the SYSTEM modal. See [DOCTOR.md](DOCTOR.md). |
 | cockpit | The single always-live page: top bar, rails, stage, timeline band, Sway deck. |
 | deck | The on-screen schematic of the Sway hardware at the bottom of the cockpit; the control-selection surface. |
@@ -94,7 +94,7 @@ The application fetches from Audima's hosts only:
 | `https://cdn.audima.com.au/software/Windows%20DFU%20Driver.zip` | "Install DFU driver" fix only (Windows) | Fetches Audima's official STM32 bootloader driver package |
 | `https://audima.com.au/downloads/`, user-manual PDF | Fallback fix actions | Opened in the system browser |
 
-All requests to Audima hosts carry the User-Agent `AKSWAYJ/0.1 (Sway companion; +https://github.com/akswayj)`; the CDN rejects generic tool User-Agents. Requests to any other host are refused by the download layer, and renderer navigation is disabled entirely. The application collects no telemetry and writes no data outside its own settings directory, the Downloads folder (user-initiated), the user's chosen project locations, and a driver cache under the settings directory.
+All requests to Audima hosts carry the User-Agent `SwayCommand/0.1 (Sway companion; +https://github.com/swaycommand)`; the CDN rejects generic tool User-Agents. Requests to any other host are refused by the download layer, and renderer navigation is disabled entirely. The application collects no telemetry and writes no data outside its own settings directory, the Downloads folder (user-initiated), the user's chosen project locations, and a driver cache under the settings directory.
 
 Handing a link to the system browser is the second, user-initiated path outward. `shell.openExternal` accepts an `https` URL only when its hostname matches an entry in `EXTERNAL_ALLOW` in `src/main/main.js`, or is a subdomain of one: `audima.com.au`, `github.com`, `githubusercontent.com`, `nodejs.org`, `community.polyexpression.com`, `discord.com`, `vidvox.net`, `huggingface.co`, `unity.com`, `resolume.com`, `st3nd.com`, `serato.com`, `synesthesia.live`, `elektronauts.com`, `indiegogo.com`. The list covers the hosts cited by the bundled documentation, so links in the documentation modal resolve without widening the policy to arbitrary URLs. A link outside the list is refused; the modal then shows an inline notice naming the URL so the reader can open it manually.
 
@@ -102,10 +102,10 @@ Handing a link to the system browser is the second, user-initiated path outward.
 
 | Item | Location |
 |---|---|
-| Settings (`settings.json`; holds `midiOverrides`, `recentProjects`, `lastProjectDir`, and any legacy `kit`) | Electron `userData`: `%APPDATA%\AKSWAYJ` on Windows, `~/Library/Application Support/AKSWAYJ` on macOS, `~/.config/AKSWAYJ` on Linux |
+| Settings (`settings.json`; holds `midiOverrides`, `recentProjects`, `lastProjectDir`, and any legacy `kit`) | Electron `userData`: `%APPDATA%\SwayCommand` on Windows, `~/Library/Application Support/SwayCommand` on macOS, `~/.config/SwayCommand` on Linux |
 | Default save location for `.sway` projects | `~/Documents/SwayCommand Projects` (created on first save; any location outside the application directory is accepted) |
 | Bundled templates | `projects/templates/` at the package root; inside `resources/app.asar` in packaged builds |
 | Downloaded Sway Software installer | The system Downloads folder |
 | DFU driver package cache | `<userData>/audima/` |
 | Documentation read by the modal | `README.md` and `docs/*.md` at the package root; inside `resources/app.asar` in packaged builds |
-| Installed application (Windows) | `%LOCALAPPDATA%\Programs\akswayj` |
+| Installed application (Windows) | `%LOCALAPPDATA%\Programs\swaycommand` |

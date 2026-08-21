@@ -71,8 +71,8 @@ electron-builder reads both files from `build/` (`directories.buildResources: bu
 
 | Key | Value |
 |---|---|
-| `appId` | `app.akswayj` |
-| `productName` | `AKSWAYJ` |
+| `appId` | `app.swaycommand` |
+| `productName` | `SwayCommand` |
 | `copyright` | `MIT — unaffiliated with Audima Labs` |
 | `directories.output` | `release` |
 | `directories.buildResources` | `build` |
@@ -102,10 +102,10 @@ NSIS options:
 | Option | Value | Effect |
 |---|---|---|
 | `oneClick` | `true` | single-page installer with no configuration prompts |
-| `perMachine` | `false` | per-user installation under `%LOCALAPPDATA%\Programs\akswayj`, no elevation |
+| `perMachine` | `false` | per-user installation under `%LOCALAPPDATA%\Programs\swaycommand`, no elevation |
 | `runAfterFinish` | `true` | launches the application when an interactive installation completes; not applied by silent (`/S`) installations |
-| `deleteAppDataOnUninstall` | `false` | `%APPDATA%\AKSWAYJ` survives uninstallation |
-| `artifactName` | `AKSWAYJ-Setup-${version}.${ext}` | `AKSWAYJ-Setup-0.1.0.exe` at the current version |
+| `deleteAppDataOnUninstall` | `false` | `%APPDATA%\SwayCommand` survives uninstallation |
+| `artifactName` | `SwayCommand-Setup-${version}.${ext}` | `SwayCommand-Setup-0.1.0.exe` at the current version |
 
 ## Release layout
 
@@ -113,9 +113,9 @@ NSIS options:
 
 | Path | Content |
 |---|---|
-| `AKSWAYJ-Setup-<version>.exe` | the NSIS installer; 94 MB at version 0.1.0, dominated by the Electron runtime |
-| `AKSWAYJ-Setup-<version>.exe.blockmap` | block-checksum map emitted alongside every NSIS artifact for differential updates; AKSWAYJ configures no auto-updater, so the file is unused |
-| `win-unpacked/` | the unpacked application — `AKSWAYJ.exe`, the Electron runtime files, and `resources/app.asar`; runs in place without installation, suitable for smoke tests |
+| `SwayCommand-Setup-<version>.exe` | the NSIS installer; 94 MB at version 0.1.0, dominated by the Electron runtime |
+| `SwayCommand-Setup-<version>.exe.blockmap` | block-checksum map emitted alongside every NSIS artifact for differential updates; SwayCommand configures no auto-updater, so the file is unused |
+| `win-unpacked/` | the unpacked application — `SwayCommand.exe`, the Electron runtime files, and `resources/app.asar`; runs in place without installation, suitable for smoke tests |
 | `builder-debug.yml` | electron-builder's dump of the effective build configuration |
 
 macOS and Linux builds write their artifacts and unpacked directories to the same `release/` directory. `release/`, `dist/`, and the generated icons are listed in `.gitignore` and are not tracked.

@@ -11,7 +11,7 @@ Header keys sit beside a single `project` object:
 | Key | Value | Semantics |
 |---|---|---|
 | `format` | `"sway"` | File-type marker. A file without it is rejected as not a project. |
-| `format_version` | `1` | Schema version. The loader rejects only versions **newer** than it supports, with a message to update AKSWAYJ; older or equal versions load. |
+| `format_version` | `1` | Schema version. The loader rejects only versions **newer** than it supports, with a message to update SwayCommand; older or equal versions load. |
 | `app_version` | string | The application version that last saved the file. Informational. |
 | `audio_mode` | `"linked"` | Media policy: v1 links audio files by path and never embeds them. |
 | `created_at`, `modified_at` | ISO 8601 or `null` | Stamped by the save path; `created_at` is set once. |
@@ -144,4 +144,4 @@ The project button shows the project name and marks unsaved changes; New, Open, 
 
 ## Startup selection
 
-At boot the renderer loads, in order of preference: the `autoplay` query parameter (a `.sway` file path, or a template id — supplied by the `AKSWAYJ_AUTOPLAY` environment variable, [ENVIRONMENT.md](ENVIRONMENT.md)); the most recent project from settings; the `first-flight` template. A failed candidate logs a console warning and falls through to the next.
+At boot the renderer loads, in order of preference: the `autoplay` query parameter (a `.sway` file path, or a template id — supplied by the `SWAYCOMMAND_AUTOPLAY` environment variable, [ENVIRONMENT.md](ENVIRONMENT.md)); the most recent project from settings; the `first-flight` template. A failed candidate logs a console warning and falls through to the next.

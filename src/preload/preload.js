@@ -4,7 +4,7 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('akswayj', {
+contextBridge.exposeInMainWorld('swaycommand', {
   info: () => ipcRenderer.invoke('app:info'),
 
   doctor: {

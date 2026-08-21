@@ -1,4 +1,4 @@
-// Wavetable bank for the AKSWAYJ synth.
+// Wavetable bank for the SwayCommand synth.
 //
 // Vital is a spectral-warping wavetable synth: each table is a series of
 // frames, and the oscillator morphs continuously between them. Web Audio has

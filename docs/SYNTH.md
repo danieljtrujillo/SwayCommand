@@ -1,12 +1,12 @@
 # Synth
 
-AKSWAYJ includes a wavetable synthesizer so a Sway is playable as an instrument without installing a plugin. Audima's downloads page recommends [Vital](https://vital.audio/) to first-time users ("Vital Synth Pack Free · Best for Beginners") and ships a Sway project for it; this engine targets the same ground.
+SwayCommand includes a wavetable synthesizer so a Sway is playable as an instrument without installing a plugin. Audima's downloads page recommends [Vital](https://vital.audio/) to first-time users ("Vital Synth Pack Free · Best for Beginners") and ships a Sway project for it; this engine targets the same ground.
 
 Implementation: [`src/renderer/audio/synth.js`](../src/renderer/audio/synth.js) and the wavetable bank in [`src/renderer/audio/wavetables.js`](../src/renderer/audio/wavetables.js). The panel lives in the SYNTH drawer ([STUDIO.md](STUDIO.md)).
 
 ## Capability against Vital
 
-| Vital feature | AKSWAYJ | Notes |
+| Vital feature | SwayCommand | Notes |
 |---|---|---|
 | 3 wavetable oscillators | Yes | 7 generated tables, continuous morph |
 | Wavetable position morph | Yes | Crossfade between adjacent spectral frames |

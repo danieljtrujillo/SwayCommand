@@ -1,5 +1,5 @@
 // VJ Shader — the five GANTASMO VJ-9000 fragment-shader presets plus its
-// eight-material picker, ported into one AKSWAYJ scene.
+// eight-material picker, ported into one SwayCommand scene.
 //
 // ============================ PROVENANCE / LICENSING =========================
 // Ported from GANTASMO VJ-9000 (the author's own project), files:
@@ -79,7 +79,7 @@
 //     `med` therefore holds 60 fps at 1080p on the reference part at DPR 1,
 //     with yotta right on the line at ~59 fps. Three honest caveats:
 //       - The reference part is a Radeon RX Vega M GL (~1.8 TFLOP). The weakest
-//         integrated GPU AKSWAYJ targets, an Intel HD 630 (~0.4 TFLOP), is
+//         integrated GPU SwayCommand targets, an Intel HD 630 (~0.4 TFLOP), is
 //         roughly a quarter of that, so `med` lands near 15-20 fps at 1080p
 //         there and even `low` does not reach 60. This scene does NOT meet
 //         contract hard rule 6 on HD 630-class graphics, and no setting of the
@@ -104,7 +104,7 @@
 //     eight-material picker occupy pads 0-3 and the one that ignores it sits on
 //     pad 4. Consequence: the scene opens on the Mandelbulb, not on yotta.
 //     Every preset's own parameters are unchanged by the reordering.
-//   * AKSWAYJ additions, all additive on top of untouched upstream math:
+//   * SwayCommand additions, all additive on top of untouched upstream math:
 //     u_hue is driven from io.palette[0]'s hue, the glow accumulator is tinted
 //     with a palette colour, io.xy offsets the camera orbit angles, gestures
 //     bias the active preset's primary/secondary parameter, io.knobs[3..6] take
@@ -135,7 +135,7 @@ const TC_ATTACK = 0.025; // 25 ms envelope attack
 const TC_RELEASE = 0.18; // 180 ms envelope release
 const TC_PARAM = 0.08;   // 80 ms parameter easing
 
-// --- AKSWAYJ gesture smoothing, seconds (63 % settle time). The task calls for
+// --- SwayCommand gesture smoothing, seconds (63 % settle time). The task calls for
 //     1.5-2.5 s: structural parameters must drift under the hand, never snap.
 const TAU_PRESS = 2.0;  // press -> active preset's PRIMARY parameter
 const TAU_SWAY = 2.5;   // sway  -> active preset's SECONDARY parameter
@@ -238,16 +238,16 @@ varying vec2 vUv;
 uniform float time;
 uniform vec2  wheel;
 uniform vec2  uAspectScale; // (max(A,1), max(1/A,1)); stands in for resolution
-uniform vec2  uPan;         // AKSWAYJ: io.xy, centred, smoothed
+uniform vec2  uPan;         // SwayCommand: io.xy, centred, smoothed
 uniform float u_bass;
 uniform float u_mid;
 uniform float u_high;
 uniform float u_volume;
 uniform float u_hue;
 uniform float u_material;
-uniform vec3  uGlowTint;    // AKSWAYJ: palette tint for the glow accumulator
-uniform float uFlash;       // AKSWAYJ: preset / material change flash
-uniform float uIntensity;   // AKSWAYJ: io.intensity
+uniform vec3  uGlowTint;    // SwayCommand: palette tint for the glow accumulator
+uniform float uFlash;       // SwayCommand: preset / material change flash
+uniform float uIntensity;   // SwayCommand: io.intensity
 ${o.uniforms}
 #define T (time + wheel.y/1e3)
 mat2 rot(float a){ float c=cos(a), s=sin(a); return mat2(c,-s,s,c); }
@@ -270,9 +270,9 @@ void main(){
   vec2 uv=(vUv-0.5)*uAspectScale;
   vec3 ro=vec3(0.,0.,${o.camDist.toFixed(2)});
   vec3 rd=normalize(vec3(uv,-1.3));
-  float a=T*0.2+uPan.x*3.0;          // AKSWAYJ: io.xy.x offsets the azimuth
+  float a=T*0.2+uPan.x*3.0;          // SwayCommand: io.xy.x offsets the azimuth
   ro.xz*=rot(a); rd.xz*=rot(a);
-  float b=sin(T*0.15)*0.4+uPan.y*0.9; // AKSWAYJ: io.xy.y offsets the elevation
+  float b=sin(T*0.15)*0.4+uPan.y*0.9; // SwayCommand: io.xy.y offsets the elevation
   ro.yz*=rot(b); rd.yz*=rot(b);
   float t=0., g=0.;
   vec3 p=ro;
@@ -320,13 +320,13 @@ void main(){
       col=neon*(0.5+0.4*dif)+neon*fres*2.2;
     }
   }
-  // Upstream glow tint kept intact; AKSWAYJ multiplies it by the palette tint.
+  // Upstream glow tint kept intact; SwayCommand multiplies it by the palette tint.
   col+=g*(${o.glow})*(0.5+0.5*cos(vec3(0,1,2)+T+u_high*4.0))*mix(vec3(1.0),uGlowTint,${GLOW_PAL});
   col=pow(clamp(col,0.,1.),vec3(0.75));
   vec2 q=vUv;
   col*=0.4+0.6*pow(max(16.0*q.x*q.y*(1.0-q.x)*(1.0-q.y),0.0),0.2); // GUARD: pow base
   col=hueShift(col,u_hue);
-  col=mix(col,vec3(1.0),clamp(uFlash,0.,1.)*0.35); // AKSWAYJ transition flash
+  col=mix(col,vec3(1.0),clamp(uFlash,0.,1.)*0.35); // SwayCommand transition flash
   gl_FragColor=vec4(col*uIntensity,1.0);
 }`;
 }
@@ -626,7 +626,7 @@ vec3 render(vec2 uv) {
 		col=S(-.5,2.,col);
 	}
 	float k=max(.3,1.-distance(LP,ro));
-	// AKSWAYJ: the one bloom term yotta has is tinted with the engine palette,
+	// SwayCommand: the one bloom term yotta has is tinted with the engine palette,
 	// mirroring what the glow accumulator gets in the four fractal presets.
 	col+=hue(k*k*1.57+1.5)*k*.6*mix(vec3(1.),uGlowTint,${GLOW_PAL});
 	col=mix(col,vec3(1,.95,.9),S(.0,15.,distance(p,ro)));
@@ -643,11 +643,11 @@ vec3 render(vec2 uv) {
 	return col*mix(vec3(.95,.97,1.),vec3(1,.85,.65),u_warmth);
 }
 void main() {
-	// Upstream: uv=(FC-.5*R)/MN. uPan is the AKSWAYJ io.xy look-around.
+	// Upstream: uv=(FC-.5*R)/MN. uPan is the SwayCommand io.xy look-around.
 	vec2 uv=(vUv-0.5)*uAspectScale+uPan*0.35;
 	vec3 col=render(uv);
 	col=hueShift(col,u_hue);
-	col=mix(col,vec3(1.0),clamp(uFlash,0.,1.)*0.35); // AKSWAYJ transition flash
+	col=mix(col,vec3(1.0),clamp(uFlash,0.,1.)*0.35); // SwayCommand transition flash
 	gl_FragColor=vec4(col*uIntensity,1.);
 }`;
 }
@@ -683,7 +683,7 @@ export function createScene(ctx) {
   //     so GLSL1 sees an unrollable constant count.
   //
   //     Upstream targets discrete GPUs at 1280x720 with one shared 140-step
-  //     march for all four fractals and the full DE iteration counts. AKSWAYJ
+  //     march for all four fractals and the full DE iteration counts. SwayCommand
   //     targets 1080p on integrated graphics, and the engine renders into a
   //     target of canvas * devicePixelRatio (capped 1.75), doubled during a
   //     crossfade.
@@ -906,7 +906,7 @@ export function createScene(ctx) {
       const rb = clamp01(io.bands.bass);
       const rm = clamp01(io.bands.mid);
       const rh = clamp01(io.bands.high);
-      const rv = clamp01(io.level); // AKSWAYJ io.level is upstream `volume`
+      const rv = clamp01(io.level); // SwayCommand io.level is upstream `volume`
       smBass += (rb - smBass) * (rb > smBass ? tcUp : tcDn);
       smMid += (rm - smMid) * (rm > smMid ? tcUp : tcDn);
       smHigh += (rh - smHigh) * (rh > smHigh ? tcUp : tcDn);
@@ -926,7 +926,7 @@ export function createScene(ctx) {
       panX = approach(panX, io.xy.x - 0.5, TAU_PAN, dt);
       panY = approach(panY, io.xy.y - 0.5, TAU_PAN, dt);
 
-      // ---- editable params: the upstream easing law, with the AKSWAYJ knob
+      // ---- editable params: the upstream easing law, with the SwayCommand knob
       //      and gesture biases folded into `base` before the same clamp.
       //        target = clamp(base + (max-min)*amt*level, min, max)
       //      eased with an 80 ms time constant.

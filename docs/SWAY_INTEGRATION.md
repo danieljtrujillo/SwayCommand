@@ -1,6 +1,6 @@
 # Sway integration
 
-Technical reference for AKSWAYJ's interface to the Audima Labs Sway and to Audima's distribution endpoints. All facts were verified against official Audima artifacts — firmware USB descriptors, companion-application binaries, and the Cubase/Ableton DAW scripts — on 2026-08-19; sources and open questions are recorded in [RESEARCH.md](RESEARCH.md). The code constants live in [`src/shared/constants.js`](../src/shared/constants.js) and [`src/renderer/midi/swaymap.js`](../src/renderer/midi/swaymap.js); this document and those two files record the same values.
+Technical reference for SwayCommand's interface to the Audima Labs Sway and to Audima's distribution endpoints. All facts were verified against official Audima artifacts — firmware USB descriptors, companion-application binaries, and the Cubase/Ableton DAW scripts — on 2026-08-19; sources and open questions are recorded in [RESEARCH.md](RESEARCH.md). The code constants live in [`src/shared/constants.js`](../src/shared/constants.js) and [`src/renderer/midi/swaymap.js`](../src/renderer/midi/swaymap.js); this document and those two files record the same values.
 
 ## USB identity
 
@@ -25,7 +25,7 @@ The device runs a dual-core STM32H7 with separate CM7 and CM4 firmware images; f
 | macOS | `Audima Labs The Sway` (exact) | Same confirmation |
 | Linux (ALSA) | Typically `Audima Labs The Sway MIDI 1` (rawmidi suffix) | ALSA port-naming convention |
 
-AKSWAYJ matches by substring — `name.includes('Audima Labs The Sway')` — which covers the exact name on Windows and macOS and the suffixed name on ALSA in a single test. The string is defined as `SWAY.MIDI_PORT_NAME` in `src/shared/constants.js` and `SWAY_PORT_NAME` in `src/renderer/midi/swaymap.js`. Runtime binding policy: [MIDI.md](MIDI.md#device-detection-and-binding-policy).
+SwayCommand matches by substring — `name.includes('Audima Labs The Sway')` — which covers the exact name on Windows and macOS and the suffixed name on ALSA in a single test. The string is defined as `SWAY.MIDI_PORT_NAME` in `src/shared/constants.js` and `SWAY_PORT_NAME` in `src/renderer/midi/swaymap.js`. Runtime binding policy: [MIDI.md](MIDI.md#device-detection-and-binding-policy).
 
 ## Factory MIDI map (Base Project V2)
 
@@ -45,12 +45,12 @@ Everything transmits on MIDI channel 1 (0-indexed `0` in code) except where the 
 | Knobs 1–8, press | CC | Numbers not established; resolvable with one hardware MIDI-monitor session | (unconfirmed) |
 | 8 mappable buttons, defaults | CC or notes | The CC-versus-note default is not established | (unconfirmed) |
 | 16 drum pads, factory layout | Note On/Off | B natural minor Theory Engine grid: `47 49 50 52 54 55 57 59 61 62 64 66 67 69 71 73` (low to high) | Confirmed |
-| 16 drum pads, Audima Ableton demo packs and AKSWAYJ's internal normalization | Note On/Off | Chromatic 24–39 → pad index 0–15 | Confirmed |
-| Pad transmit channel | — | 1 per the `.swayproj`, 16 per the official Ableton script; AKSWAYJ accepts both (`channels: [0, 15]`) | (unconfirmed) |
+| 16 drum pads, Audima Ableton demo packs and SwayCommand's internal normalization | Note On/Off | Chromatic 24–39 → pad index 0–15 | Confirmed |
+| Pad transmit channel | — | 1 per the `.swayproj`, 16 per the official Ableton script; SwayCommand accepts both (`channels: [0, 15]`) | (unconfirmed) |
 | Sleep / wake | Program Change (bank 0) | PC 37 = sleep, PC 38 = wake | Confirmed |
 | MPE | Per-region flag in projects | Zone and channel details unpublished | (unconfirmed) |
 
-AKSWAYJ maps all CCs to 0..1 and pad velocities to 0..1 in the control state constructed by `createControlState()` in `src/renderer/midi/swaymap.js`; consumers read that state, never raw MIDI. Routing and normalization details: [MIDI.md](MIDI.md#message-routing).
+SwayCommand maps all CCs to 0..1 and pad velocities to 0..1 in the control state constructed by `createControlState()` in `src/renderer/midi/swaymap.js`; consumers read that state, never raw MIDI. Routing and normalization details: [MIDI.md](MIDI.md#message-routing).
 
 ## Driver matrix
 
@@ -62,11 +62,11 @@ AKSWAYJ maps all CCs to 0..1 and pad velocities to 0..1 in the control state con
 
 Audima's official Windows DFU driver package is <https://cdn.audima.com.au/software/Windows%20DFU%20Driver.zip>. It contains `STM32Bootloader.inf` and an ST-signed `.cat`; [`src/main/driver-install.js`](../src/main/driver-install.js) stages the extracted INF with `pnputil /add-driver <inf> /install` under a user-approved UAC elevation. The package is licensed under ST's SLA0048, which permits bundling with notices retained.
 
-AKSWAYJ installs nothing by default; the driver installs only from an explicit Doctor fix click. Two Doctor checks offer that fix on Windows: the Sway USB check, when a device at `0483:DF11` is detected, and the driver check, whenever `STM32Bootloader.inf` is absent from the driver store (`pnputil /enum-drivers`).
+SwayCommand installs nothing by default; the driver installs only from an explicit Doctor fix click. Two Doctor checks offer that fix on Windows: the Sway USB check, when a device at `0483:DF11` is detected, and the driver check, whenever `STM32Bootloader.inf` is absent from the driver store (`pnputil /enum-drivers`).
 
 ## Audima CDN interface
 
-`cdn.audima.com.au` and `audima.com.au` return HTTP 403 to requests whose User-Agent contains curl, python, or Go tool signatures; any honest custom User-Agent passes. AKSWAYJ sends `AUDIMA.USER_AGENT` from `src/shared/constants.js` — `AKSWAYJ/0.1 (Sway companion; +https://github.com/akswayj)` — and never falls back to a default `curl/…` or `python-requests/…` value. The CDN supports Range/206 requests and requires no authentication. The blocking rules can tighten at any time (for example, to a JavaScript challenge); on fetch failure the Doctor offers a fix action that opens <https://audima.com.au/downloads/> in the system browser.
+`cdn.audima.com.au` and `audima.com.au` return HTTP 403 to requests whose User-Agent contains curl, python, or Go tool signatures; any honest custom User-Agent passes. SwayCommand sends `AUDIMA.USER_AGENT` from `src/shared/constants.js` — `SwayCommand/0.1 (Sway companion; +https://github.com/swaycommand)` — and never falls back to a default `curl/…` or `python-requests/…` value. The CDN supports Range/206 requests and requires no authentication. The blocking rules can tighten at any time (for example, to a JavaScript challenge); on fetch failure the Doctor offers a fix action that opens <https://audima.com.au/downloads/> in the system browser.
 
 The download layer in [`src/main/audima.js`](../src/main/audima.js) enforces an HTTPS-only host allowlist (`cdn.audima.com.au`, `audima.com.au`, `www.audima.com.au`), a 15-second default timeout (10 minutes for artifact downloads), and writes downloads to a `.part` file renamed only on completion.
 
@@ -104,17 +104,17 @@ The verification algorithm, implemented in `minisignVerify()` in `src/main/audim
 
 The flow: fetch `latest.json`, download the platform artifact to the user's Downloads folder, verify the minisign signature, and only then hand the file to the OS installer. A failed verification deletes the download. The pinned fallback URLs carry no signature; a fallback download is opened with an explicit unverified notice. Final fallback: the downloads page in the browser.
 
-Audima's terms and conditions prohibit redistributing their content (<https://audima.com.au/terms-and-conditions/>), so AKSWAYJ distributions never bundle Audima binaries; fetching onto the user's machine at the user's request is the compliant path. The ST DFU driver alone may be bundled under SLA0048.
+Audima's terms and conditions prohibit redistributing their content (<https://audima.com.au/terms-and-conditions/>), so SwayCommand distributions never bundle Audima binaries; fetching onto the user's machine at the user's request is the compliant path. The ST DFU driver alone may be bundled under SLA0048.
 
 ## Serial write prohibition
 
-AKSWAYJ never writes to the Sway's CDC serial interface. This is a hard policy, for three reasons established during research:
+SwayCommand never writes to the Sway's CDC serial interface. This is a hard policy, for three reasons established during research:
 
 1. The official application's serial protocol (Handshake, SendProjectFragment*, EEPROM upload, ACK/retry) was identified in the Tauri executable, but the wire framing — CRC polynomial, baud rate, ACK bytes — is not statically recoverable.
 2. `.swayproj` is a versioned raw EEPROM image, and the format has already changed once (the `FF 02` prefix).
 3. Audima's own application ships a deliberate `corrupt_eeprom` test demonstrating that a bad write soft-bricks the device's stored configuration.
 
-The supported alternative: any AKSWAYJ-tuned preset is authored as a `.swayproj` in Audima's own Sway Software, shipped as a file, and pushed to the device with Audima's application — no reverse engineering, no brick risk. The Base Project V2 factory map (<https://cdn.audima.com.au/software/Audima%20Labs%20The%20Sway%20V2.swayproj>) plus runtime MIDI-learn covers every remaining case. Direct device configuration would be revisited only under an Audima partnership (contactus@audima.com.au, <https://discord.com/invite/CYUrJXjjN4>).
+The supported alternative: any SwayCommand-tuned preset is authored as a `.swayproj` in Audima's own Sway Software, shipped as a file, and pushed to the device with Audima's application — no reverse engineering, no brick risk. The Base Project V2 factory map (<https://cdn.audima.com.au/software/Audima%20Labs%20The%20Sway%20V2.swayproj>) plus runtime MIDI-learn covers every remaining case. Direct device configuration would be revisited only under an Audima partnership (contactus@audima.com.au, <https://discord.com/invite/CYUrJXjjN4>).
 
 ## Sources
 

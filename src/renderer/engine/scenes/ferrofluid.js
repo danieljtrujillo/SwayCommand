@@ -177,7 +177,7 @@ export function createScene(ctx) {
       .replace('#include <defaultnormal_vertex>', DISPLACE_BODY + '\n#include <defaultnormal_vertex>')
       .replace('#include <begin_vertex>', '');
   };
-  orbMat.customProgramCacheKey = () => 'akswayj-ferrofluid';
+  orbMat.customProgramCacheKey = () => 'swaycommand-ferrofluid';
 
   const orb = new THREE.Mesh(orbGeo, orbMat);
   orb.frustumCulled = false; // displaced past its bounding sphere

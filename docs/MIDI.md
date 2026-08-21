@@ -56,7 +56,7 @@ The message handler ignores the MIDI channel for routing; messages on any channe
 
 Pad-index resolution for notes tries two lookups in order:
 
-1. Chromatic range: notes 24–39 map to pad indices 0–15 (`note - 24`). This is the layout Audima's own Ableton demo packs use and the layout AKSWAYJ normalizes to.
+1. Chromatic range: notes 24–39 map to pad indices 0–15 (`note - 24`). This is the layout Audima's own Ableton demo packs use and the layout SwayCommand normalizes to.
 2. Factory B-minor table: the note is looked up in the Theory Engine grid `47 49 50 52 54 55 57 59 61 62 64 66 67 69 71 73`; its position is the pad index. A note in neither set resolves to no pad.
 
 ## The assignment router

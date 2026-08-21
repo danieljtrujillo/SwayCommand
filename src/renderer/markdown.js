@@ -1,5 +1,5 @@
 // Minimal Markdown renderer for the in-app documentation viewer.
-// Supports the subset the AKSWAYJ documentation actually uses: ATX headings,
+// Supports the subset the SwayCommand documentation actually uses: ATX headings,
 // fenced code, pipe tables, ordered/unordered lists, blockquotes, horizontal
 // rules, and the inline set (code spans, bold, italic, links). Source text is
 // HTML-escaped before any markup is generated; code spans are extracted first

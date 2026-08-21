@@ -172,7 +172,7 @@ async function rendererChecks() {
 
 async function runDoctor() {
   $('#boot-status').textContent = 'Checking your system…';
-  const [main, local] = await Promise.all([window.akswayj.doctor.run(), rendererChecks()]);
+  const [main, local] = await Promise.all([window.swaycommand.doctor.run(), rendererChecks()]);
   state.checks = [...main, ...local];
   renderChecks();
 
@@ -199,7 +199,7 @@ async function runDoctor() {
 }
 
 function wireDoctor() {
-  window.akswayj.doctor.onFixProgress(({ fixId, phase, pct }) => {
+  window.swaycommand.doctor.onFixProgress(({ fixId, phase, pct }) => {
     const check = state.checks.find((c) => c.fix && c.fix.id === fixId);
     if (!check) return;
     const el = $(`#progress-${check.id}`);
@@ -211,7 +211,7 @@ function wireDoctor() {
     if (!btn) return;
     btn.disabled = true;
     btn.textContent = 'Working…';
-    const result = await window.akswayj.doctor.fix(btn.dataset.fix);
+    const result = await window.swaycommand.doctor.fix(btn.dataset.fix);
     const check = state.checks.find((c) => c.id === btn.dataset.check);
     if (check) {
       check.detail = result.detail;
@@ -261,7 +261,7 @@ async function addSamples() {
   const note = $('#kit-note');
   let picked;
   try {
-    picked = await window.akswayj.files.pickAudio();
+    picked = await window.swaycommand.files.pickAudio();
   } catch (err) {
     note.textContent = `File dialog failed: ${err.message}`;
     return;
@@ -292,7 +292,7 @@ async function restoreKit(saved) {
   const missing = [];
   for (const s of saved.samples) {
     try {
-      const bytes = await window.akswayj.files.readAudio(s.id);
+      const bytes = await window.swaycommand.files.readAudio(s.id);
       await state.sampler.loadSample(s.id, bytes.slice().buffer, { name: s.name });
     } catch {
       missing.push(s.name);
@@ -549,7 +549,7 @@ function wireFx() {
 
 async function openDocs(docId) {
   if (!state.docs.length) {
-    state.docs = await window.akswayj.docs.list();
+    state.docs = await window.swaycommand.docs.list();
     $('#docs-list').innerHTML = state.docs
       .map((d) => `<li><button data-doc="${d.id}">${d.title}</button></li>`)
       .join('');
@@ -563,7 +563,7 @@ async function loadDoc(docId, anchor) {
   const body = $('#docs-body');
   let source;
   try {
-    source = await window.akswayj.docs.read(docId);
+    source = await window.swaycommand.docs.read(docId);
   } catch (err) {
     body.innerHTML = `<h1>Unavailable</h1><p>${docId} could not be read: ${err.message}</p>`;
     return;
@@ -611,7 +611,7 @@ async function followDocLink(href) {
   }
   if (/^https?:/i.test(href)) {
     try {
-      await window.akswayj.openExternal(href);
+      await window.swaycommand.openExternal(href);
     } catch {
       showExternalNote(`Link not on the allowlist — open manually: ${href}`);
     }
@@ -675,8 +675,8 @@ function updateProjectButton() {
 async function openProjectMenu() {
   const store = state.projectStore;
   const [recent, templates] = await Promise.all([
-    window.akswayj.project.recent().catch(() => []),
-    window.akswayj.project.templates().catch(() => []),
+    window.swaycommand.project.recent().catch(() => []),
+    window.swaycommand.project.templates().catch(() => []),
   ]);
   const rows = [
     '<button class="pop-item" data-choice="new">New</button>',
@@ -1066,7 +1066,7 @@ function postProjectLoad() {
 // ---------------------------------------------------------------- boot
 
 async function main() {
-  const info = await window.akswayj.info();
+  const info = await window.swaycommand.info();
   $('#boot-version').textContent = `v${info.version} · ${info.platform}`;
 
   state.audio = await createAudioEngine();
@@ -1172,12 +1172,12 @@ async function main() {
   $('#input-src').addEventListener('click', openSourceMenu);
 
   // restore learned MIDI bindings
-  const settings = await window.akswayj.settings.get();
+  const settings = await window.swaycommand.settings.get();
   if (settings.midiOverrides) state.midi.setOverrides(settings.midiOverrides);
 
   // Automation handle. The page CSP admits no remote or inline script, so
-  // this is reachable only from the bundle and from AKSWAYJ_PROBE.
-  window.__akswayj = {
+  // this is reachable only from the bundle and from SWAYCOMMAND_PROBE.
+  window.__swaycommand = {
     state,
     studio,
     openStudio: (tab) => ui.drawer.open(tab || 'synth'),
@@ -1197,7 +1197,7 @@ async function main() {
   state.engine.start();
   requestAnimationFrame(frameTick);
   state.audio.autoStart().then(updateSourceLabel);
-  window.akswayj.platform.systemAudio().then((sa) => (studio.systemAudio = sa));
+  window.swaycommand.platform.systemAudio().then((sa) => (studio.systemAudio = sa));
 
   // --- boot project ---
   const params = new URLSearchParams(location.search);
@@ -1216,7 +1216,7 @@ async function main() {
   }
   if (!loaded) {
     try {
-      const recent = await window.akswayj.project.recent();
+      const recent = await window.swaycommand.project.recent();
       if (recent.length) {
         await state.projectStore.openPath(recent[0].path);
         loaded = true;
@@ -1247,5 +1247,5 @@ async function main() {
 }
 
 main().catch((err) => {
-  document.body.innerHTML = `<pre style="color:#f66;padding:2rem;font-size:14px">AKSWAYJ failed to start:\n${err.stack}</pre>`;
+  document.body.innerHTML = `<pre style="color:#f66;padding:2rem;font-size:14px">SwayCommand failed to start:\n${err.stack}</pre>`;
 });

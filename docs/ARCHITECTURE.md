@@ -1,16 +1,16 @@
 # Architecture
 
-AKSWAYJ runs as a standard two-process Electron application: a main process with operating-system access and a context-isolated renderer that receives a fixed API surface through a preload script. This document covers the process model, the module inventory, the renderer page structure, the complete IPC surface, renderer bundling, the security model, and the packaged file layout. System-level context and terminology: [OVERVIEW.md](OVERVIEW.md). Environment variables and file locations: [ENVIRONMENT.md](ENVIRONMENT.md).
+SwayCommand runs as a standard two-process Electron application: a main process with operating-system access and a context-isolated renderer that receives a fixed API surface through a preload script. This document covers the process model, the module inventory, the renderer page structure, the complete IPC surface, renderer bundling, the security model, and the packaged file layout. System-level context and terminology: [OVERVIEW.md](OVERVIEW.md). Environment variables and file locations: [ENVIRONMENT.md](ENVIRONMENT.md).
 
 ## Process model
 
 | Process | Entry | Responsibility |
 |---|---|---|
 | Main | `src/main/main.js` | Window lifecycle, session permission handlers, IPC handlers, settings file, project loading, bundled-documentation access; delegates to `doctor.js`, `audima.js`, `driver-install.js` |
-| Preload | `src/preload/preload.js` | Exposes `window.akswayj` through `contextBridge`; the renderer has no other path to the main process |
+| Preload | `src/preload/preload.js` | Exposes `window.swaycommand` through `contextBridge`; the renderer has no other path to the main process |
 | Renderer | `dist/renderer.bundle.js` (built from `src/renderer/app.js`) | The cockpit interface, MIDI input, audio analysis, sample/synth/timeline playback, WebGL rendering, documentation modal |
 
-The `BrowserWindow` is created with `contextIsolation: true`, `nodeIntegration: false`, and `sandbox: false`. Window parameters: 1440 × 900 default size, 960 × 600 minimum, background color `#05060a`, menu bar auto-hidden, shown only after the `ready-to-show` event. The window loads `dist/index.html` from disk via `loadFile`, with optional `autoplay` and `scene` query parameters taken from the `AKSWAYJ_AUTOPLAY` and `AKSWAYJ_SCENE` environment variables (see [ENVIRONMENT.md](ENVIRONMENT.md)).
+The `BrowserWindow` is created with `contextIsolation: true`, `nodeIntegration: false`, and `sandbox: false`. Window parameters: 1440 × 900 default size, 960 × 600 minimum, background color `#05060a`, menu bar auto-hidden, shown only after the `ready-to-show` event. The window loads `dist/index.html` from disk via `loadFile`, with optional `autoplay` and `scene` query parameters taken from the `SWAYCOMMAND_AUTOPLAY` and `SWAYCOMMAND_SCENE` environment variables (see [ENVIRONMENT.md](ENVIRONMENT.md)).
 
 On macOS, `activate` recreates the window when none exists; on every other platform, closing the last window quits the application.
 
@@ -22,7 +22,7 @@ On macOS, `activate` recreates the window when none exists; on every other platf
 | `src/main/doctor.js` | Main-process system checks: platform summary, Sway USB presence, Sway Software install state, DFU driver state, Audima CDN reachability | `runAll` |
 | `src/main/audima.js` | Audima CDN client: host allowlist, `latest.json` fetch, downloads with progress, minisign verification | `fetchLatest`, `downloadCompanion`, `downloadDfuDriver`, `minisignVerify`, `audimaFetch` |
 | `src/main/driver-install.js` | Windows DFU driver staging via `pnputil.exe` under a user-approved UAC elevation | `installDfuDriver` |
-| `src/preload/preload.js` | `contextBridge` exposure of the IPC surface as `window.akswayj` | none (side effect) |
+| `src/preload/preload.js` | `contextBridge` exposure of the IPC surface as `window.swaycommand` | none (side effect) |
 | `src/shared/constants.js` | Sway USB identity, Audima endpoints and public key, application name | `SWAY`, `AUDIMA`, `APP` |
 | `src/renderer/app.js` | Cockpit assembly, Doctor UI, documentation modal, keyboard and pointer input | none (bundle entry) |
 | `src/renderer/markdown.js` | Dependency-free Markdown renderer for the documentation viewer, plus the heading-to-anchor slug rule | `renderMarkdown`, `slugify` |
@@ -35,7 +35,7 @@ On macOS, `activate` recreates the window when none exists; on every other platf
 
 The renderer is a single HTML document — the cockpit — with no screen switching. A CSS grid (`#cockpit`) lays out the top bar, the two rails, the stage cell, the timeline band, and the Sway deck; the drawer (`#drawer`) and the modals (`#modal-system`, `#modal-help`, `#modal-docs`) overlay it, and the render loop never stops for any of them. Region-by-region description: [OVERVIEW.md](OVERVIEW.md#the-cockpit).
 
-The startup sequence in `main()`: fetch application info over `app:info`; create the audio engine, sampler, synth, and transport on one `AudioContext` (all three producers connect to the destination and the analyser); create the MIDI layer with the router as its event sink; create the render engine (quality tier `med`) and register the router as its frame hook; create the project store; assemble the UI modules (`src/renderer/ui/*.js`); restore `midiOverrides` from the settings file; expose `window.__akswayj`; start the engine and audio (`autoStart`: live input when available, internal groove otherwise); load the boot project (`autoplay` parameter, else the most recent project, else the `first-flight` template); then either open the blast door directly (`autoplay`) or open the SYSTEM modal and run the Doctor.
+The startup sequence in `main()`: fetch application info over `app:info`; create the audio engine, sampler, synth, and transport on one `AudioContext` (all three producers connect to the destination and the analyser); create the MIDI layer with the router as its event sink; create the render engine (quality tier `med`) and register the router as its frame hook; create the project store; assemble the UI modules (`src/renderer/ui/*.js`); restore `midiOverrides` from the settings file; expose `window.__swaycommand`; start the engine and audio (`autoStart`: live input when available, internal groove otherwise); load the boot project (`autoplay` parameter, else the most recent project, else the `first-flight` template); then either open the blast door directly (`autoplay`) or open the SYSTEM modal and run the Doctor.
 
 ### The SYSTEM modal (Doctor)
 
@@ -77,7 +77,7 @@ The inline notice is a `.docs-external-note` element appended to the body and re
 
 ## IPC surface
 
-Every renderer-to-main channel is an `ipcMain.handle` invocation reached through `window.akswayj`. There is one main-to-renderer event, `fix:progress`.
+Every renderer-to-main channel is an `ipcMain.handle` invocation reached through `window.swaycommand`. There is one main-to-renderer event, `fix:progress`.
 
 | Channel | Direction | Request payload | Response | Handler |
 |---|---|---|---|---|
@@ -108,7 +108,7 @@ The `doctor:fix` dispatch:
 
 An unknown `fixId` returns `{ ok: false, detail: 'Unknown fix: <id>' }`.
 
-The preload maps these channels onto `window.akswayj`: `info()`, `doctor.run()`, `doctor.fix(fixId)`, `doctor.onFixProgress(cb)` (returns an unsubscribe function), `project.openDialog()`, `project.saveDialog(name)`, `project.read(path)`, `project.write(path, doc)`, `project.recent()`, `project.templates()`, `project.readTemplate(id)`, `docs.list()`, `docs.read(id)`, `files.pickAudio()`, `files.readAudio(path)`, `files.statAudio(path)`, `platform.systemAudio()`, `settings.get()`, `settings.set(patch)`, and `openExternal(url)`.
+The preload maps these channels onto `window.swaycommand`: `info()`, `doctor.run()`, `doctor.fix(fixId)`, `doctor.onFixProgress(cb)` (returns an unsubscribe function), `project.openDialog()`, `project.saveDialog(name)`, `project.read(path)`, `project.write(path, doc)`, `project.recent()`, `project.templates()`, `project.readTemplate(id)`, `docs.list()`, `docs.read(id)`, `files.pickAudio()`, `files.readAudio(path)`, `files.statAudio(path)`, `platform.systemAudio()`, `settings.get()`, `settings.set(patch)`, and `openExternal(url)`.
 
 ## Renderer bundling
 
@@ -173,6 +173,6 @@ README.md
 package.json
 ```
 
-Build output lands in `release/`; the application id is `app.akswayj`. The template directory in `src/main/projectfile.js` resolves `projects/templates/` two directories above `__dirname` (`src/main`), which lands at the package root in development and at the `app.asar` root when packaged, so the same code path serves both — the `projects/**/*` whitelist entry is what carries the bundled templates. `docsRoot()` resolves the same two directories and the `DOC_ORDER` ids are paths relative to it, so the `docs/**/*.md` and `README.md` entries are what make the documentation modal work in an installed build: without them the Markdown would exist only in the source tree and `listDocs()` would return an empty list.
+Build output lands in `release/`; the application id is `app.swaycommand`. The template directory in `src/main/projectfile.js` resolves `projects/templates/` two directories above `__dirname` (`src/main`), which lands at the package root in development and at the `app.asar` root when packaged, so the same code path serves both — the `projects/**/*` whitelist entry is what carries the bundled templates. `docsRoot()` resolves the same two directories and the `DOC_ORDER` ids are paths relative to it, so the `docs/**/*.md` and `README.md` entries are what make the documentation modal work in an installed build: without them the Markdown would exist only in the source tree and `listDocs()` would return an empty list.
 
-Per-platform targets: a one-click NSIS installer on Windows (`AKSWAYJ-Setup-${version}.exe`, per-user, launches the application when it finishes, preserves application data on uninstall), a DMG on macOS (category `public.app-category.music`), and an AppImage on Linux (category `AudioVideo`).
+Per-platform targets: a one-click NSIS installer on Windows (`SwayCommand-Setup-${version}.exe`, per-user, launches the application when it finishes, preserves application data on uninstall), a DMG on macOS (category `public.app-category.music`), and an AppImage on Linux (category `AudioVideo`).

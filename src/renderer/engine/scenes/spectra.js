@@ -31,10 +31,10 @@
 //   * the world-group sway block and the geometry layout (50x50 terrain at
 //     y=-2, walls 1000x320 at x=+/-280 in a group at y=45, FOV 55).
 //
-// ADAPTED (see the inline notes marked "AKSWAYJ"):
+// ADAPTED (see the inline notes marked "SwayCommand"):
 //   1. AUDIO. Upstream takes a live FFT of any width when the host supplies
 //      one (`getSpectrum()`), and otherwise synthesizes a SPECTRUM_SIZE-wide
-//      (256-bin) stand-in into its own `synthBins`. AKSWAYJ scenes get only
+//      (256-bin) stand-in into its own `synthBins`. SwayCommand scenes get only
 //      io.bands.bass/mid/high + io.level, so the synthesis branch is the only
 //      branch: a 256-bin source spectrum — upstream's own fallback width, so
 //      the mel resampler's `srcLen` arithmetic stays literally upstream's — is
@@ -49,7 +49,7 @@
 //      Added guards: `max(-mvPosition.z, 0.25)` and `min(.., 64.0)` around the
 //      point-size divide (NaN and fill-rate respectively) and `max(..,0.0)` on
 //      the pow base in the mel chain.
-//   3. NO POST. Upstream stacks an UnrealBloomPass; AKSWAYJ owns compositing,
+//   3. NO POST. Upstream stacks an UnrealBloomPass; SwayCommand owns compositing,
 //      so the wall and particle emissive terms carry a BLOOM_GAIN lift to
 //      stand in for the missing bloom.
 //   4. NO DOM. Upstream scrolls the wall spectrogram on a 2048x512 2-D canvas
@@ -88,7 +88,7 @@ const HISTORY_SIZE = 256;  // history rows in the ring      (upstream 256)
 const FOV = 55;            // upstream camera FOV
 const PADS = 16;
 
-// AKSWAYJ: the synthesized stand-in for upstream's live analyser buffer.
+// SwayCommand: the synthesized stand-in for upstream's live analyser buffer.
 // Width is upstream's own: its fallback fills `synthBins = new Uint8Array(
 // SPECTRUM_SIZE)` and fillColumn then resamples with `srcLen = src.length`, so
 // SRC_BINS === SPECTRUM_SIZE makes targetIndex, lowBin/highBin, the fraction
@@ -108,7 +108,7 @@ const ENERGY_IMPACT = 1.0;
 
 // Upstream SCROLL_ROWS_PER_SEC is 2.0 — a 128 s sweep of the 256-row history,
 // chosen there because the renderer runs continuously behind a whole set.
-// AKSWAYJ shows a scene for 18-40 s at a time, so knob 3 centres on 6 rows/s
+// SwayCommand shows a scene for 18-40 s at a time, so knob 3 centres on 6 rows/s
 // (a 43 s sweep) and spans 1.5 .. 24; upstream's 2.0 sits at knob 3 ~= 0.10.
 const SCROLL_ROWS_MID = 6.0;
 
@@ -142,7 +142,7 @@ const M_FREECAM = 4;
 
 // --- shared GLSL -----------------------------------------------------------
 
-// AKSWAYJ palette reconciliation. The scene keeps inferno and the seven themes
+// SwayCommand palette reconciliation. The scene keeps inferno and the seven themes
 // as its authentic colour identity — replacing them would destroy the port —
 // so the engine palette enters as an ADDITIVE emissive term layered on the
 // ridges, the wall and the particles rather than as the base ramp. The palette
@@ -280,11 +280,11 @@ export function createScene(ctx) {
   }
 
   /**
-   * AKSWAYJ ADAPTATION — THE ONE PLACE THIS PORT CANNOT BE LITERAL.
+   * SwayCommand ADAPTATION — THE ONE PLACE THIS PORT CANNOT BE LITERAL.
    *
    * Upstream reads a live FFT (`getSpectrum()`), falling back to a
    * three-plateau synthesis from bass/mid/high across SPECTRUM_SIZE bins only
-   * when the host offers no spectrum. AKSWAYJ scenes NEVER receive a spectrum
+   * when the host offers no spectrum. SwayCommand scenes NEVER receive a spectrum
    * — io carries three band scalars and io.level — so the fallback path is the
    * only path, and upstream's version of it (a hard step at p<0.18 / p<0.5
    * plus the ripple 0.7 + 0.3*sin(p*9)) reads as three flat mesas.
@@ -300,7 +300,7 @@ export function createScene(ctx) {
    * energy tracker, both textures, every shader — is upstream's, unchanged.
    */
   function synthSpectrum(tSec, bass, mid, high) {
-    // AKSWAYJ: upstream reads a real analyser whose noise floor keeps the
+    // SwayCommand: upstream reads a real analyser whose noise floor keeps the
     // terrain lit even between transients. Three smoothed bands have no such
     // floor, so a quiet passage synthesized to near zero and the inferno ramp
     // — which begins at 0x000004 — rendered the whole field black. A small
@@ -367,9 +367,9 @@ export function createScene(ctx) {
     energy = sum / (trackingBands * 255.0);
   }
 
-  // AKSWAYJ: cold-start relief. The history begins empty upstream and takes a
+  // SwayCommand: cold-start relief. The history begins empty upstream and takes a
   // full sweep to fill; upstream ran for whole sets so that was invisible, but
-  // an AKSWAYJ scene may only be on screen for 20 s. A low-amplitude
+  // an SwayCommand scene may only be on screen for 20 s. A low-amplitude
   // deterministic field (well under the audio's own range) is seeded once so
   // the terrain reads as terrain from frame one, and is overwritten by real
   // columns as they scroll past. Three octaves of value noise, not sines: sines lay
@@ -422,7 +422,7 @@ export function createScene(ctx) {
   dataTexture.unpackAlignment = 1;
   dataTexture.needsUpdate = true;
 
-  // AKSWAYJ: the wall spectrogram. Upstream keeps this on a 2048x512 2-D
+  // SwayCommand: the wall spectrogram. Upstream keeps this on a 2048x512 2-D
   // canvas, scrolling it one pixel per frame with drawImage and drawing the
   // fresh column at x = 0. No DOM here, so the same picture is a RedFormat
   // ring buffer: one column written per frame at the head, and a scroll offset
@@ -477,8 +477,8 @@ export function createScene(ctx) {
     u_heightMulti: { value: 1.0 },
     u_energyImpact: { value: ENERGY_IMPACT },
     u_useColormap: { value: 1.0 },
-    u_skew: { value: 0.0 },      // AKSWAYJ: sway shears the scroll
-    u_palMix: { value: 0.5 },    // AKSWAYJ: palette emissive weight
+    u_skew: { value: 0.0 },      // SwayCommand: sway shears the scroll
+    u_palMix: { value: 0.5 },    // SwayCommand: palette emissive weight
     u_palPhase: { value: 0.0 },
     u_intensity: { value: 1.0 },
     u_colorLow: { value: themeLow },
@@ -505,7 +505,7 @@ export function createScene(ctx) {
       varying vec2 v_uv;
       void main() {
         v_uv = uv;
-        // u_skew is the AKSWAYJ addition: a shear of the history axis across
+        // u_skew is the SwayCommand addition: a shear of the history axis across
         // the frequency axis, so sway drags the scroll diagonally. Everything
         // else is upstream's terrain vertex shader unchanged.
         float sampleY = fract((u_offset / ${HISTORY_SIZE}.0) + uv.y + u_skew * (uv.x - 0.5));
@@ -594,7 +594,7 @@ export function createScene(ctx) {
         float spec = pow(clamp(dot(nrm, hVec), 0.0, 1.0), 28.0) * amp;
         float light = 0.72 + 0.55 * diff + 0.7 * spec;
         vec3 col = base * light;
-        // --- AKSWAYJ: palette emissive on the ridges. Additive and weighted
+        // --- SwayCommand: palette emissive on the ridges. Additive and weighted
         //     by amp * (0.35 + 0.65 * amp) — a softened square, so the dark
         //     valleys stay pure colormap while the mid-tones and peaks carry
         //     enough engine hue for a ColorMaster crossfade or a knob-0 hue
@@ -614,7 +614,7 @@ export function createScene(ctx) {
   const terrain = new THREE.Mesh(terrainGeo, terrainMat);
   terrain.rotation.x = -Math.PI / 2; // local +z becomes world +y: relief grows up
   terrain.position.set(0, -2, 0);
-  terrain.renderOrder = 1; // AKSWAYJ: explicit order for the three alpha layers
+  terrain.renderOrder = 1; // SwayCommand: explicit order for the three alpha layers
   // The vertex shader lifts z by up to (5.0 + energy*5.0) = 10 units, which the
   // geometry's own bounding sphere knows nothing about. Every upstream camera
   // happens to sit inside that sphere so nothing is culled wrongly today, but
@@ -639,7 +639,7 @@ export function createScene(ctx) {
     u_intensity: terrainUniforms.u_intensity,
     uColors: terrainUniforms.uColors,
     u_curveRadius: { value: 400.0 }, // upstream default; knob 6 drives it
-    u_wallOffset: { value: 0.0 },    // AKSWAYJ: ring head, replaces the blit
+    u_wallOffset: { value: 0.0 },    // SwayCommand: ring head, replaces the blit
     u_wallSpan: { value: (WALL_W - 1) / WALL_W },
   };
 
@@ -696,13 +696,13 @@ export function createScene(ctx) {
         void main() {
           vec2 sampleUv = v_uv;
           if (u_flipX > 0.5) sampleUv.x = 1.0 - sampleUv.x;
-          // AKSWAYJ: the ring-buffer read that replaces upstream's canvas blit.
+          // SwayCommand: the ring-buffer read that replaces upstream's canvas blit.
           // u_wallOffset is the newest column; walking sampleUv.x back through
           // the (repeat-wrapped) ring walks back through time.
           sampleUv.x = u_wallOffset - sampleUv.x * u_wallSpan;
           float t = texture2D(u_texture, sampleUv).r;
           vec3 col = getPalette(t, u_energy);
-          // AKSWAYJ: palette wash over the theme ramp.
+          // SwayCommand: palette wash over the theme ramp.
           col = mix(col, pal(fract(u_palPhase + v_uv.y * 0.6) * 5.0), clamp(u_palMix * 0.7, 0.0, 0.85));
           float edgeX = smoothstep(0.0, 0.2, v_uv.x) * smoothstep(1.0, 0.8, v_uv.x);
           float edgeY = smoothstep(0.0, 0.2, v_uv.y) * smoothstep(1.0, 0.6, v_uv.y);
@@ -737,9 +737,9 @@ export function createScene(ctx) {
   const pPos = new Float32Array(PARTICLE_COUNT * 3);
   const pScale = new Float32Array(PARTICLE_COUNT);
   const pColor = new Float32Array(PARTICLE_COUNT * 3);
-  const pHue = new Float32Array(PARTICLE_COUNT); // AKSWAYJ: palette lookup seed
+  const pHue = new Float32Array(PARTICLE_COUNT); // SwayCommand: palette lookup seed
 
-  // AKSWAYJ: upstream authored gl_PointSize for a 720-tall framebuffer at
+  // SwayCommand: upstream authored gl_PointSize for a 720-tall framebuffer at
   // DPR 1. Scaling by the real framebuffer height keeps the sprites the same
   // apparent size at 1080p and above. Reading the renderer's pixel ratio is a
   // query, not a state change. Seeded here because the engine only calls
@@ -755,7 +755,7 @@ export function createScene(ctx) {
   const particleUniforms = {
     u_time: { value: 0 },
     u_energy: { value: 0 },
-    u_beat: { value: 0 },      // AKSWAYJ: io.beat pulses the field
+    u_beat: { value: 0 },      // SwayCommand: io.beat pulses the field
     u_intensity: { value: 1 },
     u_palMix: { value: 0.65 }, // particles lean hardest on the engine palette
     u_palPhase: terrainUniforms.u_palPhase,
@@ -784,7 +784,7 @@ export function createScene(ctx) {
       varying float vAlpha;
       ${PAL_GLSL}
       void main() {
-        // AKSWAYJ: theme colour mixed toward the engine palette. Upstream used
+        // SwayCommand: theme colour mixed toward the engine palette. Upstream used
         // three.js vertexColors and the implicit "color" attribute; the
         // attribute is declared explicitly here so nothing depends on
         // USE_COLOR being injected by the renderer.
@@ -836,7 +836,7 @@ export function createScene(ctx) {
   worldGroup.add(particles);
 
   // --- theme state ---------------------------------------------------------
-  // AKSWAYJ: upstream opens on the mel-spectrogram theme, whose inferno ramp
+  // SwayCommand: upstream opens on the mel-spectrogram theme, whose inferno ramp
   // starts at 0x000004 and reads as a black field on the engine's black
   // ground. Cyber Horizon is the brightest of the seven and is the default
   // here; pads still select any theme, mel-spectrogram included.
@@ -1127,7 +1127,7 @@ export function createScene(ctx) {
       terrainUniforms.u_energyImpact.value = ENERGY_IMPACT;
       terrainUniforms.u_skew.value = skew;
       terrainUniforms.u_palPhase.value = palPhase;
-      // AKSWAYJ: upstream renders on its own dark ground with a bloom pass the
+      // SwayCommand: upstream renders on its own dark ground with a bloom pass the
       // engine does not provide, so the terrain needs headroom to read here.
       terrainUniforms.u_intensity.value = io.intensity * 2.4;
       // the palette rides the beat so peaks flare in engine hue

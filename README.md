@@ -1,8 +1,8 @@
-# AKSWAYJ
+# SwayCommand
 
-AKSWAYJ is a desktop application that renders real-time, audio-reactive visuals controlled by the Audima Labs Sway, a gesture-based MIDI controller. The application targets live performance: everything happens on one always-live cockpit page — stage, timeline, control deck, and instrument panels — it starts into a ready-to-play project, analyzes any audio input, and accepts control from the Sway, from any class-compliant MIDI controller, or from mouse and keyboard.
+SwayCommand is a desktop application that renders real-time, audio-reactive visuals controlled by the Audima Labs Sway, a gesture-based MIDI controller. The application targets live performance: everything happens on one always-live cockpit page — stage, timeline, control deck, and instrument panels — it starts into a ready-to-play project, analyzes any audio input, and accepts control from the Sway, from any class-compliant MIDI controller, or from mouse and keyboard.
 
-AKSWAYJ is an independent project. It is not affiliated with or endorsed by Audima Labs Pty Ltd. It never redistributes Audima binaries; optional Audima components are downloaded from Audima's official CDN at the user's request. See [Legal](#legal).
+SwayCommand is an independent project. It is not affiliated with or endorsed by Audima Labs Pty Ltd. It never redistributes Audima binaries; optional Audima components are downloaded from Audima's official CDN at the user's request. See [Legal](#legal).
 
 ## Feature summary
 
@@ -25,7 +25,7 @@ AKSWAYJ is an independent project. It is not affiliated with or endorsed by Audi
 
 | Platform | Minimum version | Package |
 |---|---|---|
-| Windows | 10 (x64) | NSIS installer (`AKSWAYJ-Setup-<version>.exe`) |
+| Windows | 10 (x64) | NSIS installer (`SwayCommand-Setup-<version>.exe`) |
 | macOS | 11 | DMG |
 | Linux | glibc-based x64 distribution | AppImage |
 
@@ -33,7 +33,7 @@ A WebGL2-capable GPU is required. A Sway, other MIDI hardware, and an audio inpu
 
 ## Installation
 
-Packaged builds install per-user and require no elevation. The Windows installer is a one-click NSIS package that launches the application when installation completes. Installation from source requires Node.js 18 or later; the repository includes double-click bootstrap scripts (`Install & Launch AKSWAYJ.bat` on Windows, `Install & Launch AKSWAYJ.command` on macOS, `install-launch.sh` on Linux) that install dependencies and start the application. Details, including silent installation and uninstallation: [docs/INSTALLATION.md](docs/INSTALLATION.md).
+Packaged builds install per-user and require no elevation. The Windows installer is a one-click NSIS package that launches the application when installation completes. Installation from source requires Node.js 18 or later; the repository includes double-click bootstrap scripts (`Install & Launch SwayCommand.bat` on Windows, `Install & Launch SwayCommand.command` on macOS, `install-launch.sh` on Linux) that install dependencies and start the application. Details, including silent installation and uninstallation: [docs/INSTALLATION.md](docs/INSTALLATION.md).
 
 ## Development
 
@@ -100,8 +100,8 @@ The documentation viewer inside the application renders this file and every docu
 
 ## Credits
 
-AKSWAYJ draws on three prior projects: [theDAW](https://github.com/gantasmo/theDAW) by GANTASMO (MIT) for the web-native VJ-engine approach and local-first design; [Akvj](https://github.com/keijiro/Akvj) and [MetavidoVFX](https://github.com/keijiro/MetavidoVFX) by Keijiro Takahashi (Unlicense) for the VfxController crossfade-cycling pattern, ColorMaster palette synchronization, and the runtime effect-switcher architecture, reimplemented here in three.js.
+SwayCommand draws on three prior projects: [theDAW](https://github.com/gantasmo/theDAW) by GANTASMO (MIT) for the web-native VJ-engine approach and local-first design; [Akvj](https://github.com/keijiro/Akvj) and [MetavidoVFX](https://github.com/keijiro/MetavidoVFX) by Keijiro Takahashi (Unlicense) for the VfxController crossfade-cycling pattern, ColorMaster palette synchronization, and the runtime effect-switcher architecture, reimplemented here in three.js.
 
 ## Legal
 
-AKSWAYJ is released under the MIT license. "Sway" and "Audima Labs" are the property of Audima Labs Pty Ltd. In accordance with Audima's terms and conditions, the application does not bundle or redistribute Audima software; the Doctor downloads Audima's official driver package and companion application directly from `cdn.audima.com.au` onto the local machine, and verifies the companion application against Audima's published minisign signature before opening the installer.
+SwayCommand is released under the MIT license. "Sway" and "Audima Labs" are the property of Audima Labs Pty Ltd. In accordance with Audima's terms and conditions, the application does not bundle or redistribute Audima software; the Doctor downloads Audima's official driver package and companion application directly from `cdn.audima.com.au` onto the local machine, and verifies the companion application against Audima's published minisign signature before opening the installer.

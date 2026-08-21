@@ -40,7 +40,7 @@ export function createProjectStore(deps) {
 
   async function readMediaBytes(media) {
     const p = media.resolvedPath || media.path;
-    const bytes = await window.akswayj.files.readAudio(p);
+    const bytes = await window.swaycommand.files.readAudio(p);
     return bytes;
   }
 
@@ -165,7 +165,7 @@ export function createProjectStore(deps) {
     for (const m of project().media) {
       if (m.sha256 && m.bytes) continue;
       try {
-        const info = await window.akswayj.files.statAudio(m.resolvedPath || m.path);
+        const info = await window.swaycommand.files.statAudio(m.resolvedPath || m.path);
         m.sha256 = info.sha256;
         m.bytes = info.bytes;
       } catch {
@@ -177,7 +177,7 @@ export function createProjectStore(deps) {
   async function saveTo(path) {
     collect();
     await fillMediaStats();
-    const result = await window.akswayj.project.write(path, doc);
+    const result = await window.swaycommand.project.write(path, doc);
     state.path = result.path;
     state.dirty = false;
     return result;
@@ -203,18 +203,18 @@ export function createProjectStore(deps) {
 
     async openPath(path) {
       state.loading = true;
-      const result = await window.akswayj.project.read(path);
+      const result = await window.swaycommand.project.read(path);
       return applyProject(result.doc, result.path);
     },
 
     async openTemplate(id) {
       state.loading = true;
-      const result = await window.akswayj.project.readTemplate(id);
+      const result = await window.swaycommand.project.readTemplate(id);
       return applyProject(result.doc, null);
     },
 
     async openFromDialog() {
-      const picked = await window.akswayj.project.openDialog();
+      const picked = await window.swaycommand.project.openDialog();
       if (!picked) return null;
       return this.openPath(picked.path);
     },
@@ -225,7 +225,7 @@ export function createProjectStore(deps) {
     },
 
     async saveAs() {
-      const picked = await window.akswayj.project.saveDialog(state.name);
+      const picked = await window.swaycommand.project.saveDialog(state.name);
       if (!picked) return null;
       return saveTo(picked.path);
     },
@@ -245,7 +245,7 @@ export function createProjectStore(deps) {
         bytes: null,
         duration: null,
       };
-      const bytes = await window.akswayj.files.readAudio(file.path);
+      const bytes = await window.swaycommand.files.readAudio(file.path);
       const info = await sampler.loadSample(media.id, bytes.slice().buffer, { name: media.name });
       if (info && info.duration) media.duration = info.duration;
       if (!existing) p.media.push(media);

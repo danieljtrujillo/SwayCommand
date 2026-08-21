@@ -16,7 +16,7 @@ The deck buttons in the top bar toggle the same panels and show which one is ope
 
 ## The deck as control surface
 
-The Sway deck at the bottom of the cockpit is a stroke line-art schematic of the hardware: the rear LED beam, the IR sensor field with the hand dot, the gesture chips X, Y, PULSE, PRESS, SWAY, eight knobs with value arcs, sixteen pads, and eight mappable buttons. (The center preset row, display, and scroll wheel are drawn for orientation but are device-local — nothing in AKSWAYJ maps them.) Every interactive element carries a control id — `pad:0`…`pad:15`, `knob:0`…`knob:7`, `button:0`…`button:7`, `xy:x`, `xy:y`, `gesture:pulse`, `gesture:press`, `gesture:sway`.
+The Sway deck at the bottom of the cockpit is a stroke line-art schematic of the hardware: the rear LED beam, the IR sensor field with the hand dot, the gesture chips X, Y, PULSE, PRESS, SWAY, eight knobs with value arcs, sixteen pads, and eight mappable buttons. (The center preset row, display, and scroll wheel are drawn for orientation but are device-local — nothing in SwayCommand maps them.) Every interactive element carries a control id — `pad:0`…`pad:15`, `knob:0`…`knob:7`, `button:0`…`button:7`, `xy:x`, `xy:y`, `gesture:pulse`, `gesture:press`, `gesture:sway`.
 
 Clicking a control on the deck selects it in the assignment panel. With **FOLLOW** on (the default), touching a control on the hardware selects it too: the router records the last physically moved control — a pad strike, a knob past a small movement threshold, a learned button, or a factory-mapped continuous CC — and the panel follows. FOLLOW pauses while a popover is open.
 

@@ -1,6 +1,6 @@
 # Documentation map
 
-Reference documentation for AKSWAYJ v0.1.x. Terminology used throughout is defined in [OVERVIEW.md](OVERVIEW.md).
+Reference documentation for SwayCommand v0.1.x. Terminology used throughout is defined in [OVERVIEW.md](OVERVIEW.md).
 
 Every document listed here also ships inside the application and is readable in the documentation modal, opened with the `D` key or the DOCS button in the top bar. The modal's sidebar lists the documents in the order set by `DOC_ORDER` in `src/main/main.js`.
 

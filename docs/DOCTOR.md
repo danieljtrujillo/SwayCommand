@@ -1,6 +1,6 @@
 # Doctor
 
-The Doctor is AKSWAYJ's startup system check and remediation list, shown in the SYSTEM modal. It verifies the machine, reports on optional hardware and software, and offers one-click fixes for anything missing. It never blocks: every check is isolated, every failure degrades to an informational row, and the cockpit is always reachable.
+The Doctor is SwayCommand's startup system check and remediation list, shown in the SYSTEM modal. It verifies the machine, reports on optional hardware and software, and offers one-click fixes for anything missing. It never blocks: every check is isolated, every failure degrades to an informational row, and the cockpit is always reachable.
 
 Implementation is split between two processes. Checks that need operating-system access (USB, registry, driver store, network) live in [`src/main/doctor.js`](../src/main/doctor.js); checks that need browser APIs (WebGL2, WebMIDI, audio devices) live in [`src/renderer/app.js`](../src/renderer/app.js). Fix actions are implemented in [`src/main/audima.js`](../src/main/audima.js) and [`src/main/driver-install.js`](../src/main/driver-install.js) and dispatched from [`src/main/main.js`](../src/main/main.js). Symptom-oriented guidance: [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
@@ -12,7 +12,7 @@ Advancement rules:
 
 - After every run, the ENTER button (`#btn-enter`) is enabled regardless of results. A `fail` result never blocks opening the blast door manually.
 - When the aggregate status is `ok` (no check reports `warn` or `fail`), the door opens on its own after 1,400 ms. Auto-advance fires at most once per session (`state._autoAdvanced`) and only if the SYSTEM modal is still open when the timer elapses.
-- With `?autoplay=` (or the `AKSWAYJ_AUTOPLAY` environment variable), the door opens immediately and the Doctor runs in the background, populating the SYSTEM modal for later viewing.
+- With `?autoplay=` (or the `SWAYCOMMAND_AUTOPLAY` environment variable), the door opens immediately and the Doctor runs in the background, populating the SYSTEM modal for later viewing.
 
 ## Status levels
 
@@ -72,7 +72,7 @@ Check id `dfu-driver`. Windows only; on macOS and Linux the check returns `ok` b
 
 ### Audima update channel
 
-Check id `network`. Calls `fetchLatest(5000)` in `audima.js`: an HTTPS fetch of `https://cdn.audima.com.au/software/latest.json` with a 5,000 ms timeout (`AbortSignal.timeout`), following redirects, sending the User-Agent `AKSWAYJ/0.1 (Sway companion; +https://github.com/akswayj)`. The response must be a Tauri updater manifest with `version` and `platforms` fields. A successful fetch is cached in the main process; subsequent Doctor runs in the same session reuse the cached manifest without a network round trip.
+Check id `network`. Calls `fetchLatest(5000)` in `audima.js`: an HTTPS fetch of `https://cdn.audima.com.au/software/latest.json` with a 5,000 ms timeout (`AbortSignal.timeout`), following redirects, sending the User-Agent `SwayCommand/0.1 (Sway companion; +https://github.com/swaycommand)`. The response must be a Tauri updater manifest with `version` and `platforms` fields. A successful fetch is cached in the main process; subsequent Doctor runs in the same session reuse the cached manifest without a network round trip.
 
 Results: `ok`, reporting the latest Sway Software version from the manifest; `warn` with the `open-downloads-page` fix when the CDN is unreachable. Offline operation is unaffected; the offline case is covered in [TROUBLESHOOTING.md](TROUBLESHOOTING.md#audima-update-channel-warns-while-offline).
 
@@ -150,7 +150,7 @@ Long-running fixes report progress on the `fix:progress` channel. `main.js` wrap
 | `verify` | `downloadCompanion` | `{ pct: 100 }` before signature verification. |
 | `install` | `installDfuDriver` | `{ pct: 100 }` before the elevated `pnputil` call. |
 
-The renderer subscribes through `window.akswayj.doctor.onFixProgress`, matches the event to the check owning that fix id, and writes into the check's progress element: `downloading… <pct>%` for the download phase, `<phase>…` otherwise.
+The renderer subscribes through `window.swaycommand.doctor.onFixProgress`, matches the event to the check owning that fix id, and writes into the check's progress element: `downloading… <pct>%` for the download phase, `<phase>…` otherwise.
 
 ## Failure isolation
 

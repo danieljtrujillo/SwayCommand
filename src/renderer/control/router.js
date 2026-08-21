@@ -261,7 +261,7 @@ export function createRouter({ engine, sampler, synth, transport, midi, onDirty 
     async learnBinding(target) {
       const result = await midi.learn(target);
       try {
-        await window.akswayj.settings.set({ midiOverrides: midi.getOverrides() });
+        await window.swaycommand.settings.set({ midiOverrides: midi.getOverrides() });
       } catch {
         /* settings persistence is best-effort */
       }
