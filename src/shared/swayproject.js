@@ -31,21 +31,14 @@ function uid(prefix) {
   return `${prefix}-${Date.now().toString(36)}${uidCounter.toString(36)}`;
 }
 
-// Knob defaults: the left cluster keeps the engine's stage controls (hue,
-// fade length, intensity) with glitch on the fourth knob; the right cluster
-// carries the frame-wrecking rack effects — anaglyph, mosaic, echo trails —
-// with the kit level on the last knob. Turning a rack knob enables the rack.
+// Knob defaults: NONE. Nothing controls an effect, the intensity, or anything
+// else until the user assigns it (user rule, 2026-08-20: no effect may ever be
+// driven by default, and a cleared control must drive nothing). A knob entry
+// that is missing from a document therefore stays empty rather than falling
+// back to a factory target. Templates that want hue / fade-length / kit-level
+// knobs carry them explicitly.
 function defaultKnobs() {
-  return [
-    { target: 'engine:hue', min: 0, max: 1, curve: 'detent' },
-    { target: 'engine:fadeTime', min: 1, max: 8, curve: 'linear' },
-    { target: 'engine:intensity', min: 0, max: 1, curve: 'linear' },
-    { target: 'fx:glitch', min: 0, max: 1, curve: 'linear' },
-    { target: 'fx:anaglyph', min: 0, max: 1, curve: 'linear' },
-    { target: 'fx:mosaic', min: 0, max: 1, curve: 'linear' },
-    { target: 'fx:echoTrails', min: 0, max: 40, curve: 'linear' },
-    { target: 'sampler:master', min: 0, max: 1, curve: 'linear' },
-  ];
+  return [null, null, null, null, null, null, null, null];
 }
 
 function defaultAssignments() {

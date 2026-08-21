@@ -12,6 +12,7 @@
 // on-screen surface follow the hardware.
 
 import { defaultAssignments, parseTarget, applyCurve } from '../../shared/swayproject.js';
+import { DEFAULTS as FX_DEFAULTS } from '../engine/fxrack.js';
 
 const SAMPLER_KNOB_INDEX = { master: 4, cutoff: 5, rate: 6, send: 7 };
 const KNOB_EPSILON = 1 / 512;
@@ -29,6 +30,49 @@ export function createRouter({ engine, sampler, synth, transport, midi, onDirty 
   const lastGesture = new Map(); // route index -> last mapped value
   const samplerKnobs = { master: 0.5, cutoff: 0.5, rate: 0.5, send: 0.5 };
   let autoVJPrev = null; // engine autoVJ state before the timeline took over
+
+  // An effect never lingers behind a cleared control (user rule): each frame
+  // the set of fx keys that some assignment still drives is compared with the
+  // previous frame's; a key that dropped out is reset to its rack default,
+  // and if the rack had been switched on BY a control (not by the user in the
+  // RACK drawer) and nothing drives it any more, it switches off again.
+  let fxAutoOn = false;
+  let fxKeysNow = new Set();
+  let fxKeysNext = new Set();
+  function collectFxKeys(into) {
+    into.clear();
+    for (let i = 0; i < 8; i++) {
+      const a = assignments.knobs[i];
+      if (a && typeof a.target === 'string' && a.target.startsWith('fx:')) into.add(a.target.slice(3));
+    }
+    for (const g of assignments.gestures) {
+      if (g && typeof g.target === 'string' && g.target.startsWith('fx:')) into.add(g.target.slice(3));
+    }
+    for (let i = 0; i < 16; i++) {
+      const a = assignments.pads[i];
+      if (a && a.type === 'fxPunch' && a.param) into.add(a.param);
+    }
+  }
+  function reconcileFx() {
+    collectFxKeys(fxKeysNext);
+    for (const k of fxKeysNow) {
+      if (!fxKeysNext.has(k) && k in FX_DEFAULTS) engine.setFxParam(k, FX_DEFAULTS[k]);
+    }
+    const swap = fxKeysNow;
+    fxKeysNow = fxKeysNext;
+    fxKeysNext = swap;
+    if (fxAutoOn && !engine.fxEnabled) fxAutoOn = false; // the user switched it off
+    if (fxAutoOn && fxKeysNow.size === 0) {
+      engine.fxEnabled = false;
+      fxAutoOn = false;
+    }
+  }
+  function rackOnByControl() {
+    if (!engine.fxEnabled) {
+      engine.fxEnabled = true;
+      fxAutoOn = true;
+    }
+  }
 
   function touch(id) {
     lastTouched.id = id;
@@ -59,8 +103,9 @@ export function createRouter({ engine, sampler, synth, transport, midi, onDirty 
         break;
       case 'fx':
         // A control reaching for the rack turns the rack on — a knob mapped
-        // to glitch must never turn silently in a disabled chain.
-        if (!engine.fxEnabled) engine.fxEnabled = true;
+        // to glitch must never turn silently in a disabled chain — and
+        // reconcileFx() turns it off again once nothing drives it.
+        rackOnByControl();
         engine.setFxParam(t.key, mapped);
         break;
       case 'synth':
@@ -124,7 +169,7 @@ export function createRouter({ engine, sampler, synth, transport, midi, onDirty 
       if (a.transition.type === 'crossfade') engine.setScene(a.scene, a.transition.duration);
       else engine.cutTo(a.scene);
     } else if (a.type === 'fxPunch' && !heldPunches.has(idx)) {
-      if (!engine.fxEnabled) engine.fxEnabled = true; // a punch must land audibly
+      rackOnByControl(); // a punch must land audibly
       heldPunches.set(idx, { param: a.param, prev: engine.fx.params[a.param], value: a.value });
       engine.setFxParam(a.param, a.value);
     }
@@ -191,6 +236,10 @@ export function createRouter({ engine, sampler, synth, transport, midi, onDirty 
       assignments = a || defaultAssignments();
       heldPunches.clear();
       lastGesture.clear();
+      // A project load replays its own fx snapshot; start tracking from the
+      // new table instead of diffing against the old one.
+      collectFxKeys(fxKeysNow);
+      fxAutoOn = false;
     },
     getAssignments() {
       return assignments;
@@ -223,6 +272,7 @@ export function createRouter({ engine, sampler, synth, transport, midi, onDirty 
     // control ingestion, before the palette/intensity update.
     frame(dt, t, io) {
       transport.update();
+      reconcileFx();
 
       // Restore autoVJ once the timeline lets go of the stage.
       if (autoVJPrev !== null && (!transport.state.playing || !transport.state.activeVisualClip)) {

@@ -29,10 +29,11 @@
 //   1. 2D canvas → GPU. Every per-pixel canvas op became a fragment-shader
 //      stage; forward canvas transforms (rotate/scale/clip/drawImage) became
 //      inverse UV maps. The maths and constants are reproduced verbatim.
-//   2. GLSL route: GLSL1 (three.js ShaderMaterial default). The upstream ASCII
-//      shader was `#version 300 es`; it is ported to GLSL1 — `out vec4 O` →
-//      `gl_FragColor`, `texture()` → `texture2D()`, `gl_FragCoord.xy/u_resolution`
-//      → a `varying vec2 vUv`. No array constructors were needed.
+//   2. GLSL route: GLSL3 (GLSL ES 3.00, `glslVersion: THREE.GLSL3` on every
+//      material). The upstream ASCII shader was already `#version 300 es`; it
+//      keeps `texture()` and its own fragment output (`out vec4 O` → `out vec4
+//      fragColor`), and `gl_FragCoord.xy/u_resolution` → an `in vec2 vUv`. No
+//      array constructors were needed.
 //   3. Pass folding. All the cheap per-pixel work lives in four mega-shaders
 //      (geometry+feedback, corruption, the colour grade+blur, and optics+
 //      overlays) with uniform toggles. Only trails/feedback (persistent
@@ -133,7 +134,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Upstream DEFAULT_VJ_STATE values for every key this rack owns (types.ts). */
-const DEFAULTS = Object.freeze({
+export const DEFAULTS = Object.freeze({
   // GEOMETRICS
   mirrorX: false,
   mirrorY: false,
@@ -227,9 +228,12 @@ const MAX_SLICES = 12;
 const TAU = Math.PI * 2;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SHADERS — GLSL1 throughout (three.js ShaderMaterial compiles GLSL1 by default;
-// no `glslVersion` is set anywhere in this file). Every division, pow base and
-// normalize below is guarded: a NaN blanks the frame.
+// SHADERS — GLSL3 (GLSL ES 3.00) throughout: every material below sets
+// `glslVersion: THREE.GLSL3` (through MAT_OPTS), so the vertex stage uses
+// in/out, each fragment stage declares its own `out vec4 fragColor`, and
+// sampling is `texture()`. three.js supplies `#version 300 es`, the precision
+// statements and the position/uv/matrix declarations in its prefix. Every
+// division, pow base and normalize below is guarded: a NaN blanks the frame.
 //
 // Coordinate conventions. The canvas 2D pipeline upstream works in device
 // pixels with y DOWN and the origin top-left; three.js render-target UV has y UP
@@ -240,7 +244,7 @@ const TAU = Math.PI * 2;
 // ─────────────────────────────────────────────────────────────────────────────
 
 const VERT = /* glsl */ `
-  varying vec2 vUv;
+  out vec2 vUv;
   void main() {
     vUv = uv;
     gl_Position = vec4(position.xy, 0.0, 1.0); // fullscreen, no matrices
@@ -250,8 +254,9 @@ const VERT = /* glsl */ `
 const FRAG_COPY = /* glsl */ `
   precision highp float;
   uniform sampler2D tSrc;
-  varying vec2 vUv;
-  void main() { gl_FragColor = vec4(texture2D(tSrc, vUv).rgb, 1.0); }`;
+  in vec2 vUv;
+  out vec4 fragColor;
+  void main() { fragColor = vec4(texture(tSrc, vUv).rgb, 1.0); }`;
 
 // ── ECHO TRAILS ─────────────────────────────────────────────────────────────
 // Upstream (VideoOutput.tsx, "Time-domain Composite Pass"):
@@ -279,11 +284,12 @@ const FRAG_ECHO = /* glsl */ `
   uniform sampler2D tAcc;   // previous accumulator (ping-pong)
   uniform float uAlpha;     // a   = 1 / (N + 1)
   uniform float uAlphaGain; // a*g = a * (1 - (1-a)^(N+1))
-  varying vec2 vUv;
+  in vec2 vUv;
+  out vec4 fragColor;
   void main() {
-    vec3 s = texture2D(tSrc, vUv).rgb;
-    vec3 a = texture2D(tAcc, vUv).rgb;
-    gl_FragColor = vec4(s * uAlphaGain + a * (1.0 - uAlpha), 1.0);
+    vec3 s = texture(tSrc, vUv).rgb;
+    vec3 a = texture(tAcc, vUv).rgb;
+    fragColor = vec4(s * uAlphaGain + a * (1.0 - uAlpha), 1.0);
   }`;
 
 // ── GEOMETRY + FEEDBACK WASH ────────────────────────────────────────────────
@@ -335,7 +341,8 @@ const FRAG_GEO = /* glsl */ `
   uniform float uMosTint;     // [SwayCommand] per-tile brightness amplitude
   uniform float uFbGeo;       // 1 - 0.95*fb
   uniform float uFbPrev;      // 0.95*fb*fb
-  varying vec2 vUv;
+  in vec2 vUv;
+  out vec4 fragColor;
 
   // One black gradient fill: alpha 1 at the edge, 0 from 15% to 85%.
   float softAlpha(float u) {
@@ -395,7 +402,7 @@ const FRAG_GEO = /* glsl */ `
       mosShade = (1.0 - 0.45 * grout) * (1.0 + (hash21(mc) - 0.5) * uMosTint);
     }
 
-    vec3 geo = texture2D(tSrc, srcUv).rgb;
+    vec3 geo = texture(tSrc, srcUv).rgb;
     if (uMosCells.x > 0.0) geo *= mosShade;
 
     if (uSoft > 0.5) {
@@ -403,8 +410,8 @@ const FRAG_GEO = /* glsl */ `
       geo *= 1.0 - softAlpha(e.y);     // …then the Y gradient fill
     }
 
-    vec3 prev = texture2D(tPrev, vUv).rgb;
-    gl_FragColor = vec4(geo * uFbGeo + prev * uFbPrev, 1.0);
+    vec3 prev = texture(tPrev, vUv).rgb;
+    fragColor = vec4(geo * uFbGeo + prev * uFbPrev, 1.0);
   }`;
 
 // ── CORRUPTION (post-geometry canvas stage) ─────────────────────────────────
@@ -474,7 +481,8 @@ const FRAG_CORRUPT = /* glsl */ `
   uniform vec2  uGhostShift;    // (sx, sy) canvas px
   uniform float uStrobe;        // 0/1 — fire this frame
   uniform vec3  uStrobeCol;     // white, or black when invert is on
-  varying vec2 vUv;
+  in vec2 vUv;
+  out vec4 fragColor;
 
   const float TAU = 6.2831853;
 
@@ -488,7 +496,7 @@ const FRAG_CORRUPT = /* glsl */ `
     // uSpokes is >= 2 at the call site, but the guard is UNCONDITIONAL: ANGLE
     // flattens the if-guarded call below into a select on some drivers and
     // then evaluates the untaken side. With uSpokes = 0 that is TAU/0 -> inf,
-    // then mod(inf, 0) -> NaN, and a NaN reaching gl_FragColor blanks the
+    // then mod(inf, 0) -> NaN, and a NaN reaching fragColor blanks the
     // whole frame. (No backticks in this comment: it lives inside a JS
     // template literal, where a backtick would end the shader string.)
     float spokes = max(uSpokes, 2.0);
@@ -530,7 +538,7 @@ const FRAG_CORRUPT = /* glsl */ `
     // first, so anything outside reads black. Masked rather than branched so
     // the function keeps a single exit.
     float inside = step(0.0, u.x) * step(u.x, 1.0) * step(0.0, u.y) * step(u.y, 1.0);
-    return texture2D(tSrc, clamp(u, 0.0, 1.0)).rgb * inside;
+    return texture(tSrc, clamp(u, 0.0, 1.0)).rgb * inside;
   }
 
   vec3 screenBlend(vec3 b, vec3 s) { return b + s - b * s; }
@@ -551,15 +559,15 @@ const FRAG_CORRUPT = /* glsl */ `
 
     if (uStrobe > 0.5) col = mix(col, uStrobeCol, 0.9);
 
-    gl_FragColor = vec4(col, 1.0);
+    fragColor = vec4(col, 1.0);
   }`;
 
 // ── ASCII ───────────────────────────────────────────────────────────────────
-// AsciilineRenderer.ts FRAG, ported GLSL3 → GLSL1:
-//   `#version 300 es` dropped, `out vec4 O` → gl_FragColor, `texture()` →
-//   `texture2D()`, and `gl_FragCoord.xy / u_resolution` → the vUv varying (the
-//   same value; upstream needed the fragcoord form because its quad carried no
-//   attributes). The luma weights, the mono/accent branch and the
+// AsciilineRenderer.ts FRAG, kept GLSL3 (GLSL ES 3.00):
+//   `#version 300 es` is supplied by three.js, `out vec4 O` → `out vec4
+//   fragColor`, `texture()` stays, and `gl_FragCoord.xy / u_resolution` → the
+//   vUv input (the same value; upstream needed the fragcoord form because its
+//   quad carried no attributes). The luma weights, the mono/accent branch and the
 //   `col *= 0.85 + 0.25*u_volume + 0.15*u_bass` audio term are verbatim. The
 //   glyph-index line is the even-spread form `clamp(floor(luma*N), 0, N-1)`,
 //   which gives all 93 glyphs an equal 1/N slice of luma and folds the
@@ -584,7 +592,8 @@ const FRAG_ASCII = /* glsl */ `
   uniform vec3  u_accent;
   uniform float u_bass;
   uniform float u_volume;
-  varying vec2 vUv;
+  in vec2 vUv;
+  out vec4 fragColor;
   void main() {
     vec2 uv = vUv;
     vec2 cell = floor(uv * u_grid);
@@ -596,7 +605,7 @@ const FRAG_ASCII = /* glsl */ `
     for (int y = 0; y < ASCII_TAPS; y++) {
       for (int x = 0; x < ASCII_TAPS; x++) {
         vec2 o = (vec2(float(x), float(y)) - (float(ASCII_TAPS) - 1.0) * 0.5) * step_;
-        src += texture2D(u_source, cuv + o).rgb;
+        src += texture(u_source, cuv + o).rgb;
       }
     }
     src /= float(ASCII_TAPS * ASCII_TAPS);
@@ -611,11 +620,11 @@ const FRAG_ASCII = /* glsl */ `
     // available, check it for the off-by-one variant floor(luma*(N-1)+0.5).
     float idx = clamp(floor(luma * u_n), 0.0, u_n - 1.0);
     vec2 auv = vec2((idx + inCell.x) / u_n, inCell.y);
-    float ink = texture2D(u_atlas, auv).a;
+    float ink = texture(u_atlas, auv).a;
     vec3 col = (u_mono > 0.5) ? (u_accent * ink) : (src * ink);
     // Gentle audio pulse on the ink brightness.
     col *= 0.85 + 0.25 * u_volume + 0.15 * u_bass;
-    gl_FragColor = vec4(col, 1.0);
+    fragColor = vec4(col, 1.0);
   }`;
 
 // ── CHROMATICS + OPTICS (the CSS/SVG filter chain and the DOM overlays) ─────
@@ -732,10 +741,11 @@ const FRAG_GRADE = /* glsl */ `
   uniform mat3  uM2;           // grayscale * sepia
   uniform vec4  uAff;          // (mC,kC) contrast; (mB,kB) brightness+invert
   uniform float uBlurPx;       // fxBlur * 20, in pixels; 0 = off
-  varying vec2 vUv;
+  in vec2 vUv;
+  out vec4 fragColor;
 
   vec3 graded(vec2 uv) {
-    vec3 c = texture2D(tSrc, uv).rgb;
+    vec3 c = texture(tSrc, uv).rgb;
     c = clamp(uM1 * c, 0.0, 1.0);
     c = clamp(c * uAff.x + uAff.y, 0.0, 1.0);   // contrast(), clamped per spec
     c = clamp(c * uAff.z + uAff.w, 0.0, 1.0);   // brightness(), invert folded in
@@ -747,7 +757,7 @@ const FRAG_GRADE = /* glsl */ `
     // One accumulator and one exit on purpose: an early return here makes
     // ANGLE's HLSL translation emit a "potentially uninitialized variable"
     // warning for the synthesised return temp, and that is not a warning worth
-    // shipping. gl_FragColor is written on every path.
+    // shipping. fragColor is written on every path.
     vec3 acc = graded(vUv);
     if (uBlurPx > 0.0) {
       for (int i = 0; i < BLUR_TAPS; i++) {   // constant bound, unrollable
@@ -758,7 +768,7 @@ const FRAG_GRADE = /* glsl */ `
       }
       acc /= float(BLUR_TAPS + 1);            // BLUR_TAPS >= 4: never zero
     }
-    gl_FragColor = vec4(acc, 1.0);
+    fragColor = vec4(acc, 1.0);
   }`;
 
 /**
@@ -783,7 +793,8 @@ const FRAG_FINAL = /* glsl */ `
   uniform float uCrtAlpha;     // 0.1 * animated opacity
   uniform vec3  uCrtBar;       // (y0 canvas px, height px, on)
   uniform float uVig;          // 0/1
-  varying vec2 vUv;
+  in vec2 vUv;
+  out vec4 fragColor;
 
   // ---- one tap of the graded + blurred image FRAG_GRADE produced ----
   // gradeRT is ClampToEdge, so the edge kernel, the warp and the split all get
@@ -791,7 +802,7 @@ const FRAG_FINAL = /* glsl */ `
   // default (edgeMode="duplicate"); feOffset/feDisplacementMap would strictly
   // give transparent black past the filter region, but a hard black seam under
   // a 150 px warp looks like a bug, so the clamp is used throughout.
-  vec3 s1(vec2 uv) { return texture2D(tSrc, uv).rgb; }
+  vec3 s1(vec2 uv) { return texture(tSrc, uv).rgb; }
 
   // ---- feConvolveMatrix -1 -1 -1 / -1 8 -1 / -1 -1 -1, divisor 1 ----
   vec3 s2(vec2 uv) {
@@ -914,7 +925,7 @@ const FRAG_FINAL = /* glsl */ `
       col *= 1.0 - a;
     }
 
-    gl_FragColor = vec4(col, 1.0);
+    fragColor = vec4(col, 1.0);
   }`;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -933,7 +944,7 @@ const TIERS = {
  * NaN HYGIENE, not defensive noise. `io` is a shared object the engine mutates
  * in place, so a band that has not been written yet reads back `undefined`, and
  * `undefined * undefined * undefined` is NaN. That NaN would reach uZoom, which
- * the geometry shader DIVIDES by, and one NaN in gl_FragColor blanks the whole
+ * the geometry shader DIVIDES by, and one NaN in fragColor blanks the whole
  * frame. The comparison form is deliberate: `v > 0` is false for both NaN and
  * undefined, so either falls to 0 instead of propagating. The clamp to 1 is
  * free here and matches the 0..1 range the scene contract documents.
@@ -1003,7 +1014,8 @@ export function createFxRack(THREE, renderer, width, height, opts) {
   quad.frustumCulled = false;          // clip-space quad, skip culling
   passScene.add(quad);
 
-  const MAT_OPTS = { depthTest: false, depthWrite: false };
+  // GLSL ES 3.00 for every pass — see SHADERS above.
+  const MAT_OPTS = { depthTest: false, depthWrite: false, glslVersion: THREE.GLSL3 };
 
   const copyMat = new THREE.ShaderMaterial({
     ...MAT_OPTS,
@@ -1451,10 +1463,12 @@ export function createFxRack(THREE, renderer, width, height, opts) {
         const cu = corruptMat.uniforms;
         cu.tSrc.value = src;
         cu.uSpokes.value = spokes >= 2 ? spokes : 0;
-        // baseRotation = (timestamp/1000)*0.15, plus (mid+high)*PI when reactive
-        let baseRotation = (clockMs / 1000) * 0.15;
-        if (p.audioReactive) baseRotation += (mid + high) * Math.PI;
-        cu.uSpokeRot.value = baseRotation % TAU;
+        // Upstream: baseRotation = (timestamp/1000)*0.15, plus (mid+high)*PI
+        // when reactive. SwayCommand holds the wheel still — nothing in the
+        // rack auto-rotates (user rule) — so the spoke pattern is static and
+        // only the spoke count moves.
+        const baseRotation = 0;
+        cu.uSpokeRot.value = baseRotation;
         cu.uSliceCount.value = sliceCount;
         cu.uGhost.value = cGhost;
         cu.uGhostShift.value.set(cGhost * W * 0.08, cGhost * H * 0.02);

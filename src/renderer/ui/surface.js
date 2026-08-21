@@ -12,14 +12,17 @@
 
 const NS = 'http://www.w3.org/2000/svg';
 
-// Screen cell → pad index. The physical order is unverified (HANDOFF pad
-// ambiguity) — correcting it after a hardware monitor session means editing
-// only this table. Bottom rows first, left cluster 0-7, right cluster 8-15.
+// Screen cell → pad index, as the user numbered the deck (2026-08-20
+// screenshot): top rows first, left to right — left cluster 0-3, right
+// cluster 4-7 — then the bottom rows, left cluster 8-11, right cluster 12-15.
+// Pads are displayed 0-based everywhere (PAD 0 … PAD 15). Nothing else
+// references the geometry; a hardware monitor session (scripts/
+// midi-session.ps1) confirms or corrects this table alone.
 export const PAD_CELLS = [
-  { x: 32, y: 125 }, { x: 104, y: 125 }, { x: 176, y: 125 }, { x: 248, y: 125 },
   { x: 32, y: 92 }, { x: 104, y: 92 }, { x: 176, y: 92 }, { x: 248, y: 92 },
-  { x: 954, y: 125 }, { x: 1026, y: 125 }, { x: 1098, y: 125 }, { x: 1170, y: 125 },
   { x: 954, y: 92 }, { x: 1026, y: 92 }, { x: 1098, y: 92 }, { x: 1170, y: 92 },
+  { x: 32, y: 125 }, { x: 104, y: 125 }, { x: 176, y: 125 }, { x: 248, y: 125 },
+  { x: 954, y: 125 }, { x: 1026, y: 125 }, { x: 1098, y: 125 }, { x: 1170, y: 125 },
 ];
 const PAD_W = 64;
 const PAD_H = 27;

@@ -64,7 +64,7 @@ export function createAssign(deps) {
     if (!target) return 'SELECT A CONTROL';
     if (HEADER_NAMES[target]) return HEADER_NAMES[target];
     const t = ctlParts(target);
-    if (t.ns === 'pad') return `PAD ${Number(t.key) + 1}`;
+    if (t.ns === 'pad') return `PAD ${Number(t.key)}`; // pads read 0-15, as the deck is numbered
     if (t.ns === 'knob') return `KNOB ${Number(t.key) + 1}`;
     if (t.ns === 'button') return `BUTTON ${Number(t.key) + 1}`;
     return target.toUpperCase();
