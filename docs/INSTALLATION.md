@@ -15,7 +15,7 @@ AKSWAYJ installs from a packaged build or from a source checkout. Packaged build
 The installer is a one-click NSIS package (`oneClick: true` in [electron-builder.yml](../electron-builder.yml)). Running `AKSWAYJ-Setup-<version>.exe` installs without further prompts:
 
 - Installation is per-user (`perMachine: false`). Files are written to `%LOCALAPPDATA%\Programs\akswayj`, no administrator elevation is requested, and the Apps list entry is created for the current user only.
-- When installation completes, the installer launches the application (`runAfterFinish: true`), which opens on the Doctor screen.
+- When installation completes, the installer launches the application (`runAfterFinish: true`), which opens with the SYSTEM check modal over the cockpit.
 
 The artifact name follows the `AKSWAYJ-Setup-${version}.${ext}` pattern; at version 0.1.0 the file is `AKSWAYJ-Setup-0.1.0.exe`.
 
@@ -114,6 +114,6 @@ The bootstrap scripts are a convenience; the equivalent manual procedure is:
 
 ## First run
 
-From source, `npm run start` first builds the renderer bundle (`scripts/build-renderer.js`), then launches Electron; packaged builds contain a prebuilt bundle and start directly. In both cases the application opens on the Doctor, the startup system check. Each check reports its result with a remediation action where one exists; when every check passes, the application advances to the project picker on its own after 1.4 seconds. The individual checks, their detection methods, and the fix actions are documented in [DOCTOR.md](DOCTOR.md).
+From source, `npm run start` first builds the renderer bundle (`scripts/build-renderer.js`), then launches Electron; packaged builds contain a prebuilt bundle and start directly. In both cases the application opens on the cockpit with the stage behind a closed blast door, and the SYSTEM modal runs the Doctor, the startup system check. Each check reports its result with a remediation action where one exists; when every check passes, the door opens on its own after 1.4 seconds — ENTER opens it manually regardless of results. The individual checks, their detection methods, and the fix actions are documented in [DOCTOR.md](DOCTOR.md).
 
 A Sway, other MIDI hardware, and an audio input are optional at first run: the application substitutes mouse and keyboard control and an internal analysis signal when they are absent, so every scene renders output on a machine with no peripherals.

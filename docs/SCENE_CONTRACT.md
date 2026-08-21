@@ -74,19 +74,20 @@ The engine defaults to `med`; an unknown quality name also falls back to `med`. 
 | `io.beat` | 0–1 | Beat impulse: 1 on beat, exponential decay. |
 | `io.xy.x`, `io.xy.y` | 0–1 | Hand position, engine-smoothed. The mouse fallback maps the canvas bottom edge to `y = 0`; on Sway hardware the raw CC value passes through unchanged, with `y = 0` as the low/near hand (unconfirmed). |
 | `io.gestures.pulse` / `.press` / `.sway` | 0–1 | Sway gesture dimensions. |
-| `io.knobs[0..7]` | 0–1 | Knob values; default 0.5. Knobs 0–2 are engine-reserved (table below); scenes MUST NOT repurpose them and SHOULD key scene parameters off knobs 3–7. |
+| `io.knobs[0..7]` | 0–1 | Raw knob positions; default 0.5. The values mirror the hardware regardless of what the knobs are assigned to. Indices 0–2 carry the factory global assignments (table below); scenes MUST NOT repurpose them and SHOULD key scene parameters off knobs 3–7. |
 | `io.pads[0..15]` | 0–1 | Pad velocities. The engine decays each value exponentially after the hit (time constant 0.2 s). |
 | `io.lastPad` | −1 to 15 | Most recently struck pad; −1 before any hit. |
 | `io.palette` | `THREE.Color[5]` | The current ColorMaster palette. Scenes MUST copy values out and MUST NOT mutate the array or the colors. |
-| `io.intensity` | 0.25–1.35 | Master brightness: `0.25 + 0.75 × knob 2 + 0.35 × pulse`. Scenes SHOULD scale emissive output by it. |
+| `io.intensity` | 0.25–1.35 | Master brightness: `0.25 + 0.75 × the engine intensity parameter + 0.35 × pulse`. Scenes SHOULD scale emissive output by it. |
 
-Engine-reserved knobs:
+Factory knob assignments (defaults in every project's assignment table, remappable per project — [STUDIO.md](STUDIO.md)):
 
-| Knob | Engine use |
+| Knob index | Default assignment |
 |---|---|
-| 0 | Palette hue rotation, 0–1 mapped to 0–360°. The default value 0.5 is treated as no rotation. |
-| 1 | Auto-VJ crossfade length, rescaled to 1–8 s. |
-| 2 | Master intensity component of `io.intensity`. |
+| 0 | Palette hue rotation (`engine:hue`), 0–1 mapped to 0–360° with a center detent: the middle of travel is exactly no rotation. |
+| 1 | Auto-VJ crossfade length (`engine:fadeTime`), rescaled to 1–8 s. |
+| 2 | The intensity component of `io.intensity` (`engine:intensity`). |
+| 4–7 | Kit level, filter, rate, delay send (`sampler:*`). |
 
 ## Hard rules
 
@@ -106,12 +107,12 @@ Engine-reserved knobs:
 
 1. Create `src/renderer/engine/scenes/<id>.js` exporting `meta` and `createScene` per the module shape above.
 2. Import the module in [`scenes/index.js`](../src/renderer/engine/scenes/index.js) and append it to the `modules` array; `sceneList` and `creators` derive from that array.
-3. Add the id to the `scenes` array of at least one project ([PROJECTS.md](PROJECTS.md)) so the scene enters a pool.
+3. Add the id to the Auto-VJ pool of at least one project or template ([PROJECTS.md](PROJECTS.md)) so the scene enters a rotation; the SCENES bank lists every registered scene regardless.
 4. Run `npm start` to rebuild the renderer bundle and launch.
 
 ## Scene inventory
 
-The registry holds eight scenes, listed here in registry order — the order that fixes the `1`–`8` keyboard selection ([ENGINE.md](ENGINE.md#scene-management)).
+The registry holds fourteen scenes, listed here in registry order. Registry order fixes nothing on the keyboard — the digit keys index the active project's pool ([ENGINE.md](ENGINE.md#scene-management)).
 
 | Id | Name | Mood | Mechanism |
 |---|---|---|---|
@@ -123,3 +124,9 @@ The registry holds eight scenes, listed here in registry order — the order tha
 | `nebula` | Nebula | psychedelic | Three value-noise fbm layers domain-warp each other into gas folds on one quad, mirror-folded into six kaleidoscope wedges; the hand pans the domain with parallax, mid drives warp strength, bass stacks concentric shells, the beat lurches the domain, and each pad fires an expanding shockwave from its own cell of a 4 × 4 screen grid. One draw call. |
 | `mandelbulb` | Mandelbulb | infinite | Raymarched power-8 Mandelbulb distance estimator on one fullscreen quad; bass swells the exponent between 7.0 and 9.5, press blends the iteration constant toward a Lissajous Julia constant, orbit trap and escape count drive the palette lookup, pads detonate a power and glow spike. One draw call. |
 | `cymatic` | Cymatic Orb | resonant | A tessellated icosahedron displaced in the vertex shader by three band-driven spherical standing-wave modes plus a zonal ring term; the fragment shader re-evaluates the same field and lights its zero set as nodal Chladni lines, press collapses the displacement while the lines burn brighter, pads and beats launch travelling ripples. Two draw calls, the second a back-facing aura shell. |
+| `spectra` | Spectra | spectral | A 256 × 256 scrolling mel-spectrogram history in a `DataTexture` displaces a 50 × 50 plane upward — the terrain is the spectrogram, frequency mirrored about the center, time running away from the camera — flanked by curved spectrum walls and an additive particle field. Pads pick the color theme and camera mode, the hand steers the live camera, press compresses the relief. Ported from GANTASMO VJ-9000's SpectraRenderer. |
+| `vjshader` | VJ Shader | kaleidoscopic | Five raymarched fragment-shader presets — Mandelbulb, Julia bulb, Mandelbox, kaleido IFS, and a Menger flythrough — with the upstream eight-material picker, on one fullscreen quad; an audio envelope drives camera drift. Ported from GANTASMO VJ-9000's shader presets; the Menger preset retains its upstream MIT attribution. |
+| `ferrofluid` | Ferrofluid Orb | magnetic | The Rosensweig spike field from theDAW's cymatics orb: a black-chrome icosphere whose vertex shader grows phyllotaxis-patterned spikes at the field poles, reflecting a procedurally generated environment, with an additive fresnel shell standing in for the upstream bloom pass. Apache-2.0 port, notice retained. |
+| `chladni` | Cymatic Plate | resonant | theDAW's Chladni/Faraday standing-wave liquid plate: sixteen n/m mode tables excited by a spectrum synthesized from the three bands, with a spectral-centroid mode picker and quadrature traveling waves that keep the plate from strobing flat. Apache-2.0 port, notice retained. |
+| `valley` | Chrome Valley | synthwave | theDAW's infinite-scroll chrome valley: a mountain-walled terrain of stacked sine octaves that morphs into a golden-angle quasicrystal ferrofluid spike field while press is held, covering both upstream landscape modes in one scene. Apache-2.0 port, notice retained. |
+| `lattice` | Quantum Lattice | crystalline | theDAW's lattice engine: an instanced node-and-beam structure with energy filaments and a storm core, cycling four geometries — Grand Torus, Cubic Frame, Merkabah Star, Cosmos Cage — on beat-driven switching with hysteresis; a pad rising edge forces the next geometry. MIT-licensed upstream. |

@@ -2,23 +2,34 @@
 
 `src/renderer/engine/audio.js` exports the async factory `createAudioEngine()`. It constructs an `AudioContext` (`latencyHint: 'interactive'`) and a single `AnalyserNode`, and publishes a per-frame snapshot — overall level, three band energies, and a beat impulse — that the engine copies into the per-frame `io` object each frame ([ENGINE.md](ENGINE.md#io-assembly)).
 
-No node in the module connects to the context destination. Both the external input and the internal groove feed the analyser only, so the analysis layer emits no sound regardless of source.
+No node in this module connects to the context destination: both the external input and the internal groove feed the analyser only, so the analysis layer emits no sound regardless of source. The module does, however, expose its `ctx` and `analyser`, and the three sound producers — the sampler ([STUDIO.md](STUDIO.md)), the synth ([SYNTH.md](SYNTH.md)), and the timeline transport ([below](#the-transport-as-a-consumer)) — each connect to `[ctx.destination, analyser]`, so anything the instrument plays is both heard and analyzed, and drives the visuals like any external signal.
+
+The INPUT box in the cockpit's right rail fronts this module: its source button opens the selection list (system audio, each input device, internal groove), the meter shows the smoothed level, and the input pill in the top bar names the active source — `LOOPBACK`, `LINE`, `GROOVE`, or `MUTE`.
 
 ## Signal sources
 
 `state.source` reports which signal feeds the analyser:
 
-| `state.source` | Meaning | `state.deviceLabel` |
-|---|---|---|
-| `none` | Initial state; nothing connected | `''` (empty) |
-| `input` | A `getUserMedia` audio stream feeds the analyser | The audio track's label, or `audio input` when the stream has no audio track |
-| `internal` | The internal groove feeds the analyser | `internal groove (120 BPM)` |
+| `state.source` | Pill | Meaning | `state.deviceLabel` |
+|---|---|---|---|
+| `none` | `MUTE` | Initial state; nothing connected | `''` (empty) |
+| `input` | `LINE` | A `getUserMedia` audio stream feeds the analyser | The audio track's label, or `audio input` when the stream has no audio track |
+| `system` | `LOOPBACK` | The system-audio loopback capture feeds the analyser | `System audio (loopback)` |
+| `internal` | `GROOVE` | The internal groove feeds the analyser | `internal groove (120 BPM)` |
+
+Exactly one source is live at a time: every selection path runs through `attachStream()`, which stops the internal groove, releases any previous input stream, and resets the auto-gain ceiling so a louder or quieter source re-converges rather than clipping or vanishing. `state.deviceId` records which input device the browser actually granted, so the source list can mark the live entry.
 
 ### External input
 
-`useInput(deviceId)` requests an audio stream with all three browser processing stages disabled — `echoCancellation: false`, `noiseSuppression: false`, `autoGainControl: false` — so the analyser receives the unprocessed signal. When `deviceId` is given, the constraint is `{ exact: deviceId }`; otherwise the platform default input is used. On success the function stops the internal groove if it is running, disconnects any previous input node, connects a `MediaStreamSource` to the analyser, sets the source state, and resolves to the device label. On failure (no device, permission denied) the promise rejects and the current source is left unchanged.
+`useInput(deviceId)` requests an audio stream with all three browser processing stages disabled — `echoCancellation: false`, `noiseSuppression: false`, `autoGainControl: false` — so the analyser receives the unprocessed signal. When `deviceId` is given, the constraint is `{ exact: deviceId }`; otherwise the platform default input is used. On failure (no device, permission denied) the promise rejects and the current source is left unchanged.
 
 `listInputs()` resolves to the available `audioinput` devices as `{ id, label }` pairs. A device that reports no label appears as `Audio input`.
+
+### System audio (loopback)
+
+`useSystemAudio()` captures everything playing on the computer through `getDisplayMedia({ audio: true, video: true })`. Chromium requires a video source for that call, so the main process supplies a screen source with `audio: 'loopback'` (Windows WASAPI) and the renderer stops and removes the video track the moment the stream arrives; only the loopback audio reaches the analyser. When the capture returns no audio track — the case on platforms without loopback — every track is stopped and the promise rejects with a message naming the platform limitation.
+
+Loopback is a Windows capability. On macOS and Linux the source entry is disabled and states the alternative: install a virtual loopback device (BlackHole or Loopback on macOS, a PulseAudio or PipeWire monitor source on Linux), then select it in the input list. The main process reports platform support over the `platform:systemAudio` channel; nothing about this is inferred in the renderer.
 
 ### Start order
 
@@ -92,15 +103,20 @@ A `setInterval` timer fires every 120 ms; each tick schedules all events falling
 
 Stopping the groove clears the timer and disconnects the bus. `startInternal()` is a no-op while the groove is already running.
 
+## The transport as a consumer
+
+The timeline transport (`src/renderer/audio/transport.js`) is the third producer on the shared output bus, beside the sampler and the synth. It schedules each audio clip as an `AudioBufferSourceNode` against the `AudioContext` clock — sample-accurate start, offset, loop seam, and per-clip fade ramps — through a per-clip gain into its master gain, which connects to both the context destination and the analyser. The playback position is derived from `ctx.currentTime`, so the transport cannot drift against the audio it schedules, and backing tracks drive the visuals exactly as a live input would. Decoded buffers arrive from the project store (the page CSP forbids `file://` media); a clip whose buffer has not decoded yet is skipped and rescheduled at the correct offset when the buffer lands. The visual lane produces no audio: it fires clip-entry events at the router ([MIDI.md](MIDI.md#the-assignment-router)). Loop-seam and end-of-timeline checks run once per `update()` call — frame-quantized, on the router's frame hook.
+
 ## Public interface
 
-The factory resolves to an object with one state record and six methods.
+The factory resolves to an object with one state record, the shared `ctx` and `analyser` nodes, and the methods below.
 
 `state` fields:
 
 | Field | Range | Meaning |
 |---|---|---|
-| `source` | `'none'` \| `'input'` \| `'internal'` | Active signal source |
+| `source` | `'none'` \| `'input'` \| `'system'` \| `'internal'` | Active signal source |
+| `deviceId` | string or `null` | The granted input device id; `null` for the other sources |
 | `deviceLabel` | string | Human-readable source name (table above) |
 | `level` | 0..1 | Smoothed, normalized overall loudness |
 | `bands.bass` / `.mid` / `.high` | 0..1 | Smoothed, normalized band energies |
@@ -114,8 +130,11 @@ Methods:
 | `update(dt)` | Per-frame analysis step; `dt` in seconds. Called by the engine's frame loop |
 | `autoStart()` | Async bootstrap (resume, input attempt, groove fallback); resolves to `state.source` |
 | `useInput(deviceId)` | Async; switches to an external input; resolves to the device label; rejects on `getUserMedia` failure |
+| `useSystemAudio()` | Async; switches to the loopback capture; resolves to the source label; rejects when no audio track is available |
 | `listInputs()` | Async; resolves to `{ id, label }` for each `audioinput` device |
 | `startInternal()` | Starts the internal groove; no-op while running |
+| `stopInternal()` | Stops the groove; no-op while it is not running |
+| `releaseInput()` | Disconnects the current input node and stops its media tracks |
 | `resume()` | Resumes the `AudioContext`; returns the context's resume promise |
 
-The engine's frame loop calls only `update(dt)` and copies `state` into `io`; it never switches sources itself.
+The engine's frame loop calls only `update(dt)` and copies `state` into `io`; it never switches sources itself. Source switching belongs to the INPUT box and `autoStart()`.

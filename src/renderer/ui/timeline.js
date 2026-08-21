@@ -341,6 +341,43 @@ export function createTimeline({ transport, engine, store, onEdit }) {
     visualClips().push({ id: uid('v'), scene, start: t, end: t + 8, transition: { type: 'cut', duration: 0 } });
     edited();
   });
+  // Audio clips draw on canvas, so selection is hit-tested: click selects,
+  // drag moves, the trailing edge resizes.
+  let audioDrag = null;
+  audioCanvas.addEventListener('pointerdown', (e) => {
+    const t = xToTime(e.offsetX);
+    const clip = audioClips().find((c) => t >= c.start && t < c.end);
+    selectedId = clip ? clip.id : selectedId;
+    if (clip) {
+      const endX = timeToX(clip.end);
+      audioDrag = {
+        clip,
+        mode: endX - e.offsetX < EDGE ? 'end' : 'move',
+        grabT: t - clip.start,
+      };
+      audioCanvas.setPointerCapture(e.pointerId);
+    }
+    render();
+  });
+  audioCanvas.addEventListener('pointermove', (e) => {
+    if (!audioDrag) return;
+    const t = xToTime(e.offsetX);
+    const c = audioDrag.clip;
+    const snap = (v) => Math.max(0, Math.round(v * 2) / 2);
+    if (audioDrag.mode === 'move') {
+      const dur = c.end - c.start;
+      c.start = snap(t - audioDrag.grabT);
+      c.end = c.start + dur;
+    } else {
+      c.end = Math.max(c.start + 0.5, snap(t));
+    }
+    renderAudio();
+  });
+  audioCanvas.addEventListener('pointerup', () => {
+    if (audioDrag) edited();
+    audioDrag = null;
+  });
+
   audioCanvas.addEventListener('drop', async (e) => {
     e.preventDefault();
     root.classList.remove('droppable');

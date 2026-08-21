@@ -30,7 +30,7 @@ Symptom-oriented reference for known issues. Check-by-check detection methods an
 
 | | |
 |---|---|
-| Symptom | With a Windows contrast theme active, interface colors (and with them the palette swatches on the project cards) are replaced by the system theme's colors. |
+| Symptom | With a Windows contrast theme active, interface colors are replaced by the system theme's colors. |
 | Cause | The shipped stylesheet opts the document out of forced colors with `html { forced-color-adjust: none; }` ([`src/renderer/styles.css`](../src/renderer/styles.css), mirrored in `dist/styles.css`); the property inherits to every element. If a rebuilt or modified bundle strips that declaration, the browser engine substitutes the forced-colors palette for the application's CSS colors. |
 | Resolution | Restoring the declaration in `src/renderer/styles.css` and rebuilding the renderer bundle (`npm run build:renderer`) reinstates the application palette. Packaged builds ship the declaration intact. |
 
@@ -86,15 +86,15 @@ Symptom-oriented reference for known issues. Check-by-check detection methods an
 
 | | |
 |---|---|
-| Symptom | Visuals render but do not follow the music; the HUD audio pill reads `INT. GROOVE` instead of `LIVE AUDIO`. |
+| Symptom | Visuals render but do not follow the music; the input pill in the top bar reads `GROOVE` instead of `LINE`. |
 | Cause | At startup, `autoStart()` in [`src/renderer/engine/audio.js`](../src/renderer/engine/audio.js) requests the default audio input via `getUserMedia`; when no input exists or capture fails, the internal groove takes over — a synthesized 120 BPM kick-and-hat bus routed only into the analyser, inaudible by design. The Doctor's audio check counts inputs via `enumerateDevices`; device labels are blank until an active capture stream exists, and blank labels are replaced with the generic `Audio input`. |
-| Resolution | An operating-system-level input (microphone, line-in, or a loopback device) must exist and be permitted; the application itself grants capture permission to the renderer ([`src/main/main.js`](../src/main/main.js) permission handlers), so a denial originates from OS privacy settings. Once an input is available, `useInput(deviceId)` switches the analysis source and the HUD pill changes to `LIVE AUDIO`. Slow auto-gain normalizes quiet and loud sources into the 0–1 band range, so low input level alone does not disable reaction. |
+| Resolution | An operating-system-level input (microphone, line-in, or a loopback device) must exist and be permitted; the application itself grants capture permission to the renderer ([`src/main/main.js`](../src/main/main.js) permission handlers), so a denial originates from OS privacy settings. Once an input is available, selecting it from the INPUT box in the right rail switches the analysis source and the pill changes to `LINE` (`LOOPBACK` for system audio on Windows). Slow auto-gain normalizes quiet and loud sources into the 0–1 band range, so low input level alone does not disable reaction. |
 
 ## Black render or WebGL2 failure
 
 | | |
 |---|---|
-| Symptom | The stage stays black, or the Doctor's "Graphics (WebGL2)" check reports `fail`; in severe cases the application shows a startup-failure message with a stack trace instead of the boot screen. |
+| Symptom | The stage stays black, or the Doctor's "Graphics (WebGL2)" check reports `fail`; in severe cases the application shows a startup-failure message with a stack trace instead of the cockpit. |
 | Cause | The check probes `canvas.getContext('webgl2')` and fails when the GPU or its driver exposes no WebGL2 context. The render pipeline is three.js on WebGL2; when context creation throws during engine construction, the `main().catch` handler in [`src/renderer/app.js`](../src/renderer/app.js) replaces the page with the failure message. |
 | Resolution | A GPU driver update is the primary remedy; WebGL2 support is a hard requirement per the [requirements table](../README.md#requirements). On capable hardware with low headroom, the quality tier bounds the per-scene particle budget — `low` 8,000, `med` 30,000 (the default passed by `app.js`), `high` 80,000 — and the renderer caps `devicePixelRatio` at 1.75. |
 
@@ -102,7 +102,7 @@ Symptom-oriented reference for known issues. Check-by-check detection methods an
 
 | | |
 |---|---|
-| Symptom | The Doctor's MIDI check reports `warn` (WebMIDI unavailable) or `ok` with no devices, and the HUD input pill reads `MOUSE/KEYS`. |
+| Symptom | The Doctor's MIDI check reports `warn` (WebMIDI unavailable) or `ok` with no devices, and the link pill in the top bar reads `KEYS`. |
 | Cause | The MIDI layer requires `navigator.requestMIDIAccess` (requested with `sysex: false`); the check reports `warn` when the API is absent or access fails. An `ok` with no devices means WebMIDI is working and no ports are currently attached. When a Sway is attached, it is bound exclusively and other controllers are ignored by design; otherwise all inputs are bound. |
 | Resolution | Device attachment requires no restart: the layer rescans on every WebMIDI `statechange` event, so plugging a controller in binds it immediately ([`src/renderer/midi/midi.js`](../src/renderer/midi/midi.js)). The application grants the `midi` and `midiSysex` permissions itself, so no browser-style prompt is involved. Mouse and keyboard remain fully mapped whenever no MIDI device is bound. |
 

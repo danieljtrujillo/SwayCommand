@@ -1,18 +1,18 @@
 # Doctor
 
-The Doctor is AKSWAYJ's startup system check and remediation screen. It verifies the machine, reports on optional hardware and software, and offers one-click fixes for anything missing. It never blocks: every check is isolated, every failure degrades to an informational row, and the application always reaches the project picker.
+The Doctor is AKSWAYJ's startup system check and remediation list, shown in the SYSTEM modal. It verifies the machine, reports on optional hardware and software, and offers one-click fixes for anything missing. It never blocks: every check is isolated, every failure degrades to an informational row, and the cockpit is always reachable.
 
 Implementation is split between two processes. Checks that need operating-system access (USB, registry, driver store, network) live in [`src/main/doctor.js`](../src/main/doctor.js); checks that need browser APIs (WebGL2, WebMIDI, audio devices) live in [`src/renderer/app.js`](../src/renderer/app.js). Fix actions are implemented in [`src/main/audima.js`](../src/main/audima.js) and [`src/main/driver-install.js`](../src/main/driver-install.js) and dispatched from [`src/main/main.js`](../src/main/main.js). Symptom-oriented guidance: [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
 ## Purpose and lifecycle
 
-The Doctor screen (`boot`) is the first screen the application enters. On startup, `runDoctor()` in `app.js` invokes the main-process checks over IPC (`doctor:run`) and the renderer checks locally, in parallel, and renders the combined list. A re-run button (`#btn-recheck`) invokes `runDoctor()` again at any time, and a successful fix triggers an automatic full re-run.
+The SYSTEM modal opens over the cockpit at startup, with the stage behind the closed blast door. `runDoctor()` in `app.js` invokes the main-process checks over IPC (`doctor:run`) and the renderer checks locally, in parallel, and renders the combined list. A re-run button (`#btn-recheck`) invokes `runDoctor()` again at any time, a successful fix triggers an automatic full re-run, and the modal is reachable later from the SYSTEM button in the CONTROLS modal.
 
 Advancement rules:
 
-- After every run, the continue button (`#btn-enter`) is enabled regardless of results. A `fail` result never blocks manual entry to the project picker.
-- When the aggregate status is `ok` (no check reports `warn` or `fail`), the application advances to the project picker on its own after 1,400 ms. Auto-advance fires at most once per session (`state._autoAdvanced`) and only if the Doctor screen is still active when the timer elapses.
-- With `?autoplay=` (or the `AKSWAYJ_AUTOPLAY` environment variable), the application enters the perform screen directly and the Doctor runs in the background, populating the boot screen for later viewing.
+- After every run, the ENTER button (`#btn-enter`) is enabled regardless of results. A `fail` result never blocks opening the blast door manually.
+- When the aggregate status is `ok` (no check reports `warn` or `fail`), the door opens on its own after 1,400 ms. Auto-advance fires at most once per session (`state._autoAdvanced`) and only if the SYSTEM modal is still open when the timer elapses.
+- With `?autoplay=` (or the `AKSWAYJ_AUTOPLAY` environment variable), the door opens immediately and the Doctor runs in the background, populating the SYSTEM modal for later viewing.
 
 ## Status levels
 
@@ -160,4 +160,4 @@ The Doctor is built so that no single failure can prevent startup:
 - The `run()` command wrapper resolves to `null` on command failure instead of rejecting, so a missing tool (`lsusb`, `pnputil`) degrades to a not-detected result.
 - `runAll()` gathers the five checks with `Promise.allSettled`; a rejected check (which the per-check `catch` should already prevent) is mapped to an `info` row rather than propagating.
 - Each renderer check wraps its probe in `try`/`catch`.
-- The continue button is enabled after every run, and `fail` results affect only auto-advance. The project picker is reachable on a machine with no GPU acceleration, no network, no MIDI, and no audio input.
+- The ENTER button is enabled after every run, and `fail` results affect only auto-advance. The cockpit is reachable on a machine with no GPU acceleration, no network, no MIDI, and no audio input.
