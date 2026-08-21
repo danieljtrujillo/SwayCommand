@@ -206,27 +206,32 @@
           "max": 1,
           "curve": "linear"
         },
-        null,
+        {
+          "target": "fx:glitch",
+          "min": 0,
+          "max": 1,
+          "curve": "linear"
+        },
+        {
+          "target": "fx:anaglyph",
+          "min": 0,
+          "max": 1,
+          "curve": "linear"
+        },
+        {
+          "target": "fx:mosaic",
+          "min": 0,
+          "max": 1,
+          "curve": "linear"
+        },
+        {
+          "target": "fx:echoTrails",
+          "min": 0,
+          "max": 40,
+          "curve": "linear"
+        },
         {
           "target": "sampler:master",
-          "min": 0,
-          "max": 1,
-          "curve": "linear"
-        },
-        {
-          "target": "sampler:cutoff",
-          "min": 0,
-          "max": 1,
-          "curve": "linear"
-        },
-        {
-          "target": "sampler:rate",
-          "min": 0,
-          "max": 1,
-          "curve": "linear"
-        },
-        {
-          "target": "sampler:send",
           "min": 0,
           "max": 1,
           "curve": "linear"

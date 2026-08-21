@@ -31,19 +31,20 @@ function uid(prefix) {
   return `${prefix}-${Date.now().toString(36)}${uidCounter.toString(36)}`;
 }
 
-// Knob defaults reproduce the behavior the engine used to hardwire (hue on 0,
-// fade length on 1, intensity on 2) and give the sampler knobs their factory
-// slots on the right cluster.
+// Knob defaults: the left cluster keeps the engine's stage controls (hue,
+// fade length, intensity) with glitch on the fourth knob; the right cluster
+// carries the frame-wrecking rack effects — anaglyph, mosaic, echo trails —
+// with the kit level on the last knob. Turning a rack knob enables the rack.
 function defaultKnobs() {
   return [
     { target: 'engine:hue', min: 0, max: 1, curve: 'detent' },
     { target: 'engine:fadeTime', min: 1, max: 8, curve: 'linear' },
     { target: 'engine:intensity', min: 0, max: 1, curve: 'linear' },
-    null,
+    { target: 'fx:glitch', min: 0, max: 1, curve: 'linear' },
+    { target: 'fx:anaglyph', min: 0, max: 1, curve: 'linear' },
+    { target: 'fx:mosaic', min: 0, max: 1, curve: 'linear' },
+    { target: 'fx:echoTrails', min: 0, max: 40, curve: 'linear' },
     { target: 'sampler:master', min: 0, max: 1, curve: 'linear' },
-    { target: 'sampler:cutoff', min: 0, max: 1, curve: 'linear' },
-    { target: 'sampler:rate', min: 0, max: 1, curve: 'linear' },
-    { target: 'sampler:send', min: 0, max: 1, curve: 'linear' },
   ];
 }
 

@@ -50,6 +50,10 @@
 //      warp up from a fader parked at zero, which "autoplays" a deck the VJ has
 //      switched off; here each push is gated on its own fader being > 0. The
 //      push VALUE is upstream's (see the render() block); only the gate is new.
+//      Two rack-native effects are additions outright (no upstream source):
+//      `anaglyph`, a depth-scaled red/cyan stereo split in FRAG_FINAL, and
+//      `mosaic`, a grouted tile quantiser in FRAG_GEO — both marked at their
+//      sites and both taking the same arm-gated bass sweetening.
 //
 // NOT PORTED (out of scope for this rack — they are sources or whole-frame
 // compositors, not the effect decks): equirect projection, stereo SBS/TB,
@@ -84,6 +88,7 @@
 //     mirrorY        false      toggle          VJControls TogglePad "Mirror Y"
 //     kaleidoscope   false      toggle          VJControls TogglePad "Kaleido"
 //     tiling         1          1..8   step 1   Fader "Grid Tiling"
+//     mosaic         0          0..1            [SwayCommand] see MOSAIC at FRAG_GEO
 //     radialSpokes   0          0..24  step 1   Fader "Radial Mirror (Spokes)"
 //     feedback       0.85       0..0.99         Fader "Feedback Wash"
 //     softEdges      true       toggle          TogglePad "Soft Edges"
@@ -96,6 +101,7 @@
 //     pixelate       0          0..1            Fader "Pixel Destroy"
 //     backskip       0          0..1            Fader "Backskip"
 //     chromaAbRadial false      toggle          [SwayCommand] see CHROMA/RGB SPLIT
+//     anaglyph       0          0..1            [SwayCommand] see ANAGLYPH at FRAG_FINAL
 //   CHROMATICS
 //     hue            0          0..360 deg      Fader "Hue Cycle"
 //     saturation     100        0..300 %        Fader "Saturation"
@@ -133,6 +139,7 @@ const DEFAULTS = Object.freeze({
   mirrorY: false,
   kaleidoscope: false,
   tiling: 1,
+  mosaic: 0,
   radialSpokes: 0,
   feedback: 0.85,
   softEdges: true,
@@ -145,6 +152,7 @@ const DEFAULTS = Object.freeze({
   pixelate: 0,
   backskip: 0,
   chromaAbRadial: false,
+  anaglyph: 0,
   // CHROMATICS
   hue: 0,
   saturation: 100,
@@ -183,9 +191,9 @@ export const RANGES = Object.freeze({
   ascii: true, asciiMono: true, asciiPalette: true, audioReactive: true,
   chromaAbRadial: true,
   asciiAccent: 'hex',
-  tiling: [1, 8], radialSpokes: [0, 24], feedback: [0, 0.99],
+  tiling: [1, 8], radialSpokes: [0, 24], feedback: [0, 0.99], mosaic: [0, 1],
   glitch: [0, 1], rgbGhost: [0, 1], rgbSplit: [0, 1], waveWarp: [0, 1],
-  chromaAb: [0, 1], pixelate: [0, 1], backskip: [0, 1],
+  chromaAb: [0, 1], pixelate: [0, 1], backskip: [0, 1], anaglyph: [0, 1],
   hue: [0, 360], saturation: [0, 300], contrast: [0, 300], brightness: [0, 200],
   sepia: [0, 1], grayscale: [0, 1], blur: [0, 1],
   echoTrails: [0, 40], strobe: [0, 1], posterizeTime: [1, 60],
@@ -198,8 +206,8 @@ export const RANGES = Object.freeze({
  * every RANGES key appears in exactly one deck.
  */
 export const DECKS = Object.freeze([
-  { name: 'Geometrics', keys: ['mirrorX', 'mirrorY', 'kaleidoscope', 'softEdges', 'tiling', 'radialSpokes', 'feedback'] },
-  { name: 'Corruption', keys: ['glitch', 'rgbGhost', 'rgbSplit', 'chromaAb', 'chromaAbRadial', 'waveWarp', 'pixelate', 'backskip'] },
+  { name: 'Geometrics', keys: ['mirrorX', 'mirrorY', 'kaleidoscope', 'softEdges', 'tiling', 'mosaic', 'radialSpokes', 'feedback'] },
+  { name: 'Corruption', keys: ['glitch', 'rgbGhost', 'rgbSplit', 'chromaAb', 'chromaAbRadial', 'anaglyph', 'waveWarp', 'pixelate', 'backskip'] },
   { name: 'Chromatics', keys: ['hue', 'saturation', 'contrast', 'brightness', 'invert', 'edgeDetect', 'sepia', 'grayscale', 'blur', 'scanlines', 'crt', 'vignette'] },
   { name: 'Timecode', keys: ['echoTrails', 'strobe', 'posterizeTime', 'audioReactive'] },
   { name: 'ASCII', keys: ['ascii', 'asciiCols', 'asciiMono', 'asciiAccent', 'asciiPalette'] },
@@ -304,6 +312,14 @@ const FRAG_ECHO = /* glsl */ `
 //     out = geo * (1 - 0.95*fb) + prev * 0.95*fb*fb
 //   At the 0.85 default that is 0.1925*geo + 0.6864*prev — a decaying wash, not
 //   a unity-gain feedback loop. Reproduced exactly, fb-squared and all.
+//
+// [SwayCommand] MOSAIC — rack-native, no upstream source; deliberately distinct
+// from pixelate above. The frame is quantised into square tiles (4..64 px,
+// ramped by the fader), each tile samples its own CENTRE, a thin grout line is
+// darkened on the tile borders and each tile takes a subtle brightness
+// variation from a hash of its integer coords, so the result reads as tilework
+// rather than resolution loss. Neutral-skip: uMosCells = (0,0) leaves srcUv
+// untouched and mosShade at exactly 1.0, so the off state is the old shader.
 const FRAG_GEO = /* glsl */ `
   precision highp float;
   uniform sampler2D tSrc;
@@ -314,6 +330,9 @@ const FRAG_GEO = /* glsl */ `
   uniform vec2  uMirror;      // (mirrorX, mirrorY) as 0/1
   uniform float uSoft;        // 0/1
   uniform vec2  uPixCells;    // pixelate cell counts; (0,0) = off
+  uniform vec2  uMosCells;    // [SwayCommand] mosaic tile counts; (0,0) = off
+  uniform float uMosGrout;    // [SwayCommand] grout half-width, tile units
+  uniform float uMosTint;     // [SwayCommand] per-tile brightness amplitude
   uniform float uFbGeo;       // 1 - 0.95*fb
   uniform float uFbPrev;      // 0.95*fb*fb
   varying vec2 vUv;
@@ -323,6 +342,14 @@ const FRAG_GEO = /* glsl */ `
     float lo = 1.0 - clamp(u / 0.15, 0.0, 1.0);          // 0.15 is a literal: safe
     float hi = clamp((u - 0.85) / 0.15, 0.0, 1.0);
     return clamp(lo + hi, 0.0, 1.0);
+  }
+
+  // [SwayCommand] per-tile hash for the mosaic tint — the same construction
+  // FRAG_FINAL's value noise uses, so the rack keeps a single hash flavour.
+  float hash21(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
   }
 
   void main() {
@@ -355,7 +382,21 @@ const FRAG_GEO = /* glsl */ `
       srcUv = (floor(srcUv * uPixCells) + 0.5) / uPixCells;
     }
 
+    // [SwayCommand] mosaic: quantise into square tiles, sample each tile's
+    // CENTRE; the shade term (grout + hashed per-tile tint) multiplies the
+    // fetch below. See the MOSAIC note above FRAG_GEO.
+    float mosShade = 1.0;
+    if (uMosCells.x > 0.0) {
+      vec2 mg = srcUv * uMosCells;
+      vec2 mc = floor(mg);
+      vec2 db = abs(fract(mg) - 0.5);            // 0 at tile centre, 0.5 at border
+      srcUv = (mc + 0.5) / uMosCells;            // tile-centre sample
+      float grout = step(0.5 - uMosGrout, max(db.x, db.y));
+      mosShade = (1.0 - 0.45 * grout) * (1.0 + (hash21(mc) - 0.5) * uMosTint);
+    }
+
     vec3 geo = texture2D(tSrc, srcUv).rgb;
+    if (uMosCells.x > 0.0) geo *= mosShade;
 
     if (uSoft > 0.5) {
       geo *= 1.0 - softAlpha(e.x);     // the X gradient fill…
@@ -649,6 +690,19 @@ const FRAG_ASCII = /* glsl */ `
 // even though the implementation upstream is a uniform feOffset. Off by default
 // so the ported behaviour is what you get unless you ask for the other one.
 //
+// [SwayCommand] ANAGLYPH — rack-native, no upstream source (upstream's stereo
+// SBS/TB compositor is out of scope, see the header). Deliberately distinct
+// from the flat feOffset split above: red is displaced left and slightly down,
+// green+blue (cyan) right and slightly up, and the parallax scales with the
+// distance from a screen-centre convergence plane — zero at the centre, full
+// at the corners — so the separation reads as depth rather than a channel
+// shift. At high drive the red and cyan images also counter-rotate slightly
+// about the centre (uAnaRot ramps cubically, so it only wakes near the top of
+// the fader). The anaglyph taps JOIN the split's own taps, so split+anaglyph
+// together still cost three s3 evaluations; with uAnaPx at (0,0) the tap
+// positions collapse to the split's exact previous expressions, which is the
+// no-op-on-a-uniform branch this always-on pass requires.
+//
 // SCANLINES / CRT / VIGNETTE — the DOM overlays, index.css:
 //   .scanlines-overlay  4px tile, top 2px clear, bottom 2px rgba(0,0,0,0.3),
 //                       mix-blend-mode: overlay, element opacity 0.8
@@ -722,6 +776,8 @@ const FRAG_FINAL = /* glsl */ `
   uniform vec2  uSplitPx;      // (rgbSplit*100, 0)
   uniform vec2  uChromaPx;     // (chromaAb*20, chromaAb*15)
   uniform float uChromaRadial; // 0/1 [SwayCommand]
+  uniform vec2  uAnaPx;        // [SwayCommand] red/cyan parallax at full depth, canvas px; (0,0) = off
+  uniform float uAnaRot;       // [SwayCommand] per-eye counter-rotation, radians
   uniform float uScan;         // 0/1
   uniform float uCrt;          // 0/1
   uniform float uCrtAlpha;     // 0.1 * animated opacity
@@ -809,9 +865,27 @@ const FRAG_FINAL = /* glsl */ `
     }
 
     vec3 col;
-    if (dot(dPx, dPx) > 0.0) {
+    // [SwayCommand] the anaglyph taps ride the split's; see ANAGLYPH above.
+    if (dot(dPx, dPx) > 0.0 || uAnaPx.x > 0.0) {
       vec2 d = vec2(dPx.x, -dPx.y) * uTexel;   // canvas px -> uv (y flips)
-      col = vec3(s3(vUv - d).r, s3(vUv).g, s3(vUv + d).b);
+      vec2 uvR = vUv;
+      vec2 uvC = vUv;
+      if (uAnaPx.x > 0.0) {
+        vec2 rel = (vUv - 0.5) * uRes;
+        // parallax grows with distance from the screen-centre convergence
+        // plane (same normalisation as the radial chromaAb / vignette)
+        float depth = clamp(length(rel) / max(0.5 * length(uRes), 1.0), 0.0, 1.0);
+        // sampling red at +a displays the red image shifted by -a — left and
+        // down in y-up uv space; cyan mirrors it to the right and up
+        vec2 a = uAnaPx * depth * uTexel;
+        // slight opposing per-eye rotation about the centre at high drive
+        float cA = cos(uAnaRot), sA = sin(uAnaRot);
+        vec2 relR = vec2(cA * rel.x - sA * rel.y, sA * rel.x + cA * rel.y);
+        vec2 relC = vec2(cA * rel.x + sA * rel.y, -sA * rel.x + cA * rel.y);
+        uvR = relR * uTexel + 0.5 + a;
+        uvC = relC * uTexel + 0.5 - a;
+      }
+      col = vec3(s3(uvR - d).r, s3(uvC).g, s3(uvC + d).b);
     } else {
       col = s3(vUv);
     }
@@ -953,6 +1027,8 @@ export function createFxRack(THREE, renderer, width, height, opts) {
       uZoom: { value: 1 }, uTiles: { value: 1 }, uKaleido: { value: 0 },
       uMirror: { value: new THREE.Vector2(0, 0) }, uSoft: { value: 0 },
       uPixCells: { value: new THREE.Vector2(0, 0) },
+      uMosCells: { value: new THREE.Vector2(0, 0) },
+      uMosGrout: { value: 0 }, uMosTint: { value: 0 },
       uFbGeo: { value: 1 }, uFbPrev: { value: 0 },
     },
     vertexShader: VERT,
@@ -999,6 +1075,8 @@ export function createFxRack(THREE, renderer, width, height, opts) {
       uSplitPx: { value: new THREE.Vector2(0, 0) },
       uChromaPx: { value: new THREE.Vector2(0, 0) },
       uChromaRadial: { value: 0 },
+      uAnaPx: { value: new THREE.Vector2(0, 0) },
+      uAnaRot: { value: 0 },
       uScan: { value: 1 }, uCrt: { value: 1 }, uCrtAlpha: { value: 0.1 },
       uCrtBar: { value: new THREE.Vector3(0, 0, 0) },
       uVig: { value: 1 },
@@ -1202,6 +1280,8 @@ export function createFxRack(THREE, renderer, width, height, opts) {
       let cGhost = p.rgbGhost;
       let cSplit = p.rgbSplit;
       let cWave = p.waveWarp;
+      let cAnaglyph = p.anaglyph;   // [SwayCommand] rack-native, see ANAGLYPH
+      let cMosaic = p.mosaic;       // [SwayCommand] rack-native, see MOSAIC
       let cBackskip = p.backskip;
       let zoomScale = 1.0;
       let isAudioStrobe = false;
@@ -1221,6 +1301,10 @@ export function createFxRack(THREE, renderer, width, height, opts) {
         if (p.rgbGhost > 0) cGhost = Math.max(cGhost, powBass * 0.7);
         if (p.rgbSplit > 0) cSplit = Math.max(cSplit, powBass * 0.5);
         if (p.waveWarp > 0) cWave = Math.max(cWave, powBass * 0.4);
+        // [SwayCommand] the two rack-native decks join the same arm-gated
+        // pattern: anaglyph rides with split's 0.5, mosaic with warp's 0.4.
+        if (p.anaglyph > 0) cAnaglyph = Math.max(cAnaglyph, powBass * 0.5);
+        if (p.mosaic > 0) cMosaic = Math.max(cMosaic, powBass * 0.4);
 
         // Pulse-zoom only when feedback/geometry are actually in play.
         if (p.feedback > 0 || p.kaleidoscope || p.tiling > 1 || p.radialSpokes >= 2) {
@@ -1296,7 +1380,7 @@ export function createFxRack(THREE, renderer, width, height, opts) {
       const pixScale = 1.0 - p.pixelate * 0.96;        // 1.0 down to 0.04
       const needGeo =
         p.feedback > 0 || tiles > 1 || p.kaleidoscope || p.mirrorX || p.mirrorY ||
-        p.softEdges || p.pixelate > 0 || zoomScale !== 1.0;
+        p.softEdges || p.pixelate > 0 || p.mosaic > 0 || zoomScale !== 1.0;
       if (needGeo) {
         const gu = geoMat.uniforms;
         gu.tSrc.value = src;
@@ -1313,6 +1397,19 @@ export function createFxRack(THREE, renderer, width, height, opts) {
           );
         } else {
           gu.uPixCells.value.set(0, 0);
+        }
+        // [SwayCommand] mosaic: square tiles ramp 4..64 px with the (bass-
+        // sweetened) fader; grout is 1..2 px a side, tint a subtle ±8%.
+        if (p.mosaic > 0) {
+          const mosCellPx = 4 + cMosaic * 60;
+          gu.uMosCells.value.set(
+            Math.max(2, Math.floor(W / mosCellPx)),
+            Math.max(2, Math.floor(H / mosCellPx)),
+          );
+          gu.uMosGrout.value = (1 + cMosaic) / mosCellPx;
+          gu.uMosTint.value = 0.16;
+        } else {
+          gu.uMosCells.value.set(0, 0);
         }
         gu.uFbGeo.value = 1 - 0.95 * p.feedback;
         gu.uFbPrev.value = 0.95 * p.feedback * p.feedback;
@@ -1414,6 +1511,10 @@ export function createFxRack(THREE, renderer, width, height, opts) {
       fu.uSplitPx.value.set(cSplit * 100, 0);
       fu.uChromaPx.value.set(p.chromaAb * 20, p.chromaAb * 15);
       fu.uChromaRadial.value = p.chromaAbRadial ? 1 : 0;
+      // [SwayCommand] anaglyph drive: (x,y) parallax in canvas px at full
+      // depth, plus the counter-rotation — cubic so it only wakes near 1.
+      fu.uAnaPx.value.set(cAnaglyph * 30, cAnaglyph * 10);
+      fu.uAnaRot.value = cAnaglyph * cAnaglyph * cAnaglyph * 0.05;
       fu.uScan.value = p.scanlines ? 1 : 0;
       fu.uCrt.value = p.crt ? 1 : 0;
       fu.uVig.value = p.vignette ? 1 : 0;

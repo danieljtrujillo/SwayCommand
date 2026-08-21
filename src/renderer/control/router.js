@@ -58,6 +58,9 @@ export function createRouter({ engine, sampler, synth, transport, midi, onDirty 
         else if (t.key === 'fadeTime') engine.autoVJ.fadeTime = mapped;
         break;
       case 'fx':
+        // A control reaching for the rack turns the rack on — a knob mapped
+        // to glitch must never turn silently in a disabled chain.
+        if (!engine.fxEnabled) engine.fxEnabled = true;
         engine.setFxParam(t.key, mapped);
         break;
       case 'synth':
@@ -121,6 +124,7 @@ export function createRouter({ engine, sampler, synth, transport, midi, onDirty 
       if (a.transition.type === 'crossfade') engine.setScene(a.scene, a.transition.duration);
       else engine.cutTo(a.scene);
     } else if (a.type === 'fxPunch' && !heldPunches.has(idx)) {
+      if (!engine.fxEnabled) engine.fxEnabled = true; // a punch must land audibly
       heldPunches.set(idx, { param: a.param, prev: engine.fx.params[a.param], value: a.value });
       engine.setFxParam(a.param, a.value);
     }
