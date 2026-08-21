@@ -20,6 +20,7 @@ import { createSurface } from './ui/surface.js';
 import { createAssign } from './ui/assign.js';
 import { createDrawer } from './ui/drawer.js';
 import { createTimeline } from './ui/timeline.js';
+import { createLayout } from './ui/layout.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -46,6 +47,7 @@ const ui = {
   drawer: null,
   timeline: null,
   wave: null,
+  layout: null,
 };
 
 const studio = {
@@ -1155,6 +1157,7 @@ async function main() {
     onEdit: () => state.projectStore.markDirty(),
   });
   new ResizeObserver(() => ui.timeline.render()).observe($('#timeline'));
+  ui.layout = createLayout({ root: $('#cockpit'), settings: window.swaycommand.settings });
   state.router.onTouch((id) => {
     if (!ui.assign.followEnabled() || popoverOpen()) return;
     if (ui.assign.current() !== id) selectControl(id);
