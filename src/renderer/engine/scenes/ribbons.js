@@ -1,12 +1,19 @@
 // Ribbons — a bundle of glowing triangle-strip trails on per-ribbon
 // lissajous paths, blended toward the Sway hand so the whole swarm
 // chases it. Mid band + press fatten the strips, beats spike them,
-// pads teleport a ribbon's head with a flash. One draw call for all
-// strips + one for the head sprites. (docs/SCENE_CONTRACT.md)
+// pads teleport a ribbon's head with a flash. Sway morphs the ribbon
+// geometry itself — the lissajous rate accumulates faster while the
+// amplitudes and strip width pull in, so the field glides from long
+// silk sweeps to tight coils — and a strike is a whipcrack: one
+// amplitude impulse travels head -> tail down every strip. One draw
+// call for all strips + one for the head sprites.
+// (docs/SCENE_CONTRACT.md)
 
 export const meta = { id: 'ribbons', name: 'Ribbons', mood: 'fluid' };
 
-const POINTS = 96; // trail points per ribbon (2 verts each)
+const POINTS = 96;     // trail points per ribbon (2 verts each)
+const TAU = Math.PI * 2;
+const WHIP_LEN = 0.9;  // seconds for the whipcrack to run the strip
 
 export function createScene(ctx) {
   const { THREE, quality } = ctx;
@@ -19,7 +26,7 @@ export function createScene(ctx) {
 
   // --- per-ribbon lissajous parameters + head state (all preallocated)
   const freq = new Float32Array(RIBBONS * 3);
-  const phase = new Float32Array(RIBBONS * 3);
+  const acc = new Float32Array(RIBBONS * 3);   // accumulated lissajous angles
   const heads = new Float32Array(RIBBONS * 3); // current head positions
   const flash = new Float32Array(RIBBONS);     // pad-teleport flash energy
   const padPrev = new Float32Array(16);        // for pad rising-edge detection
@@ -28,12 +35,12 @@ export function createScene(ctx) {
     freq[i * 3] = 0.7 + Math.random() * 1.1;
     freq[i * 3 + 1] = 0.8 + Math.random() * 1.2;
     freq[i * 3 + 2] = 0.5 + Math.random() * 0.9;
-    phase[i * 3] = Math.random() * Math.PI * 2;
-    phase[i * 3 + 1] = Math.random() * Math.PI * 2;
-    phase[i * 3 + 2] = Math.random() * Math.PI * 2;
-    heads[i * 3] = Math.sin(phase[i * 3]) * AMP_X;
-    heads[i * 3 + 1] = Math.sin(phase[i * 3 + 1]) * AMP_Y;
-    heads[i * 3 + 2] = Math.sin(phase[i * 3 + 2]) * AMP_Z;
+    acc[i * 3] = Math.random() * TAU;
+    acc[i * 3 + 1] = Math.random() * TAU;
+    acc[i * 3 + 2] = Math.random() * TAU;
+    heads[i * 3] = Math.sin(acc[i * 3]) * AMP_X;
+    heads[i * 3 + 1] = Math.sin(acc[i * 3 + 1]) * AMP_Y;
+    heads[i * 3 + 2] = Math.sin(acc[i * 3 + 2]) * AMP_Z;
   }
 
   // --- trail center points, shift buffer: index 0 = head (newest)
@@ -91,6 +98,8 @@ export function createScene(ctx) {
       uFlash: { value: flash },
       uWidth: { value: 0.012 }, // half-width in NDC units
       uAspect: { value: ctx.width / ctx.height },
+      uWhip: { value: 0 },     // whipcrack impulse strength
+      uWhipPos: { value: 0 },  // whipcrack position along the strip (aFade units)
       uIntensity: { value: 0 },
     },
     vertexShader: /* glsl */ `
@@ -102,6 +111,8 @@ export function createScene(ctx) {
       uniform float uFlash[${RIBBONS}];
       uniform float uWidth;
       uniform float uAspect;
+      uniform float uWhip;
+      uniform float uWhipPos;
       varying float vFade;
       varying float vSide;
       varying vec3 vColor;
@@ -117,11 +128,15 @@ export function createScene(ctx) {
         vec2 perp = vec2(-dir.y, dir.x);
         perp.x /= uAspect;
         float flash = uFlash[int(aRib + 0.5)];
-        float w = uWidth * (1.0 + flash * 1.5) * (0.25 + 0.75 * (1.0 - aFade));
+        // whipcrack: a gaussian amplitude bump centred at uWhipPos runs the
+        // strip head -> tail, fattening and brightening as it passes
+        float wd = (aFade - uWhipPos) * 6.0;
+        float whip = uWhip * exp(-wd * wd);
+        float w = uWidth * (1.0 + flash * 1.5 + whip * 2.5) * (0.25 + 0.75 * (1.0 - aFade));
         cur.xy += perp * aSide * w * cur.w;
         vFade = aFade;
         vSide = aSide;
-        vFlash = flash;
+        vFlash = flash + whip; // the whip rides the flash brightening path
         vColor = uPalette[int(mod(aRib, 5.0) + 0.5)];
         gl_Position = cur;
       }`,
@@ -194,6 +209,8 @@ export function createScene(ctx) {
   const camTarget = new THREE.Vector3(0, 0, 0);
   const CHASE = 0.45;      // blend weight toward the hand
   const HAND_X = 16, HAND_Y = 10;
+  let swayS = 0;           // smoothed sway -> geometry morph position
+  let whipT = WHIP_LEN;    // whipcrack clock; >= WHIP_LEN == idle
 
   return {
     scene,
@@ -203,7 +220,18 @@ export function createScene(ctx) {
       const hx = (io.xy.x - 0.5) * 2 * HAND_X;
       const hy = (io.xy.y - 0.5) * 2 * HAND_Y;
 
+      // sway morphs the ribbon geometry: the lissajous angles accumulate
+      // faster (shorter wavelength, more twist) while the amplitudes pull
+      // in, so the field glides from long silk sweeps to tight coils.
+      // Integrating the angle keeps the morph phase-continuous — scaling
+      // t * freq directly would teleport every head on a sway move.
+      swayS += (io.gestures.sway - swayS) * (1 - Math.exp(-dt * 4));
+      const rateXY = 1 + swayS * 2.6;
+      const rateZ = 1 + swayS * 3.4; // z coils hardest for visible twist
+      const ampK = 1 - swayS * 0.45;
+
       // pad rising edges teleport ribbon (pad % RIBBONS) onto a 4x4 grid
+      // and crack the whip: one impulse travels down every strip
       for (let k = 0; k < 16; k++) {
         if (io.pads[k] > padPrev[k] + 0.3) {
           const r = k % RIBBONS;
@@ -211,8 +239,19 @@ export function createScene(ctx) {
           heads[r * 3 + 1] = ((k >> 2) / 3 - 0.5) * 2 * HAND_Y;
           heads[r * 3 + 2] = 0;
           flash[r] = 1;
+          whipT = 0;
         }
         padPrev[k] = io.pads[k];
+      }
+
+      // whipcrack: the bump runs head -> tail over WHIP_LEN, fading out
+      if (whipT < WHIP_LEN) {
+        whipT += dt;
+        const wn = Math.min(1, whipT / WHIP_LEN);
+        mat.uniforms.uWhipPos.value = wn;
+        mat.uniforms.uWhip.value = 1.6 * (1 - wn);
+      } else {
+        mat.uniforms.uWhip.value = 0;
       }
 
       const ease = Math.min(1, dt * 7); // head chase rate
@@ -220,10 +259,19 @@ export function createScene(ctx) {
       for (let i = 0; i < RIBBONS; i++) {
         flash[i] *= decay;
 
+        // accumulate the lissajous angles at the morphed rate (wrap keeps
+        // the float32 store precise over long sets)
+        acc[i * 3] += dt * freq[i * 3] * rateXY;
+        acc[i * 3 + 1] += dt * freq[i * 3 + 1] * rateXY;
+        acc[i * 3 + 2] += dt * freq[i * 3 + 2] * rateZ;
+        if (acc[i * 3] > TAU * 64) acc[i * 3] -= TAU * 64;
+        if (acc[i * 3 + 1] > TAU * 64) acc[i * 3 + 1] -= TAU * 64;
+        if (acc[i * 3 + 2] > TAU * 64) acc[i * 3 + 2] -= TAU * 64;
+
         // lissajous point blended toward the hand -> desired head position
-        const lx = Math.sin(t * freq[i * 3] + phase[i * 3]) * AMP_X;
-        const ly = Math.sin(t * freq[i * 3 + 1] + phase[i * 3 + 1]) * AMP_Y;
-        const lz = Math.sin(t * freq[i * 3 + 2] + phase[i * 3 + 2]) * AMP_Z;
+        const lx = Math.sin(acc[i * 3]) * AMP_X * ampK;
+        const ly = Math.sin(acc[i * 3 + 1]) * AMP_Y * ampK;
+        const lz = Math.sin(acc[i * 3 + 2]) * AMP_Z * ampK;
         const dx = lx * (1 - CHASE) + hx * CHASE;
         const dy = ly * (1 - CHASE) + hy * CHASE;
         heads[i * 3] += (dx - heads[i * 3]) * ease;
@@ -259,15 +307,17 @@ export function createScene(ctx) {
       const pal = mat.uniforms.uPalette.value;
       for (let k = 0; k < 5; k++) pal[k].copy(io.palette[k]);
 
-      // width breathes with mid + press, beat kicks a brief spike
+      // width breathes with mid + press, beat kicks a brief spike; the
+      // coil morph thins the strips so tight coils read as wire, not tape
       mat.uniforms.uWidth.value =
-        0.014 + io.bands.mid * 0.022 + io.gestures.press * 0.016 + io.beat * 0.016;
+        (0.014 + io.bands.mid * 0.022 + io.gestures.press * 0.016 + io.beat * 0.016) *
+        (1 - swayS * 0.35);
       mat.uniforms.uIntensity.value = io.intensity * (0.9 + io.level * 0.5);
       headMat.uniforms.uBeat.value = io.beat;
       headMat.uniforms.uIntensity.value = io.intensity;
 
-      // slow orbit; sway leans it, bass breathes the radius
-      const orbit = t * 0.05 + (io.gestures.sway - 0.5) * 0.9;
+      // slow orbit; bass breathes the radius (sway morphs the field above)
+      const orbit = t * 0.05;
       const radius = 30 - io.bands.bass * 4;
       camera.position.x = Math.sin(orbit) * radius;
       camera.position.z = Math.cos(orbit) * radius;

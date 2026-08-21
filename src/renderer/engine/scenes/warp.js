@@ -7,10 +7,14 @@
 // triangular tech lattice with hard neon nodes, fine scanline/data-strip
 // filigree, and a kaleidoscopic angular fold whose segment count rides the
 // treble — all hue-travelling with depth so the corridor reads iridescent.
-// Streaking stars fly past outside the throat. A STRIKE (pad rising edge, or
-// press crossing its arm threshold through a Schmitt latch) fires the
-// HYPERSPACE JUMP: a scripted charge → launch → cruise → settle sequence
-// driven by one CPU scalar. One draw call, GLSL1.
+// Streaking stars fly past outside the throat. SWAY morphs the tunnel's
+// topology, not its spin: the flare exponent (funnel <-> corridor), the
+// lensing twist rate, and the kaleidoscope fold count all glide with it.
+// A STRIKE (pad rising edge, or press crossing its arm threshold through a
+// Schmitt latch) fires the HYPERSPACE JUMP: a scripted charge → launch →
+// cruise → settle sequence driven by one CPU scalar, and re-seeds the
+// flight phase so the corridor re-patterns as the whiteout clears.
+// One draw call, GLSL1.
 // Follows docs/SCENE_CONTRACT.md; reference style: beams.js.
 
 export const meta = { id: 'warp', name: 'Wormhole', mood: 'transluminal' };
@@ -371,6 +375,7 @@ export function createScene(ctx) {
   let hue = 0;
   let lens = 0.35;
   let skew = 0;
+  let swayS = 0; // smoothed sway -> tunnel topology morph position
   let centerY = 0;
   let press = 0;
   let bassS = 0;
@@ -405,8 +410,15 @@ export function createScene(ctx) {
       } else if (pr < PRESS_REARM) {
         pressArmed = true; // 0.20 of hysteresis before another jump is possible
       }
-      // re-arm once the launch is spent, so a roll of hits keeps jumping
-      if (strike && (jumpT < 0 || jumpT > J_T2)) jumpT = 0;
+      // re-arm once the launch is spent, so a roll of hits keeps jumping.
+      // Each jump also re-seeds the flight phase: every zr-keyed layer
+      // (rings, lattice, strips, star cells) lands on a fresh stretch of
+      // corridor, so the tunnel re-patterns behind the charge flash.
+      if (strike && (jumpT < 0 || jumpT > J_T2)) {
+        jumpT = 0;
+        phase += Math.random() * PHASE_WRAP;
+        if (phase >= PHASE_WRAP) phase -= PHASE_WRAP;
+      }
 
       // --- scripted jump: one scalar walks charge -> launch -> cruise ->
       //     settle, and every easing lands in a uniform. No allocation.
@@ -487,12 +499,16 @@ export function createScene(ctx) {
       bassS += (io.bands.bass - bassS) * ks;
       highS += (io.bands.high - highS) * (1 - Math.exp(-dt * 2.5));
 
-      // --- continuous controls, all lerped so mouse jumps stay fluid
+      // --- continuous controls, all lerped so mouse jumps stay fluid.
+      // Sway is the topology morph: it deepens the flare, speeds the
+      // lensing twist, and (below) raises the fold count. The skew keeps
+      // only a mild off-axis drag so the morph reads as shape, not lean.
       const k = 1 - Math.exp(-dt * 6.0);
-      skew += ((io.gestures.sway - 0.5) * 1.3 - skew) * k;
+      swayS += (io.gestures.sway - swayS) * k;
+      skew += ((io.gestures.sway - 0.5) * 0.5 - skew) * k;
       centerY += ((io.xy.y - 0.5) * 0.55 - centerY) * k;
       press += (io.gestures.press - press) * k;
-      lens += (0.30 + io.bands.mid * 0.45 + io.level * 0.35 - lens) * k;
+      lens += (0.30 + io.bands.mid * 0.45 + io.level * 0.35 + (swayS - 0.5) * 0.55 - lens) * k;
 
       // --- accumulated flight: level sets the base rate, the jump multiplies
       //     it. Integrating means speed changes never jump the phase.
@@ -514,10 +530,14 @@ export function createScene(ctx) {
         0.12,
         0.80 * (1 - press * 0.50) * (1 + bassS * 0.28) * (1 - jSquash * 0.55),
       );
-      // flare: a deep funnel at rest, flattening to a corridor mid-jump
-      u.uFlare.value = Math.max(0.4, 1.22 + bassS * 0.30 + jFlare);
-      // treble snaps the kaleidoscope between fold counts (DMT geometry)
-      u.uFolds.value = FOLD_MIN + Math.round(highS * FOLD_SPAN);
+      // flare: sway morphs the radius profile — a shallow corridor at low
+      // sway deepening into a gravity funnel at high — bass swells it, the
+      // jump flattens it
+      u.uFlare.value = Math.max(0.4, 1.22 + (swayS - 0.5) * 0.85 + bassS * 0.30 + jFlare);
+      // kaleidoscope folds: treble snaps between counts (DMT geometry) and
+      // sway glides the whole range upward as the topology morph deepens
+      u.uFolds.value =
+        FOLD_MIN + Math.round(Math.min(1, highS * 0.6 + swayS * 0.7) * FOLD_SPAN);
       u.uCenter.value.set(Math.sin(t * 0.19) * 0.10, centerY);
       u.uBass.value = bassS;
       u.uMid.value = io.bands.mid;

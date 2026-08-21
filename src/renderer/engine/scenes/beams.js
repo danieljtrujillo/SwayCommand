@@ -1,7 +1,10 @@
 // Beams — sixteen vertical light columns, one per Sway IR sensor.
 // The hand position sweeps a highlight across the row, pads flash their
-// column, bass fattens everything. Reference implementation of the
-// scene contract (docs/SCENE_CONTRACT.md).
+// column, bass fattens everything. Sway morphs the beam field itself —
+// a tight parallel column array fans and cross-tilts into a crossing
+// lattice — and a strike re-seeds the formation so the array visibly
+// re-patterns. Reference implementation of the scene contract
+// (docs/SCENE_CONTRACT.md).
 
 export const meta = { id: 'beams', name: 'Beam Sixteen', mood: 'anthemic' };
 
@@ -89,11 +92,16 @@ export function createScene(ctx) {
   const s = new THREE.Vector3();
   const p = new THREE.Vector3();
   const c = new THREE.Color();
+  const zAxis = new THREE.Vector3(0, 0, 1); // tilt axis for the field morph
   const camTarget = new THREE.Vector3(0, 4, 0);
-  const flash = new Float32Array(COUNT); // per-beam pad flash energy
+  const flash = new Float32Array(COUNT);    // per-beam pad flash energy
+  const colPhase = new Float32Array(COUNT); // per-column idle phase (strike re-seeds)
+  const colPal = new Float32Array(COUNT);   // per-column palette slot shift (strike re-seeds)
+  for (let i = 0; i < COUNT; i++) colPhase[i] = i * 0.62;
+  let swayS = 0;      // smoothed sway -> field morph position
+  let strikePrev = 0; // last frame's strike energy, for rising-edge detection
 
   const SPACING = 4.6;
-  const X0 = -((COUNT - 1) * SPACING) / 2;
 
   return {
     scene,
@@ -102,23 +110,47 @@ export function createScene(ctx) {
       const bass = io.bands.bass;
       const sweep = io.xy.x * (COUNT - 1); // hand position in beam-index space
 
+      // sway morphs the field, not the camera: spacing tightens toward a
+      // column array at rest and spreads as sway rises, while each beam
+      // picks up an outward fan + alternating cross-tilt so the row folds
+      // into a crossing lattice at full sway
+      swayS += (io.gestures.sway - swayS) * (1 - Math.exp(-dt * 4));
+      const spacing = SPACING * (0.62 + 0.38 * swayS);
+      const x0 = -((COUNT - 1) * spacing) / 2;
+
+      // strike (pad-energy rising edge) re-seeds the formation: every
+      // column draws a fresh idle phase and palette slot, so the array
+      // visibly re-patterns while the struck column still flashes
+      if (io.strike > strikePrev + 0.25) {
+        for (let i = 0; i < COUNT; i++) {
+          colPhase[i] = Math.random() * Math.PI * 2;
+          colPal[i] = (Math.random() * 5) | 0;
+        }
+      }
+      strikePrev = io.strike;
+
       for (let i = 0; i < COUNT; i++) {
         // pad hits inject flash energy into their own column
         flash[i] = Math.max(flash[i] * Math.pow(0.06, dt), io.pads[i]);
 
-        // proximity of the hand sweep to this beam (soft highlight)
+        // proximity of the hand sweep to this beam (soft highlight);
+        // sway counter-phases odd/even columns' idle weighting so the
+        // lattice checkers instead of breathing in unison
+        const ni = (i / (COUNT - 1)) * 2 - 1; // -1..1 across the row
+        const alt = i & 1 ? 1 : -1;           // alternating crossing sign
         const prox = Math.exp(-Math.pow(i - sweep, 2) * 0.5);
-        const idle = 0.55 + 0.45 * Math.sin(t * 0.8 + i * 0.62);
+        const idle = 0.55 + 0.45 * Math.sin(t * 0.8 + colPhase[i] + swayS * alt * 2.2);
         const energy = Math.min(1.5, idle * 0.25 + prox * (0.4 + io.xy.y) + flash[i] + bass * 0.5);
 
         const w = 0.25 + energy * (0.9 + bass * 1.6) + io.gestures.press * 0.8;
-        p.set(X0 + i * SPACING, 22 - io.gestures.press * 10, 0);
+        p.set(x0 + i * spacing, 22 - io.gestures.press * 10, 0);
+        q.setFromAxisAngle(zAxis, swayS * (ni * 0.5 + alt * 0.3)); // fan + cross
         s.set(w, 1 + io.beat * 0.05, w);
         m.compose(p, q, s);
         beams.setMatrixAt(i, m);
 
         // palette: cycle across the row, pushed toward white by flash energy
-        c.copy(io.palette[(i + ((t * 0.4) | 0)) % 5]);
+        c.copy(io.palette[(i + colPal[i] + ((t * 0.4) | 0)) % 5]);
         c.multiplyScalar(0.25 + energy * 1.1 * io.intensity);
         beams.setColorAt(i, c);
       }
@@ -130,8 +162,8 @@ export function createScene(ctx) {
       dustMat.uniforms.uColor.value.copy(io.palette[4]).multiplyScalar(io.intensity);
       dustMat.uniforms.uLevel.value = io.bands.high;
 
-      // slow orbit; sway gesture leans the camera, y raises it
-      const orbit = t * 0.07 + (io.gestures.sway - 0.5) * 1.2;
+      // slow orbit; the hand raises the eye (sway morphs the field above)
+      const orbit = t * 0.07;
       camera.position.x = Math.sin(orbit) * 36;
       camera.position.z = Math.cos(orbit) * 36;
       camera.position.y = 4 + io.xy.y * 10 + io.beat * 0.6;
