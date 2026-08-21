@@ -19,10 +19,14 @@ import * as lattice from './lattice.js';
 import * as willidream from './willidream.js';
 import * as naturestomb from './naturestomb.js';
 import * as miraclemile from './miraclemile.js';
+import * as tunnelending from './tunnelending.js';
+import * as wormholept1 from './wormholept1.js';
+import * as wormholeend from './wormholeend.js';
 
 const modules = [
   beams, swarm, ribbons, voxels, warp, nebula, mandelbulb, cymatic,
   spectra, vjshader, ferrofluid, chladni, valley, lattice, willidream, naturestomb, miraclemile,
+  tunnelending, wormholept1, wormholeend,
 ];
 
 export const sceneList = modules.map((m) => m.meta);
