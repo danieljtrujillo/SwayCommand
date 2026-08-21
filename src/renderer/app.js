@@ -1194,6 +1194,10 @@ async function main() {
   };
 
   // The stage runs from the first frame; the door covers it until ENTER.
+  // Auto rotation stays off until a project decides — otherwise the engine
+  // free-runs the full registry during a slow boot and races the project's
+  // start scene.
+  state.engine.autoVJ.enabled = false;
   state.engine.start();
   requestAnimationFrame(frameTick);
   state.audio.autoStart().then(updateSourceLabel);

@@ -13,7 +13,7 @@ Renderer configuration:
 | Pixel ratio | `min(window.devicePixelRatio, 1.75)` |
 | `autoClear` | `true` |
 
-Two offscreen render targets, A and B (depth buffer enabled, no stencil), hold the active and the incoming scene; a third, `rtComp`, receives the composite when the effects rack is active. Their initial size is the canvas layout size, with a 1280 × 720 fallback when the canvas has no layout size yet. `resize()` sets the renderer size to the layout size and the render targets (and the rack) to the drawing-buffer size (layout size × pixel ratio), and notifies every cached scene instance; a call while the canvas has a zero layout dimension is ignored. Two triggers exist: a `ResizeObserver` on the stage canvas — the one that actually fires, since the stage lives in a grid cell whose box changes when a drawer opens or solo view toggles — and a window `resize` listener as a backstop.
+Two half-float offscreen render targets, A and B (depth buffer enabled, no stencil), hold the active and the incoming scene in HDR — additive shader output past 1.0 survives for the bloom pass; a third, `rtComp`, receives the composite whenever bloom or the effects rack needs a texture to work from. The engine also generates a PMREM room environment once at startup and hands it to scenes through `ctx.environment` (the reflection source for the chrome ports). Their initial size is the canvas layout size, with a 1280 × 720 fallback when the canvas has no layout size yet. `resize()` sets the renderer size to the layout size and the render targets (and the rack) to the drawing-buffer size (layout size × pixel ratio), and notifies every cached scene instance; a call while the canvas has a zero layout dimension is ignored. Two triggers exist: a `ResizeObserver` on the stage canvas — the one that actually fires, since the stage lives in a grid cell whose box changes when a drawer opens or solo view toggles — and a window `resize` listener as a backstop.
 
 The frame loop runs on `requestAnimationFrame` with `dt` clamped to 0.05 s. Per frame, in order:
 
@@ -26,7 +26,7 @@ The frame loop runs on `requestAnimationFrame` with `dt` clamped to 0.05 s. Per 
 7. The Auto-VJ scheduler ticks.
 8. Fade progress advances: `mix += dt / fadeTime`; at `mix ≥ 1` the incoming scene becomes the active scene and the fade ends.
 9. The active scene's `update(dt, t, io)` runs and the scene renders into target A, cleared to opaque black. While a fade is in progress, the incoming scene updates and renders into target B the same way.
-10. The composite pass draws — directly to the canvas while the rack is idle, or into `rtComp` followed by the rack's own passes when `fxEnabled` is set.
+10. The composite pass draws — directly to the canvas while bloom and the rack are both idle, or into `rtComp`, where a per-scene UnrealBloom pass adds its glow (strength crossfaded with the scene mix; parameters from `meta.bloom` or the instance's live `bloom` object — [SCENE_CONTRACT.md](SCENE_CONTRACT.md#bloom)) before the rack's passes or a plain copy to the canvas.
 
 The composite pass is a fullscreen quad under an orthographic camera, drawn with a `ShaderMaterial` (depth test and depth write disabled) whose uniforms are `tA`, `tB`, `uMix`, `uMaster`, and `uFlash`:
 
@@ -41,7 +41,7 @@ The composite pass is a fullscreen quad under an orthographic camera, drawn with
 
 ## Effects rack
 
-`src/renderer/engine/fxrack.js` implements the post chain: 36 parameters in five decks (Geometrics, Corruption, Chromatics, Timecode, ASCII). It exports two tables the interface layers build from — `RANGES`, the per-key clamp specification (`true` for booleans, `'hex'` for the color input, `[min, max]` for numbers), and `DECKS`, the deck grouping; every `RANGES` key appears in exactly one deck, so the RACK drawer and knob-target lists cannot drift from what the rack accepts. The rack costs several fullscreen passes and stays out of the pipeline until `fxEnabled` is set. `setFxParam` clamps through `RANGES`; `resetFx` restores the upstream defaults. The project stores the full parameter snapshot and replays it through `setFxParam` on load ([PROJECTS.md](PROJECTS.md)).
+`src/renderer/engine/fxrack.js` implements the post chain: 38 parameters in five decks (Geometrics, Corruption, Chromatics, Timecode, ASCII). It exports two tables the interface layers build from — `RANGES`, the per-key clamp specification (`true` for booleans, `'hex'` for the color input, `[min, max]` for numbers), and `DECKS`, the deck grouping; every `RANGES` key appears in exactly one deck, so the RACK drawer and knob-target lists cannot drift from what the rack accepts. The rack costs several fullscreen passes and stays out of the pipeline until `fxEnabled` is set. `setFxParam` clamps through `RANGES`; `resetFx` restores the upstream defaults. The project stores the full parameter snapshot and replays it through `setFxParam` on load ([PROJECTS.md](PROJECTS.md)).
 
 ## Scene management
 

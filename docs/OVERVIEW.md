@@ -50,7 +50,7 @@ The Sway is optional at every point. All Sway controls have mouse, keyboard, and
 | control state | The normalized input snapshot (XY, gestures, knobs, pads) shared between the MIDI layer and the engine. |
 | Auto-VJ | The scheduler that holds a scene for a randomized interval, then crossfades to another scene from the project pool. The AUTO group in the left rail exposes it. |
 | ColorMaster | The global five-color palette instance that every scene reads each frame. |
-| effects rack | The post-processing chain (36 parameters in five decks) applied to the composited frame when enabled. `src/renderer/engine/fxrack.js`. |
+| effects rack | The post-processing chain (38 parameters in five decks) applied to the composited frame when enabled. `src/renderer/engine/fxrack.js`. |
 | internal groove | A synthesized 120 BPM rhythm routed only into the analyser node; inaudible, used when no audio input is available. |
 | quality tier | A particle/instance budget preset passed to scenes at creation: `low` (8,000), `med` (30,000), `high` (80,000). |
 

@@ -52,6 +52,7 @@ export function createScene(ctx) {
 | `renderer` | The shared `WebGLRenderer`. For capability checks only; scenes MUST NOT call `render` or alter renderer state. |
 | `width`, `height` | Canvas size in CSS pixels at creation time. Later changes arrive through `resize(w, h)`. |
 | `quality` | `{ tier, particles }` — the quality tier (table below). Scenes SHOULD derive instance and particle counts from `quality.particles`. |
+| `environment` | A PMREM-filtered room environment texture, generated once by the engine. Reflective scenes set it as `material.envMap` (the theDAW-port chrome scenes do); scenes MUST NOT dispose it. |
 
 Quality tiers:
 
@@ -74,9 +75,10 @@ The engine defaults to `med`; an unknown quality name also falls back to `med`. 
 | `io.beat` | 0–1 | Beat impulse: 1 on beat, exponential decay. |
 | `io.xy.x`, `io.xy.y` | 0–1 | Hand position, engine-smoothed. The mouse fallback maps the canvas bottom edge to `y = 0`; on Sway hardware the raw CC value passes through unchanged, with `y = 0` as the low/near hand (unconfirmed). |
 | `io.gestures.pulse` / `.press` / `.sway` | 0–1 | Sway gesture dimensions. |
-| `io.knobs[0..7]` | 0–1 | Raw knob positions; default 0.5. The values mirror the hardware regardless of what the knobs are assigned to. Indices 0–2 carry the factory global assignments (table below); scenes MUST NOT repurpose them and SHOULD key scene parameters off knobs 3–7. |
+| `io.knobs[0..7]` | 0–1 | Raw knob positions; default 0.5. The values mirror the hardware regardless of what the knobs are assigned to — the factory table (below) routes them through the assignment layer, so scenes SHOULD prefer the gesture dimensions over raw knob reads. |
 | `io.pads[0..15]` | 0–1 | Pad velocities. The engine decays each value exponentially after the hit (time constant 0.2 s). |
 | `io.lastPad` | −1 to 15 | Most recently struck pad; −1 before any hit. |
+| `io.strike` | 0–1 | The strike dimension: the maximum pad energy this frame. Scenes SHOULD treat a rising edge as a discrete morph event — a geometry advance, a mode jump, a re-seed — of their own generative parameters. |
 | `io.palette` | `THREE.Color[5]` | The current ColorMaster palette. Scenes MUST copy values out and MUST NOT mutate the array or the colors. |
 | `io.intensity` | 0.25–1.35 | Master brightness: `0.25 + 0.75 × the engine intensity parameter + 0.35 × pulse`. Scenes SHOULD scale emissive output by it. |
 
@@ -87,7 +89,16 @@ Factory knob assignments (defaults in every project's assignment table, remappab
 | 0 | Palette hue rotation (`engine:hue`), 0–1 mapped to 0–360° with a center detent: the middle of travel is exactly no rotation. |
 | 1 | Auto-VJ crossfade length (`engine:fadeTime`), rescaled to 1–8 s. |
 | 2 | The intensity component of `io.intensity` (`engine:intensity`). |
-| 4–7 | Kit level, filter, rate, delay send (`sampler:*`). |
+| 3–6 | Glitch, anaglyph, mosaic, echo trails (`fx:*`). |
+| 7 | Kit level (`sampler:master`). |
+
+## Bloom
+
+The engine runs an UnrealBloom pass per scene over the half-float composite. A scene requests it with `meta.bloom = { strength, radius, threshold }`, or by exposing a live `bloom` object on the returned instance that `update()` mutates (the live object wins). Strength crossfades with the scene mix; absent both, the pass is skipped. The theDAW ports use upstream's numbers (the lattice 0.2 × per-shape multipliers, the chrome scenes 1.65 / 0.4 / 0.6).
+
+## Morph responses
+
+Strike and sway are morph dimensions, not motion inputs: sway SHOULD continuously reshape a core generative parameter of the scene (mode numbers, field strengths, warp exponents, fold counts), and a strike SHOULD fire a discrete restructuring (a geometry advance, a mode jump, a basin or seed jump). A response that only rotates, leans, or orbits an object does not satisfy this.
 
 ## Hard rules
 

@@ -9,7 +9,7 @@ Implementation: the drawer shell in [`src/renderer/ui/drawer.js`](../src/rendere
 | Panel | Key | Contents |
 |---|---|---|
 | SYNTH | `S` | Enable toggle, preset selector, on-screen keys, the parameter decks generated from the synth's control manifest, and the modulation matrix. Details: [SYNTH.md](SYNTH.md). |
-| RACK | `R` | The effects rack: ACTIVE toggle, RESET, and the 36 parameters in their five decks (Geometrics, Corruption, Chromatics, Timecode, ASCII), generated from the rack's exported range table. Pipeline placement: [ENGINE.md](ENGINE.md). |
+| RACK | `R` | The effects rack: ACTIVE toggle, RESET, and the 38 parameters in their five decks (Geometrics, Corruption, Chromatics, Timecode, ASCII), generated from the rack's exported range table. Pipeline placement: [ENGINE.md](ENGINE.md). |
 | KIT | `E` | The sample pool and its LOAD button (below). |
 
 The deck buttons in the top bar toggle the same panels and show which one is open. Panel content renders lazily on first open; `Esc` or the close button closes the drawer. While the SYNTH drawer is open, the tracker key row `A W S E D F T G Y H U J K O L P ;` plays the synth; those keys return to the cockpit shortcuts the moment the drawer closes.
@@ -60,7 +60,7 @@ A knob drives one continuous TARGET, chosen from four groups:
 
 RANGE sets the min–max the 0–1 knob position maps into (picking a target preloads its natural range). CURVE is `linear` or `center detent`; the detent maps the exact center of travel to zero — the semantics the hue knob has always had. Knob dispatch is change-driven: an idle knob never fights an edit made in a drawer panel.
 
-The default knob table reproduces the behavior earlier builds hardwired: knob 1 → hue (detent), knob 2 → fade length (1–8 s), knob 3 → intensity, knobs 5–8 → the four kit targets; knob 4 is unassigned.
+The default knob table puts the stage controls on the left cluster and the frame-wrecking rack effects on the right: knob 1 → hue (detent), knob 2 → fade length (1–8 s), knob 3 → intensity, knob 4 → glitch, knob 5 → anaglyph, knob 6 → mosaic, knob 7 → echo trails (0–40), knob 8 → kit level. Driving any rack target switches the rack on, so a knob mapped to glitch never turns silently in a disabled chain; the four kit targets stay available in the picker for reassignment.
 
 ### Buttons
 

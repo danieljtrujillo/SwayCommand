@@ -24,7 +24,7 @@ The `project` object:
 | `meta` | `id`, `name`, `description`, `author`, `vibe`, `bpmHint`, `pairsWith`, `template` |
 | `palette` | Exactly five `#rrggbb` strings, loaded into ColorMaster with a 2-second blend |
 | `engine` | `quality` (`low`/`med`/`high`), `fxEnabled`, `autoVJ` (`enabled`, `pool`, `minHold`, `maxHold`, `fadeTime`), `start.scene` |
-| `fx.params` | The full 36-key effects-rack snapshot ([ENGINE.md](ENGINE.md)); replayed through the rack on load, never trusted raw |
+| `fx.params` | The full 38-key effects-rack snapshot ([ENGINE.md](ENGINE.md)); replayed through the rack on load, never trusted raw |
 | `synth` | `enabled`, `preset`, `patch` (the full patch object, or `null` to load the preset by name) |
 | `media` | The media table — the **only** place file paths live. Each entry: `id`, `name`, `path` (project-relative when possible), `sha256`, `bytes`, `duration` |
 | `sampler` | `kit` (16 pad slots referencing media by id, each with `gain`, `pitch`, `loop`, `chokeGroup`, `mode`) and `knobs` (`master`, `cutoff`, `rate`, `send`) |
