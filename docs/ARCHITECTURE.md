@@ -112,7 +112,7 @@ The preload maps these channels onto `window.swaycommand`: `info()`, `doctor.run
 
 ## Renderer bundling
 
-`scripts/build-renderer.js` bundles the renderer with esbuild: entry point `src/renderer/app.js`, `format: 'iife'`, `platform: 'browser'`, `target: 'chrome120'`, unminified, no source map. three.js (`^0.180.0`, imported by `engine.js` and `colormaster.js`) is statically bundled; the renderer loads no code at runtime beyond the bundle. The script then copies the two static files. Resulting `dist/` layout:
+`scripts/build-renderer.js` bundles the renderer with esbuild: entry point `src/renderer/app.js`, `format: 'iife'`, `platform: 'browser'`, `target: 'chrome140'`, unminified, no source map. three.js (`^0.185.1`, imported by `engine.js` and `colormaster.js`) is statically bundled; the renderer loads no code at runtime beyond the bundle. The script then copies the two static files. Resulting `dist/` layout:
 
 | File | Origin |
 |---|---|

@@ -60,7 +60,7 @@ A knob drives one continuous TARGET, chosen from four groups:
 
 RANGE sets the min–max the 0–1 knob position maps into (picking a target preloads its natural range). CURVE is `linear` or `center detent`; the detent maps the exact center of travel to zero — the semantics the hue knob has always had. Knob dispatch is change-driven: an idle knob never fights an edit made in a drawer panel.
 
-The default knob table puts the stage controls on the left cluster and the frame-wrecking rack effects on the right: knob 1 → hue (detent), knob 2 → fade length (1–8 s), knob 3 → intensity, knob 4 → glitch, knob 5 → anaglyph, knob 6 → mosaic, knob 7 → echo trails (0–40), knob 8 → kit level. Driving any rack target switches the rack on, so a knob mapped to glitch never turns silently in a disabled chain; the four kit targets stay available in the picker for reassignment.
+There is no default knob table: a new project's knobs are empty, so nothing drives an effect, the intensity, or anything else until it is assigned, and clearing a control resets the effect it was driving — the rack switches off again if a control had switched it on and nothing drives it any more (the router reconciles this every frame). Templates carry their own tables: the factory presets map hue (knob 1, center detent), fade length (knob 2, 1–8 s), and kit level (knob 8); `will-i-dream` maps nothing. Driving any rack target still switches the rack on, so a knob mapped to glitch never turns silently in a disabled chain; the four kit targets stay available in the picker.
 
 ### Buttons
 

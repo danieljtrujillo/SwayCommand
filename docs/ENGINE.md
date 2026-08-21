@@ -45,7 +45,7 @@ The composite pass is a fullscreen quad under an orthographic camera, drawn with
 
 ## Scene management
 
-`scenes/index.js` imports the fourteen scene modules in registry order — `beams`, `swarm`, `ribbons`, `voxels`, `warp`, `nebula`, `mandelbulb`, `cymatic`, `spectra`, `vjshader`, `ferrofluid`, `chladni`, `valley`, `lattice` — and derives two exports: `sceneList`, the array of each module's `meta`, and `creators`, a map from scene id to its `createScene` function. The digit keys `1`–`9` index the **active project's pool**, not this registry, so the registry can grow past the digits; the SCENES bank in the left rail lists all fourteen and prints each pooled scene's digit.
+`scenes/index.js` imports the fifteen scene modules in registry order — `beams`, `swarm`, `ribbons`, `voxels`, `warp`, `nebula`, `mandelbulb`, `cymatic`, `spectra`, `vjshader`, `ferrofluid`, `chladni`, `valley`, `lattice`, `willidream` — and derives two exports: `sceneList`, the array of each module's `meta`, and `creators`, a map from scene id to its `createScene` function. The digit keys `1`–`9` index the **active project's pool**, not this registry, so the registry can grow past the digits; the SCENES bank in the left rail lists all fifteen and prints each pooled scene's digit.
 
 Scene instances are created on demand at first use and cached in a map for the rest of the session; the engine never disposes them. Creation receives the context `{ THREE, renderer, width, height, quality }` defined in [SCENE_CONTRACT.md](SCENE_CONTRACT.md). Requesting an unregistered id throws `Unknown scene: <id>`.
 

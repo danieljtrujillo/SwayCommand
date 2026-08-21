@@ -9,11 +9,13 @@ The application is one page — the cockpit — and it is always live. There is 
 | Region | Contents |
 |---|---|
 | Top bar | Wordmark; the project button (opens the project menu: New, Open, Save, Save as, recent files, templates); the transport (play/pause, stop, clock, LOOP); the current scene readout; status pills (`SWAY`/`MIDI`/`KEYS` link, `LOOPBACK`/`LINE`/`GROOVE`/`MUTE` input, fps); the deck buttons SYNTH, RACK, KIT, DOCS, HELP |
-| Left rail | The SCENES bank — all fourteen registry scenes, with digit hints on the first nine of the active pool; a click switches the stage, a drag onto the timeline lays a clip. The AUTO group — RUN toggle, HOLD min–max seconds, FADE seconds |
+| Left rail | The SCENES bank — all fifteen registry scenes, with digit hints on the first nine of the active pool; a click switches the stage, a drag onto the timeline lays a clip. The AUTO group — RUN toggle, HOLD min–max seconds, FADE seconds |
 | Center | The stage canvas. The blast door covers it at boot and opens once |
 | Right rail | The assignment panel for the selected control, and the INPUT box: the analysis-source button, a level meter, and an audio-reactive band display |
 | Bottom band | The timeline: a ruler (scrub, loop region, locators), a VISUAL lane of scene clips, an AUDIO lane with waveforms, and the playhead |
 | Below the band | The Sway deck: a stroke line-art schematic of the hardware. Clicking any control on it — or touching the control on the hardware, with FOLLOW on — selects it for assignment |
+
+Every region around the stage is adjustable (`src/renderer/ui/layout.js`). Thin grips on the inner edge of each rail, the top edge of the timeline band and of the deck, and the seam between the assignment panel and the INPUT box drag to resize; double-clicking a grip restores that dimension's default. A chevron chip in each region's top corner collapses it to a thin strip — a rail to an 18 px column, a band to its ruler line or an 18 px bar, a right-rail panel to its header line — and expands it again at the size it had. Sizes and collapsed states persist across sessions in the settings file (`layout` key) and compose with solo view: `O` hides everything, and the collapsed states are still there when it returns.
 
 Three surfaces overlay the cockpit:
 

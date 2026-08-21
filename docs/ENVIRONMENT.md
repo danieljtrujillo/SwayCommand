@@ -52,7 +52,7 @@ Both parameters are consumed once, in `main()` of `src/renderer/app.js`, from `l
 | Parameter | Value | Behavior |
 |---|---|---|
 | `autoplay` | Template id, or a `.sway` file path | A value ending in `.sway` (case-insensitive) is opened as a project file; anything else is opened as a template id. On failure the startup falls through to the normal selection (most recent project, then the `first-flight` template) with a console warning. Any `autoplay` value also skips the SYSTEM modal: the blast door opens immediately and the Doctor still runs in the background, keeping its checks reachable from the CONTROLS modal. |
-| `scene` | Scene id | Applied after the boot project loads: Auto-VJ is disabled and the engine switches to the named scene via `setScene(scene, 0.3)`. The value is one of the fourteen ids in the scene registry (`src/renderer/engine/scenes/index.js`): `beams`, `swarm`, `ribbons`, `voxels`, `warp`, `nebula`, `mandelbulb`, `cymatic`, `spectra`, `vjshader`, `ferrofluid`, `chladni`, `valley`, `lattice`. `setScene` ignores an id with no registered creator, so an unknown value leaves the project's opening scene on stage with Auto-VJ still disabled. |
+| `scene` | Scene id | Applied after the boot project loads: Auto-VJ is disabled and the engine switches to the named scene via `setScene(scene, 0.3)`. The value is one of the fifteen ids in the scene registry (`src/renderer/engine/scenes/index.js`): `beams`, `swarm`, `ribbons`, `voxels`, `warp`, `nebula`, `mandelbulb`, `cymatic`, `spectra`, `vjshader`, `ferrofluid`, `chladni`, `valley`, `lattice`, `willidream`. `setScene` ignores an id with no registered creator, so an unknown value leaves the project's opening scene on stage with Auto-VJ still disabled. |
 
 ## The automation handle
 
@@ -78,7 +78,7 @@ $env:SWAYCOMMAND_PROBE = "JSON.stringify(__swaycommand.transport.state)"
 # assignment table: how many pads and knobs are mapped
 $env:SWAYCOMMAND_PROBE = "(() => { const a = __swaycommand.router.getAssignments(); return JSON.stringify({ pads: a.pads.filter(Boolean).length, knobs: a.knobs.filter(Boolean).length, routes: a.gestures.length }); })()"
 
-# drive the interface: open the kit drawer and select pad 1
+# drive the interface: open the kit drawer and select pad 0
 $env:SWAYCOMMAND_PROBE = "__swaycommand.openStudio('kit'); __swaycommand.selectControl('pad:0'); 'ok'"
 ```
 
@@ -100,6 +100,7 @@ Keys in use:
 | `recentProjects` | The main process on every project open and save (up to 10 entries; missing paths pruned on read) | The project menu's RECENT section and the startup project selection |
 | `lastProjectDir` | The main process after every open/save dialog | The next dialog's starting directory |
 | `kit` | No current writer (pre-cockpit builds wrote it) | Restored once at startup as a legacy kit; the kit now lives in the project file |
+| `layout` | The layout module (`src/renderer/ui/layout.js`) ~300 ms after a grip drag, a grip double-click, or a collapse chip | Applied at startup: `{ railLeft, railRight, tl, deck, input, collapsed: { railLeft, railRight, tl, deck, assign, input } }` — panel sizes in px (a missing key means the CSS default) and which regions are collapsed |
 
 ## Data locations
 

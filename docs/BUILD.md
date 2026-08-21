@@ -8,10 +8,10 @@ Building requires Node.js 18 or later and the development dependencies installed
 
 | Package | Version range | Role |
 |---|---|---|
-| `electron` | `^38.0.0` | runtime for development and for the packaged application |
+| `electron` | `^43.4.1` | runtime for development and for the packaged application |
 | `electron-builder` | `^26.0.0` | installer and package production |
-| `esbuild` | `^0.25.0` | renderer bundling |
-| `three` | `^0.180.0` | WebGL library, compiled into the renderer bundle |
+| `esbuild` | `^0.28.2` | renderer bundling |
+| `three` | `^0.185.1` | WebGL library, compiled into the renderer bundle |
 
 The project declares no production dependencies. `three` is inlined into `dist/renderer.bundle.js` at build time, so the packaged application ships without `node_modules`.
 
@@ -38,13 +38,13 @@ Every `dist:*` script regenerates the icons and the renderer bundle before invok
 | `bundle` | `true` |
 | `format` | `iife` |
 | `platform` | `browser` |
-| `target` | `chrome120` |
+| `target` | `chrome140` |
 | `outfile` | `dist/renderer.bundle.js` |
 | `minify` | `false` |
 | `sourcemap` | `false` |
 | `logLevel` | `info` |
 
-The output is an immediately-invoked function expression compiled against the Chromium 120 feature set; `three` is resolved from `node_modules`, the renderer modules from `src/renderer/`, and all of them are inlined into the single output file. The bundle is not minified and no source map is emitted. After bundling, the script copies `src/renderer/index.html` and `src/renderer/styles.css` into `dist/` unchanged. The main and preload processes are not bundled; Electron loads them directly from `src/`.
+The output is an immediately-invoked function expression compiled against the Chromium 140 feature set (Electron 43 ships a newer Chromium, so the target is a floor); `three` is resolved from `node_modules`, the renderer modules from `src/renderer/`, and all of them are inlined into the single output file. The bundle is not minified and no source map is emitted. After bundling, the script copies `src/renderer/index.html` and `src/renderer/styles.css` into `dist/` unchanged. The main and preload processes are not bundled; Electron loads them directly from `src/`.
 
 ## Icon generation
 

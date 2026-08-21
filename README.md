@@ -7,8 +7,8 @@ SwayCommand is an independent project. It is not affiliated with or endorsed by 
 ## Feature summary
 
 - A single-page cockpit: the stage renders from boot to quit while the scene bank, transport, timeline, assignment panel, and drawers work on top of it — no screen switching, no interrupted frames.
-- Fourteen procedural visual scenes, each driven by audio analysis and gesture input, rendered with three.js on WebGL2.
-- Projects as `.sway` files: one JSON document carrying palette, engine settings, effects snapshot, synth patch, linked media, kit, timeline, and every control assignment. Save, open, and recent files live in the project menu; eight bundled templates (three tuned to pair with Audima's official Ableton demo packs — Garage, DNB, Hip Hop) provide starting points.
+- Fifteen procedural visual scenes, each driven by audio analysis and gesture input, rendered with three.js on WebGL2 — every shader GLSL3, no autonomous rotation anywhere.
+- Projects as `.sway` files: one JSON document carrying palette, engine settings, effects snapshot, synth patch, linked media, kit, timeline, and every control assignment. Save, open, and recent files live in the project menu; nine bundled templates (three tuned to pair with Audima's official Ableton demo packs — Garage, DNB, Hip Hop) provide starting points.
 - A timeline with an audio lane (waveform clips scheduled sample-accurately on the audio clock) and a visual lane (scene clips with per-clip cut or fade entry), plus loop region, locators, and scrubbing.
 - An on-screen Sway deck — a line-art schematic of the hardware. Click any pad, knob, button, or gesture chip to assign it: pads fire samples, scene switches, or momentary effect punches; knobs drive any engine, rack, synth, or kit parameter with range and curve; buttons learn a hardware CC and toggle anything; the five gesture dimensions hold modulation routes. Touching a control on the hardware selects it on screen.
 - Automated scene cycling with palette-synchronized crossfades (Auto-VJ), after the pattern established by Keijiro Takahashi's Akvj.
@@ -17,7 +17,7 @@ SwayCommand is an independent project. It is not affiliated with or endorsed by 
 - Audio analysis from any input device or, on Windows, from system-audio loopback, with an internal fallback signal when no input exists.
 - A built-in wavetable synth covering the ground Vital does, playable from the Sway, with seven factory presets and a modulation matrix.
 - A sample kit on the deck's sixteen pads with one-shot, loop, and gate modes and choke groups; triggered samples, the synth, and timeline playback are all heard and drive the visuals.
-- A 36-parameter effects rack (mirror, kaleidoscope, glitch, color, trails, ASCII, and more) applied to the composited frame when enabled.
+- A 38-parameter effects rack (mirror, kaleidoscope, glitch, anaglyph, mosaic, color, trails, ASCII, and more) applied to the composited frame when enabled; driving any rack parameter from a knob switches the rack on.
 - An in-application documentation viewer that renders the bundled Markdown documentation, including this file, without network access.
 - Full offline operation. The application contains no telemetry. Its own network access is limited to Audima endpoints: a reachability check at startup and user-initiated downloads. Links the user follows are handed to the system browser, restricted to an allowlist of hosts.
 
@@ -52,17 +52,18 @@ Build-system details: [docs/BUILD.md](docs/BUILD.md). Environment variables and 
 | Input | Effect |
 |---|---|
 | Hand position over the Sway (XY) | Continuous steering of the active scene; assignable to any parameter as modulation routes |
-| Pulse / Press / Sway gestures | Brightness surge / compression / camera lean by default; each dimension holds any number of modulation routes |
-| Knobs 1–8 | Assignable. Factory table: hue, crossfade length, intensity on 1–3; kit level, filter, rate, delay on 5–8 |
-| Pads 1–16 | Assignable: sample, scene switch (cut or fade entry), or momentary effect punch; discrete scene events besides |
+| Pulse / Press / Sway gestures | Pulse surges brightness; press compresses — each scene's own crush or dive; sway morphs the active scene's generative parameters (mode numbers, field strengths, warp velocity). Each dimension also holds any number of modulation routes |
+| Knobs 1–8 | Assignable. Nothing by default: no knob drives an effect, the intensity, or anything else until you assign it, and clearing a control resets the effect it drove (the rack switches off again if a control had switched it on). Templates carry their own knob tables |
+| Pads 0–15 | Assignable: sample, scene switch (cut or fade entry), or momentary effect punch — numbered 0–15 as the deck shows them (top rows first, left cluster then right, then the bottom rows). Every strike is also the active scene's morph event — a geometry advance, mode jump, or re-seed |
 | Buttons 1–8 | Learned from the hardware, then toggle anything: rack, Auto-VJ, synth, transport |
-| Pad strike, or a sharp Press, in the Wormhole scene | Fires the hyperspace jump: charge, launch, cruise, and settle segments, 2.07 seconds in total |
+| Wormhole scene | A pad strike toggles warp (stars streak with aberration and Doppler shift); sway sets the warp velocity; a press held deep (≥ 0.7 for 0.25 s) opens the wormhole — a ~4.2 s lensed transit that exits into a different sky |
 | Mouse move / button / wheel on the stage | XY position / Press / Pulse when no Sway is bound |
 | Click a control on the deck | Selects it in the assignment panel (touching it on the hardware does the same) |
+| Panel grips / chips | Drag to resize the rails, timeline, deck, and input box; the corner chip collapses or expands a panel; double-click a grip resets it |
 | `1`–`9` | Select a scene from the active project's pool (disables Auto-VJ) |
 | `Space` | Crossfade to another scene from the project pool |
 | `A` | Toggle Auto-VJ |
-| `Z X C V B N M ,` | Pads 1–8 |
+| `Z X C V B N M ,` | Pads 0–7 |
 | `P` / `L` | Play or pause the timeline / toggle the loop |
 | `Delete`, `←` `→` | Remove / nudge the selected timeline clip |
 | `S` / `R` / `E` | Synth / rack / kit drawer |
