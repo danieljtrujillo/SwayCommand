@@ -4,6 +4,8 @@
 // Scene instances are cached for glitch-free switching.
 
 import * as THREE from 'three';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { creators, sceneList } from './scenes/index.js';
 import { createColorMaster } from './colormaster.js';
 import { createFxRack } from './fxrack.js';
@@ -29,14 +31,31 @@ export function createEngine({ canvas, quality = 'med' }) {
   let width = canvas.clientWidth || 1280;
   let height = canvas.clientHeight || 720;
 
-  const rtOpts = { depthBuffer: true, stencilBuffer: false };
+  // Half-float targets keep the scenes' additive HDR (values past 1.0) alive
+  // for the bloom pass, exactly like theDAW's EffectComposer buffers.
+  const rtOpts = { depthBuffer: true, stencilBuffer: false, type: THREE.HalfFloatType };
   let rtA = new THREE.WebGLRenderTarget(width, height, rtOpts);
   let rtB = new THREE.WebGLRenderTarget(width, height, rtOpts);
 
-  // The crossfade composite lands here when the FX rack is active, so the rack
-  // has a texture to work from. Straight to the screen when the rack is idle.
-  let rtComp = new THREE.WebGLRenderTarget(width, height, { depthBuffer: false, stencilBuffer: false });
+  // The crossfade composite lands here when bloom or the FX rack needs a
+  // texture to work from. Straight to the screen when both are idle.
+  let rtComp = new THREE.WebGLRenderTarget(width, height, { depthBuffer: false, stencilBuffer: false, type: THREE.HalfFloatType });
   const fxRack = createFxRack(THREE, renderer, width, height);
+
+  // Shared reflection environment for the chrome scenes — the no-asset
+  // stand-in for theDAW's EXR: a PMREM-filtered RoomEnvironment, generated
+  // once and handed to scenes through ctx.environment.
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  pmrem.dispose();
+
+  // Per-scene bloom (theDAW's UnrealBloomPass). Scenes request it through
+  // meta.bloom { strength, radius, threshold } or a live instance.bloom that
+  // update() mutates; the engine crossfades strength with the scene mix.
+  const bloomPass = new UnrealBloomPass(new THREE.Vector2(width, height), 0, 0.4, 0.6);
+  const copyMat = new THREE.MeshBasicMaterial({ map: rtComp.texture, depthTest: false, depthWrite: false });
+  const copyScene = new THREE.Scene();
+  copyScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), copyMat));
 
   // Fullscreen composite pass
   const compScene = new THREE.Scene();
@@ -75,7 +94,7 @@ export function createEngine({ canvas, quality = 'med' }) {
   // --- scene management --------------------------------------------------------
 
   const instances = new Map(); // id -> created scene
-  const ctx = { THREE, renderer, width, height, quality: q };
+  const ctx = { THREE, renderer, width, height, quality: q, environment };
 
   function instance(id) {
     if (!instances.has(id)) {
@@ -158,6 +177,7 @@ export function createEngine({ canvas, quality = 'med' }) {
     knobs: new Array(8).fill(0.5),
     pads: new Array(16).fill(0),
     lastPad: -1,
+    strike: 0, // max pad energy this frame — the strike dimension scenes morph on
     palette: colorMaster.palette,
     intensity: 1,
   };
@@ -213,10 +233,13 @@ export function createEngine({ canvas, quality = 'med' }) {
       io.gestures.press = control.gestures.press;
       io.gestures.sway = control.gestures.sway;
       for (let i = 0; i < 8; i++) io.knobs[i] = control.knobs[i];
+      let strike = 0;
       for (let i = 0; i < 16; i++) {
         io.pads[i] = Math.max(io.pads[i] * Math.exp(-dt * 5), control.pads[i]);
         control.pads[i] = 0; // consume the hit; engine owns the decay
+        if (io.pads[i] > strike) strike = io.pads[i];
       }
+      io.strike = strike;
       io.lastPad = control.lastPad;
     }
 
@@ -271,16 +294,44 @@ export function createEngine({ canvas, quality = 'med' }) {
     compMat.uniforms.uMix.value = fading ? mix : 0;
     compMat.uniforms.uMaster.value = 1;
     compMat.uniforms.uFlash.value = io.beat;
-    if (fxEnabled) {
+
+    // Per-scene bloom, crossfaded with the scene mix. A live instance.bloom
+    // (mutated in update()) wins over the static meta.bloom.
+    const bloomA = bloomOf(slotA);
+    const bloomB = fading ? bloomOf(slotB) : null;
+    const wB = fading ? mix : 0;
+    const strength = (bloomA ? bloomA.strength : 0) * (1 - wB) + (bloomB ? bloomB.strength : 0) * wB;
+    const lead = wB > 0.5 ? bloomB || bloomA : bloomA || bloomB;
+    const bloomOn = strength > 0.01 && lead;
+
+    if (fxEnabled || bloomOn) {
       renderer.setRenderTarget(rtComp);
       renderer.clear();
       renderer.render(compScene, compCam);
+      if (bloomOn) {
+        bloomPass.strength = strength;
+        bloomPass.radius = lead.radius ?? 0.4;
+        bloomPass.threshold = lead.threshold ?? 0.6;
+        bloomPass.render(renderer, null, rtComp, dt, false); // adds bloom into rtComp
+      }
       renderer.setRenderTarget(null);
-      fxRack.render(rtComp.texture, null, dt, io);
+      if (fxEnabled) {
+        fxRack.render(rtComp.texture, null, dt, io);
+      } else {
+        renderer.render(copyScene, compCam);
+      }
     } else {
       renderer.setRenderTarget(null);
       renderer.render(compScene, compCam);
     }
+  }
+
+  function bloomOf(id) {
+    if (!id) return null;
+    const inst = instances.get(id);
+    if (inst && inst.bloom) return inst.bloom;
+    const m = sceneList.find((s) => s.id === id);
+    return (m && m.bloom) || null;
   }
 
   function resize() {
@@ -292,6 +343,7 @@ export function createEngine({ canvas, quality = 'med' }) {
     rtA.setSize(width * pr, height * pr);
     rtB.setSize(width * pr, height * pr);
     rtComp.setSize(width * pr, height * pr);
+    bloomPass.setSize(width, height);
     fxRack.resize(width * pr, height * pr);
     instances.forEach((s) => s.resize(width, height));
   }
