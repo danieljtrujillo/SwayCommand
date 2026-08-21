@@ -409,6 +409,7 @@ button { font-family: inherit; }
 }
 .version { color: var(--info); margin-top: 4px; font: 12px var(--mono); }
 .boot-status { text-align: center; color: var(--accent); font-weight: 600; margin-bottom: 18px; min-height: 22px; }
+.boot-warm { text-align: center; color: var(--text-dim); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; margin: -10px 0 14px; min-height: 16px; }
 .check-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
 .check {
   display: flex; gap: 14px; align-items: flex-start;

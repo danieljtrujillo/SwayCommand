@@ -17,8 +17,8 @@ const FORMAT_VERSION = 1;
 
 const PALETTE_FALLBACK = ['#ff2d95', '#7a0bc0', '#2de1fc', '#f9f871', '#ff6b35'];
 const GESTURE_SOURCES = ['xy:x', 'xy:y', 'gesture:pulse', 'gesture:press', 'gesture:sway'];
-const TARGET_NAMESPACES = ['engine', 'fx', 'synth', 'sampler', 'transport'];
-const PAD_ACTION_TYPES = ['sample', 'scene', 'fxPunch'];
+const TARGET_NAMESPACES = ['engine', 'fx', 'synth', 'sampler', 'transport', 'scene'];
+const PAD_ACTION_TYPES = ['sample', 'scene', 'fxPunch', 'sceneAction'];
 const CURVES = ['linear', 'detent'];
 const NOTE_ROUTING = ['always', 'unassigned', 'off'];
 const SAMPLER_KNOB_TARGETS = ['sampler:master', 'sampler:cutoff', 'sampler:rate', 'sampler:send'];
@@ -108,6 +108,15 @@ function parseTarget(str) {
   const ns = str.slice(0, at);
   const key = str.slice(at + 1);
   if (!TARGET_NAMESPACES.includes(ns) || !key) return null;
+  // Scene targets carry the scene id: two scenes may name a parameter the
+  // same, and a control reaching for one must never move the other.
+  // `scene:<sceneId>:<param>` — the scene declares the parameter in
+  // meta.controls (docs/SCENE_CONTRACT.md).
+  if (ns === 'scene') {
+    const at2 = key.indexOf(':');
+    if (at2 < 1 || at2 === key.length - 1) return null;
+    return { ns, scene: key.slice(0, at2), key: key.slice(at2 + 1) };
+  }
   return { ns, key };
 }
 
@@ -316,6 +325,11 @@ function validateProject(input) {
         scene: a.scene,
         transition: { type: tr.type === 'crossfade' ? 'crossfade' : 'cut', duration: num(tr.duration, 0, 0, 60) },
       };
+    }
+    if (a.type === 'sceneAction') {
+      if (typeof a.scene !== 'string' || !a.scene) return null;
+      if (typeof a.action !== 'string' || !a.action) return null;
+      return { type: 'sceneAction', scene: a.scene, action: a.action };
     }
     // fxPunch
     if (typeof a.param !== 'string' || !a.param) return null;

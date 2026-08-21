@@ -120,6 +120,9 @@ export function createRouter({ engine, sampler, synth, transport, midi, onDirty 
         }
         break;
       }
+      case 'scene':
+        engine.setSceneParam(t.scene, t.key, mapped);
+        break;
       // transport targets are toggles; a continuous control cannot drive them
     }
   }
@@ -141,6 +144,9 @@ export function createRouter({ engine, sampler, synth, transport, midi, onDirty 
           if (!synthOn) synth.allNotesOff();
           if (synthToggleCb) synthToggleCb(synthOn);
         }
+        break;
+      case 'scene':
+        engine.sceneAction(t.scene, t.key); // scene events are momentary, not switches
         break;
       case 'transport':
         if (t.key === 'playPause') transport.state.playing ? transport.pause() : transport.play();
@@ -168,6 +174,10 @@ export function createRouter({ engine, sampler, synth, transport, midi, onDirty 
       engine.autoVJ.enabled = false;
       if (a.transition.type === 'crossfade') engine.setScene(a.scene, a.transition.duration);
       else engine.cutTo(a.scene);
+    } else if (a.type === 'sceneAction') {
+      // The event reaches the named scene only while it is on screen — a
+      // black hole fired at a scene nobody can see has nowhere to land.
+      engine.sceneAction(a.scene, a.action);
     } else if (a.type === 'fxPunch' && !heldPunches.has(idx)) {
       rackOnByControl(); // a punch must land audibly
       heldPunches.set(idx, { param: a.param, prev: engine.fx.params[a.param], value: a.value });
@@ -272,6 +282,10 @@ export function createRouter({ engine, sampler, synth, transport, midi, onDirty 
     // control ingestion, before the palette/intensity update.
     frame(dt, t, io) {
       transport.update();
+      // Scenes read the show clock through io (docs/SCENE_CONTRACT.md): the
+      // router owns the transport, so it is the one that mirrors it.
+      io.transport.playing = !!transport.state.playing;
+      io.transport.time = transport.state.position || 0;
       reconcileFx();
 
       // Restore autoVJ once the timeline lets go of the stage.

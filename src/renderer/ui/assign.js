@@ -84,6 +84,38 @@ export function createAssign(deps) {
       .join('');
   }
 
+  // Scenes declare their own controls in meta.controls, so the panel lists a
+  // scene's parameters and events without ever instancing the scene.
+  function scenesWith(kind) {
+    return engine.sceneList.filter((m) => m.controls && Array.isArray(m.controls[kind]) && m.controls[kind].length);
+  }
+  function sceneParamOptions(current) {
+    return scenesWith('params')
+      .map((m) => {
+        const opts = m.controls.params
+          .map((c) => {
+            const v = `scene:${m.id}:${c.key}`;
+            return `<option value="${esc(v)}" data-min="${c.min ?? 0}" data-max="${c.max ?? 1}"${v === current ? ' selected' : ''}>${esc(c.label || c.key)}</option>`;
+          })
+          .join('');
+        return `<optgroup label="${esc(m.name.toUpperCase())}">${opts}</optgroup>`;
+      })
+      .join('');
+  }
+  function sceneActionOptions(current) {
+    return scenesWith('actions')
+      .map((m) => {
+        const opts = m.controls.actions
+          .map((c) => {
+            const v = `scene:${m.id}:${c.key}`;
+            return `<option value="${esc(v)}"${v === current ? ' selected' : ''}>${esc(c.label || c.key)}</option>`;
+          })
+          .join('');
+        return `<optgroup label="${esc(m.name.toUpperCase())}">${opts}</optgroup>`;
+      })
+      .join('');
+  }
+
   function continuousTargetOptions(current) {
     const groups = [];
     groups.push(`<optgroup label="ENGINE">${ENGINE_TARGETS.map(([v, l, lo, hi]) => `<option value="${v}" data-min="${lo}" data-max="${hi}"${v === current ? ' selected' : ''}>${l}</option>`).join('')}</optgroup>`);
@@ -91,6 +123,8 @@ export function createAssign(deps) {
     const manifest = synth.controlManifest().filter((c) => c.kind === 'range');
     groups.push(`<optgroup label="SYNTH">${manifest.map((c) => `<option value="synth:${c.key}" data-min="${c.min}" data-max="${c.max}"${`synth:${c.key}` === current ? ' selected' : ''}>${c.label} (${c.group.toLowerCase()})</option>`).join('')}</optgroup>`);
     groups.push(`<optgroup label="KIT">${SAMPLER_TARGETS.map(([v, l, lo, hi]) => `<option value="${v}" data-min="${lo}" data-max="${hi}"${v === current ? ' selected' : ''}>${l}</option>`).join('')}</optgroup>`);
+    const sc = sceneParamOptions(current);
+    if (sc) groups.push(sc); // scene parameters, grouped by scene
     return groups.join('');
   }
 
@@ -103,12 +137,21 @@ export function createAssign(deps) {
     return engine.sceneList.map((s) => `<option value="${s.id}"${s.id === current ? ' selected' : ''}>${s.name}</option>`).join('');
   }
 
+  // A learned override for this control, if any. Buttons keep their CC in
+  // the slot itself, so only continuous dimensions have one here.
+  function hasOverride(ctl) {
+    if (!ctl || ctl.startsWith('button:')) return false;
+    const o = deps.midi.getOverrides();
+    return !!o[ctl];
+  }
+
   function renderHeader() {
     const learnable = selected && (/^knob:|^xy:|^gesture:/.test(selected) || selected.startsWith('button:'));
     header.innerHTML =
       `<span>${headerName(selected)}</span>` +
       `<button class="chip${follow ? ' on' : ''}" data-act="follow" title="Hardware touch selects here">FOLLOW</button>` +
       (learnable ? `<button class="chip${learning ? ' armed' : ''}" data-act="learn" title="Bind the next incoming CC">LEARN</button>` : '') +
+      (learnable && hasOverride(selected) ? `<button class="chip" data-act="unlearn" title="Drop the learned CC and fall back to the factory map">UNLEARN</button>` : '') +
       (selected ? '<button class="chip" data-act="clear">CLEAR</button>' : '');
   }
 
@@ -133,6 +176,7 @@ export function createAssign(deps) {
         <option value="sample"${kind === 'sample' ? ' selected' : ''}>sample</option>
         <option value="scene"${kind === 'scene' ? ' selected' : ''}>visual</option>
         <option value="fxPunch"${kind === 'fxPunch' ? ' selected' : ''}>punch</option>
+        <option value="sceneAction"${kind === 'sceneAction' ? ' selected' : ''}>scene event</option>
       </select></div>`,
     ];
     if (kind === 'sample') {
@@ -155,6 +199,11 @@ export function createAssign(deps) {
         <option value="cut"${a.transition.type === 'cut' ? ' selected' : ''}>cut</option>
         <option value="crossfade"${a.transition.type === 'crossfade' ? ' selected' : ''}>fade</option>
       </select>${a.transition.type === 'crossfade' ? `<input type="number" data-pad-fade min="0.2" max="20" step="0.1" value="${a.transition.duration}"> s` : ''}</div>`);
+    } else if (kind === 'sceneAction') {
+      // A scene event fires only while its scene is on screen; the panel says so.
+      rows.push(`<div class="assign-row"><span>EVENT</span><select data-pad-event>${sceneActionOptions(`scene:${a.scene}:${a.action}`)}</select></div>`);
+      const on = engine.currentScene && engine.currentScene.id === a.scene;
+      rows.push(`<div class="assign-row"><span></span><span style="min-width:0">${on ? 'fires now' : 'fires while that visual is on stage'}</span></div>`);
     } else if (kind === 'fxPunch') {
       const spec = (parseTarget(`fx:${a.param}`) && fxRanges[a.param]) || [0, 1];
       const [lo, hi] = Array.isArray(spec) ? spec : [0, 1];
@@ -189,6 +238,7 @@ export function createAssign(deps) {
         <option value=""${b.action ? '' : ' selected'}>—</option>
         <optgroup label="SWITCHES">${TOGGLE_TARGETS.map(([v, l]) => `<option value="${v}"${b.action && b.action.target === v ? ' selected' : ''}>${l}</option>`).join('')}</optgroup>
         <optgroup label="RACK">${booleanFxOptions(b.action && b.action.target)}</optgroup>
+        ${sceneActionOptions(b.action && b.action.target)}
       </select></div>`,
     ];
     body.innerHTML = rows.join('');
@@ -240,6 +290,17 @@ export function createAssign(deps) {
         for (let i = g.length - 1; i >= 0; i--) if (g[i].source === selected) g.splice(i, 1);
       }
       changed(true);
+    } else if (chip.dataset.act === 'unlearn' && selected) {
+      const overrides = deps.midi.getOverrides();
+      delete overrides[selected];
+      deps.midi.setOverrides(overrides);
+      try {
+        await window.swaycommand.settings.set({ midiOverrides: overrides });
+      } catch {
+        /* settings persistence is best-effort */
+      }
+      renderHeader();
+      changed(false);
     } else if (chip.dataset.act === 'learn' && selected && !learning) {
       learning = true;
       renderHeader();
@@ -280,6 +341,10 @@ export function createAssign(deps) {
         if (kind === 'off') asg().pads[i] = null;
         else if (kind === 'sample') asg().pads[i] = { type: 'sample', pad: i };
         else if (kind === 'scene') asg().pads[i] = { type: 'scene', scene: engine.sceneList[0].id, transition: { type: 'cut', duration: 0 } };
+        else if (kind === 'sceneAction') {
+          const first = engine.sceneList.find((m) => m.controls && m.controls.actions && m.controls.actions.length);
+          asg().pads[i] = first ? { type: 'sceneAction', scene: first.id, action: first.controls.actions[0].key } : null;
+        }
         else asg().pads[i] = { type: 'fxPunch', param: 'glitch', value: 0.8 };
         return changed(true);
       }
@@ -296,6 +361,12 @@ export function createAssign(deps) {
       }
       const a = asg().pads[i];
       if (el.matches('[data-pad-scene]')) { a.scene = el.value; return changed(false); }
+      if (el.matches('[data-pad-event]')) {
+        const t2 = parseTarget(el.value);
+        a.scene = t2.scene;
+        a.action = t2.key;
+        return changed(true);
+      }
       if (el.matches('[data-pad-trans]')) {
         a.transition.type = el.value;
         if (el.value === 'crossfade' && !a.transition.duration) a.transition.duration = 2.5;

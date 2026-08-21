@@ -127,12 +127,20 @@ function renderChecks() {
 async function rendererChecks() {
   const checks = [];
   try {
-    const probe = document.createElement('canvas');
-    const gl = probe.getContext('webgl2');
-    const info = gl ? gl.getParameter(gl.RENDERER) : null;
+    // The stage already holds a WebGL2 context; ask it rather than opening a
+    // second one (a cold-GPU-process stall, and it only ever said "WebKit
+    // WebGL"). The probe canvas is the fallback before the engine exists.
+    let info = state.engine ? state.engine.gpuName : null;
+    let gl = !!state.engine;
+    if (!state.engine) {
+      const probe = document.createElement('canvas');
+      const pgl = probe.getContext('webgl2');
+      gl = !!pgl;
+      info = pgl ? pgl.getParameter(pgl.RENDERER) : null;
+    }
     checks.push(
       gl
-        ? { id: 'gpu', label: 'Graphics (WebGL2)', status: 'ok', detail: `Ready — ${info}.` }
+        ? { id: 'gpu', label: 'Graphics (WebGL2)', status: 'ok', detail: `Ready — ${info || 'WebGL2'}.` }
         : { id: 'gpu', label: 'Graphics (WebGL2)', status: 'fail', detail: 'WebGL2 unavailable. Update your GPU drivers.' }
     );
   } catch (e) {
@@ -194,9 +202,17 @@ async function runDoctor() {
   enter.focus();
   if (worst === 'ok' && !state._autoAdvanced && !state.entered) {
     state._autoAdvanced = true;
-    setTimeout(() => {
-      if (!state.entered && modalOpen('system')) enterCockpit();
-    }, 1400);
+    // The door opens by itself once the checks pass — but not onto a stage
+    // that is still compiling its visuals. It waits for the warm pipeline,
+    // six seconds at most; ENTER opens it at once regardless.
+    const t0 = performance.now();
+    const tryOpen = () => {
+      if (state.entered || !modalOpen('system')) return;
+      const wp = state.engine ? state.engine.warmProgress() : { busy: false };
+      if (!wp.busy || performance.now() - t0 > 6000) enterCockpit();
+      else setTimeout(tryOpen, 150);
+    };
+    setTimeout(tryOpen, 1400);
   }
 }
 
@@ -852,6 +868,10 @@ function refreshDeck() {
     } else if (a.type === 'scene') {
       const meta = state.engine.sceneList.find((s) => s.id === a.scene);
       labels.push(meta ? meta.name : a.scene);
+    } else if (a.type === 'sceneAction') {
+      const meta = state.engine.sceneList.find((s) => s.id === a.scene);
+      const ctl = meta && meta.controls && meta.controls.actions.find((c) => c.key === a.action);
+      labels.push(ctl ? ctl.label : a.action);
     } else {
       labels.push(a.param);
     }
@@ -1000,6 +1020,15 @@ function frameTick(now) {
   const eng = state.engine;
   const io = eng.io;
 
+  // While the door is shut, it says what the stage is doing behind it: on a
+  // cold shader cache (first launch after an install) the driver compiles
+  // every pooled scene, and that reads as a hang unless it is named.
+  if (!state.entered) {
+    const wp = eng.warmProgress();
+    const el = $('#boot-warm');
+    if (el) el.textContent = wp.busy ? `Warming visuals · ${wp.done} of ${wp.total}` : wp.total ? 'Visuals ready' : '';
+  }
+
   // top bar
   const sceneName = eng.currentScene ? eng.currentScene.name : '';
   if (sceneName !== lastScene) {
@@ -1017,8 +1046,11 @@ function frameTick(now) {
 
   const c = state.midi.control;
   const link = $('#pill-link');
-  link.textContent = c.isSway ? 'SWAY' : c.connected ? 'MIDI' : 'KEYS';
-  link.classList.toggle('pill-on', c.isSway || c.connected);
+  // BUSY: the port is there but another process holds it (Windows allows one
+  // opener per MIDI input) — the Sway is plugged in and cannot reach us.
+  link.textContent = c.busy ? 'BUSY' : c.isSway ? 'SWAY' : c.connected ? 'MIDI' : 'KEYS';
+  link.title = c.busy ? `${c.portName} is held by another process — close the other app or instance` : '';
+  link.classList.toggle('pill-on', !c.busy && (c.isSway || c.connected));
 
   const a = state.audio.state;
   $('#pill-in').textContent =
