@@ -20,17 +20,22 @@
 //               object ahead: pulsar, spiral galaxy, solar system, nebula, or
 //               ringed planet, never the same twice running. The star/streak
 //               layer is drawn above the object (renderOrder 2 > 1).
-//   BLACK HOLE  PAD 7 opens it at the center: a Schwarzschild black hole
-//               raymarched in the overlay — null geodesics bent by the
-//               -1.5·h²·p/r⁵ term, an accretion disk seen nearly edge-on with
-//               the far side lensed over and under the shadow, Doppler
-//               beaming (bright, blue-shifted approaching side; dim, red
-//               receding side), a photon-ring glow — and the ship FALLS IN:
-//               the virtual camera closes from 80 to 2.2 rs so the shadow
-//               swallows the view from the center out while the star lens
-//               pushes the field outward around it, then a beat of void and
-//               re-emergence into a re-seeded sky with NO celestial object; a
-//               jump in progress ends into the hole instead of spawning one.
+//   BLACK HOLE  PAD 7 opens it at the center — Darryl Huffman's "Black Hole
+//               (WebGL Shader)" lens (the user's BLACKHOLE.zip), its maths
+//               kept: pull = mass / dist², the view is rotated about the mass
+//               by (pull + held)·π — with the sine term at zero, as upstream
+//               ships it, that is a signed radial scaling that collapses and
+//               inverts the sky in concentric rings — and every pixel is
+//               darkened by pull·0.25, which blacks out the core. The pen's
+//               mass eases in (cur += (target − cur)·0.03 per frame); then,
+//               as with its held click, the hold value climbs so the rings
+//               sweep inward while the mass grows until its own darkening
+//               covers the screen — the swallow from the center out — then a
+//               beat of void and re-emergence into a re-seeded sky with NO
+//               celestial object; a jump in progress ends into the hole
+//               instead of spawning one. The lens is applied to the stars'
+//               streak endpoints and the object quad; the overlay carries the
+//               darkening.
 //   BANKS       PAD 8 banks left, PAD 15 banks right: the only rotation in
 //               the scene, a 2.4 s roll-and-yaw that levels out again; the
 //               stars sweep sideways with the turn.
@@ -90,13 +95,22 @@ const GLSL_COMMON = /* glsl */ `
     return n;
   }
   mat2 rot2(float a) { float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }
-  // Black-hole lens on a centred, aspect-corrected screen position (height = 1):
-  // a point lens pushes images outward by thetaE^2 / theta. hole = (thetaE^2,
-  // shadow radius). Zero is the identity.
+  // Darryl Huffman's black-hole lens (CodePen gRZrpv, MIT) on a centred,
+  // aspect-corrected screen position (height = 1): pull = mass / dist², the
+  // point is rotated about the mass by (pull + held)·π with the sine term at
+  // zero exactly as upstream ships it, i.e. a signed radial scaling that
+  // collapses and inverts the view in rings. hole = (mass, held). Zero mass is
+  // the identity.
   vec2 lens(vec2 q, vec2 hole) {
     if (hole.x <= 0.0) return q;
-    float d2 = dot(q, q);
-    return q * (1.0 + hole.x / (d2 + 0.003));
+    float pull = hole.x / max(dot(q, q), 0.00001);
+    return q * cos((pull + hole.y) * PI);
+  }
+  // the pen's darkening of what the lens shows: colour − pull·0.25
+  float lensDark(vec2 q, vec2 hole) {
+    if (hole.x <= 0.0) return 0.0;
+    float pull = hole.x / max(dot(q, q), 0.00001);
+    return clamp(pull * 0.25, 0.0, 1.0);
   }
 `;
 
@@ -133,7 +147,7 @@ const STAR_VERT = /* glsl */ `
     float vis = step(0.3, ch.w) * step(0.3, ct.w);
     vec2 sh = lens(toScreen(ch), uHole);
     vec2 stl = lens(toScreen(ct), uHole);
-    float horizon = uHole.y > 0.0 ? 1.0 - step(uHole.y, length(sh)) : 0.0;
+    float dark = lensDark(toScreen(ch), uHole);
     vec2 d = sh - stl;
     float len = length(d);
     vec2 dir = len > 0.00001 ? d / len : vec2(1.0, 0.0);
@@ -150,7 +164,7 @@ const STAR_VERT = /* glsl */ `
     float near = smoothstep(uDepth, uDepth * 0.3, dist);
     float tw = 1.0 - 0.18 * uTwinkle * (0.5 + 0.5 * sin(uTime * (2.0 + aInfo.z * 7.0) + aInfo.z * 40.0));
     // a stretched star spreads its light; the jump adds energy back
-    vA = (0.42 + mag * 1.3) * (0.5 + 0.5 * near) * tw * uBreath * vis * (1.0 - horizon) * (1.0 + uGain) / sqrt(1.0 + vLenR * 0.22);
+    vA = (0.42 + mag * 1.3) * (0.5 + 0.5 * near) * tw * uBreath * vis * (1.0 - dark) * (1.0 + uGain) / sqrt(1.0 + vLenR * 0.22);
     vec3 tint = aInfo.y < 0.33 ? uPal0 : (aInfo.y < 0.66 ? uPal1 : uPal2);
     vCol = mix(vec3(1.0), tint, 0.38 + 0.22 * mag);
   }
@@ -488,98 +502,25 @@ const OVER_VERT = /* glsl */ `
 `;
 
 const OVER_FRAG = /* glsl */ `
-  out vec4 fragColor;
   ${GLSL_COMMON}
   uniform vec2 uRes;
-  uniform float uTime, uWarp, uFlash, uVeil, uSwallow, uIntensity, uRoll, uHoleD, uDisk;
+  uniform float uTime, uWarp, uFlash, uVeil, uIntensity, uRoll;
+  uniform vec2 uHole;
   uniform vec3 uPal0, uPal1, uPal2, uPal3, uPal4;
   in vec2 vUv;
-
-  // accretion disk sample: temperature falloff, static streaks + noise,
-  // Doppler beaming toward the approaching side; v = ray direction at the hit
-  vec4 diskSample(vec3 hit, vec3 N, vec3 U, vec3 V, vec3 v) {
-    float rh = length(hit);
-    float t = (rh - 2.6) / (9.0 - 2.6);
-    float temp = pow(clamp(1.0 - t, 0.0, 1.0), 0.8);
-    float phi = atan(dot(hit, V), dot(hit, U));
-    float n = vnoise(vec2(phi * 3.0, rh * 1.6)) * 0.6 + vnoise(vec2(phi * 9.0 + 3.0, rh * 4.0)) * 0.4;
-    float streaks = 0.5 + 0.5 * sin(phi * 30.0 + rh * 7.0 + n * 7.0);
-    float flick = 0.9 + 0.1 * sin(uTime * 6.0 + rh * 5.0);
-    float dens = (0.55 + 0.45 * n) * (0.55 + 0.45 * streaks) * smoothstep(0.0, 0.1, t) * (1.0 - smoothstep(0.7, 1.0, t)) * flick;
-    vec3 vel = normalize(cross(N, hit));
-    float beta = sqrt(0.5 / max(rh, 1.0));
-    float cosang = dot(vel, -v);
-    float dop = clamp(pow(1.0 / max(1.0 - beta * cosang * 0.95, 0.15), 3.0), 0.15, 5.0);
-    vec3 hot = mix(uPal3, vec3(1.0), 0.65);
-    vec3 warm = uPal4;
-    vec3 cool = mix(uPal2, uPal0, 0.5);
-    vec3 c = mix(warm, hot, temp);
-    c = mix(c, cool, clamp((dop - 1.0) * 0.3, 0.0, 0.6));
-    c = mix(c, warm * 0.5, clamp((1.0 - dop) * 0.9, 0.0, 0.7));
-    float a = clamp(dens * 0.9, 0.0, 0.95);
-    return vec4(c * dens * dop * (1.0 + temp * 2.2), a);
-  }
-
+  out vec4 fragColor;
   void main() {
     vec2 uv = (vUv - 0.5) * vec2(uRes.x / uRes.y, 1.0);
     uv = rot2(uRoll) * uv;
     float r = length(uv);
     vec3 col = vec3(0.0);
-    float cover = 0.0;
     // vanishing-point glow of the jump, and the exit flash
     col += mix(uPal2, vec3(1.0), 0.5) * uWarp * uWarp * 0.22 / (r * 6.0 + 0.25);
     col += vec3(1.0) * uFlash * 0.35;
-
-    if (uHoleD > 0.0) {
-      vec3 ro = vec3(0.0, 0.0, uHoleD);
-      vec3 rd = normalize(vec3(uv * 1.1, -1.0));
-      vec3 N = normalize(vec3(0.0, 0.976, 0.22));
-      vec3 U = normalize(cross(N, vec3(1.0, 0.0, 0.0)));
-      vec3 Vv = cross(N, U);
-      float b = length(cross(ro, rd));
-      vec3 disk = vec3(0.0);
-      float T = 1.0;
-      float captured = 0.0;
-      if (b < 14.0 || uHoleD < 4.0) {
-        vec3 p = ro; vec3 v = rd;
-        for (int i = 0; i < STEPS; i++) {
-          float r2 = dot(p, p);
-          float rr = sqrt(r2);
-          if (rr < 1.0) { captured = 1.0; break; }
-          if (rr > 14.0 && dot(p, v) > 0.0) break;
-          vec3 h = cross(p, v);
-          float h2 = dot(h, h);
-          float dt = clamp(rr * 0.16, 0.03, 0.8);
-          vec3 a = -1.5 * h2 * p / (r2 * r2 * rr);
-          vec3 pn = p + v * dt + 0.5 * a * dt * dt;
-          float s0 = dot(p, N), s1 = dot(pn, N);
-          if (s0 * s1 < 0.0) {
-            vec3 hit = mix(p, pn, s0 / (s0 - s1));
-            float rh = length(hit);
-            if (rh > 2.6 && rh < 9.0) {
-              vec4 dc = diskSample(hit, N, U, Vv, v);
-              disk += dc.rgb * dc.a * T;
-              T *= (1.0 - dc.a);
-              if (T < 0.03) break;
-            }
-          }
-          v = normalize(v + a * dt);
-          p = pn;
-        }
-      }
-      // photon-ring glow just outside the shadow (screen-space approximation)
-      float shadowR = 2.36 / uHoleD;
-      float ring = exp(-pow((r - shadowR * 1.02) / (shadowR * 0.05 + 0.002), 2.0)) * (1.0 - captured);
-      float halo = exp(-(r - shadowR) * (6.0 / (shadowR + 0.05))) * step(shadowR, r) * 0.25;
-      vec3 glow = (mix(uPal3, vec3(1.0), 0.7) * ring * 1.6 + mix(uPal4, uPal3, 0.5) * halo) * uDisk;
-      col = col * (1.0 - captured) + disk * uDisk + glow;
-      cover = max(captured, (1.0 - T) * 0.9);
-    }
-
-    float fade = uSwallow > 0.0 ? 1.0 - smoothstep(uSwallow - 0.25, uSwallow, r) : 0.0;
-    float dark = max(fade, uVeil);
-    cover = max(cover, dark);
-    col *= (1.0 - dark);
+    // the pen's darkening: the core goes black, the rings dim toward it
+    float dark = lensDark(uv, uHole);
+    float cover = max(dark, uVeil);
+    col *= (1.0 - cover);
     fragColor = vec4(col * uIntensity, cover);
   }
 `;
@@ -591,7 +532,6 @@ export function createScene(ctx) {
   camera.position.set(0, 0, 0);
   const tier = quality.tier;
   const STARS = tier === 'low' ? 4000 : tier === 'high' ? 16000 : 9000;
-  const STEPS = tier === 'low' ? 36 : tier === 'high' ? 72 : 52;
   const fovK = 1 / (2 * Math.tan((FOV * Math.PI) / 360));
 
   const pal = () => Array.from({ length: 5 }, () => ({ value: new THREE.Color(1, 1, 1) }));
@@ -696,17 +636,14 @@ export function createScene(ctx) {
     uWarp: { value: 0 },
     uFlash: { value: 0 },
     uVeil: { value: 0 },
-    uSwallow: { value: 0 },
     uIntensity: { value: 1 },
     uRoll: { value: 0 },
-    uHoleD: { value: 0 },
-    uDisk: { value: 0 },
+    uHole: { value: new THREE.Vector2(0, 0) },
     uPal0: vp0, uPal1: vp1, uPal2: vp2, uPal3: vp3, uPal4: vp4,
   };
   const overMat = new THREE.ShaderMaterial({
     glslVersion: THREE.GLSL3,
     uniforms: overU,
-    defines: { STEPS },
     vertexShader: OVER_VERT,
     fragmentShader: OVER_FRAG,
     transparent: true,
@@ -736,7 +673,7 @@ export function createScene(ctx) {
   let seq = 0.618;
   let bankT = -1, bankSide = 0, roll = 0, yaw = 0, rollT = 0, yawT = 0;
   let holeT = -1, voidDone = false;
-  let holeD = 0, disk = 0, lensE = 0, swallow = 0, veil = 0;
+  let mass = 0, held = 0, veil = 0;
   let pulse = 0, beatPrev = 0;
   const padPrev = new Float32Array(PADS);
 
@@ -810,18 +747,19 @@ export function createScene(ctx) {
       yaw = approach(yaw, yawT, 0.12, dt);
       camera.rotation.set(0, yaw, roll);
 
-      // ---- black hole: open (approach), swallow (fall in), void, emerge
-      let holeDT = 0, diskT = 0, lensT = 0, swallowT = 0, veilT = 0;
+      // ---- black hole (Huffman's lens): the mass eases in, the hold takes us in
+      let massT = 0, heldT = 0, veilT = 0;
       if (holeT >= 0) {
         holeT += dt;
         if (holeT < T_OPEN) {
-          const u = ease(holeT / T_OPEN);
-          holeDT = 80 - 60 * u; diskT = u; lensT = 0.004 * u;
+          massT = 0.015; heldT = 0;
         } else if (holeT < T_SWALLOW) {
           const u = (holeT - T_OPEN) / (T_SWALLOW - T_OPEN);
-          const ue = u * u;
-          holeDT = 20 - 17.8 * ue; diskT = 1; lensT = 0.004 + 0.03 * ue;
-          swallowT = 1.3 * smooth(0.55, 1.0, u);
+          // the pen's held click: its hold value climbs 0.03 per frame and the
+          // rings sweep inward; the mass grows until its own darkening
+          // (pull · 0.25) covers the screen — the swallow from the center out
+          heldT = u * 2.4;
+          massT = 0.015 + 4.0 * u * u * u;
         } else if (holeT < T_VOID) {
           if (!voidDone) {
             voidDone = true;
@@ -840,17 +778,14 @@ export function createScene(ctx) {
         }
       }
       if (holeT >= 0 && holeT < T_SWALLOW) {
-        holeD = holeD === 0 ? holeDT : approach(holeD, holeDT, 0.08, dt);
-        disk = approach(disk, diskT, 0.12, dt);
-        lensE = approach(lensE, lensT, 0.08, dt);
-        swallow = approach(swallow, swallowT, 0.06, dt);
+        mass = approach(mass, massT, 0.25, dt); // the pen eases cur toward target 3 % per frame
+        held = heldT;
         veil = 0;
       } else if (holeT >= T_SWALLOW && holeT < T_END) {
-        holeD = 0; disk = 0; lensE = 0; swallow = 0; veil = veilT;
+        mass = 0; held = 0; veil = veilT;
       } else {
-        holeD = 0; disk = 0; lensE = 0; swallow = 0; veil = approach(veil, 0, 0.1, dt);
+        mass = 0; held = 0; veil = approach(veil, 0, 0.1, dt);
       }
-      const shadowR = holeD > 0 ? (2.36 / holeD) * 1.02 : 0;
 
       // ---- flight: forward only; the jump multiplies speed, strikes kick it
       const targetSpeed = CRUISE * (1 + warpS * WARP_GAIN) + kick * 160 + io.beat * 30;
@@ -887,7 +822,7 @@ export function createScene(ctx) {
       starU.uOrder.value = orderS;
       starU.uTail.value = tail;
       starU.uGain.value = warpS * 1.6 + io.bands.bass * 0.3;
-      starU.uHole.value.set(lensE, shadowR);
+      starU.uHole.value.set(mass, held);
       starU.uIntensity.value = io.intensity;
 
       objU.uTime.value = t;
@@ -896,18 +831,16 @@ export function createScene(ctx) {
       objU.uAlpha.value = objAlpha;
       objU.uPulse.value = Math.max(pulse, 0.5 + 0.5 * Math.sin(t * 7.0));
       objU.uObjPos.value.set(objX, objY, objZ);
-      objU.uHole.value.set(lensE, shadowR);
+      objU.uHole.value.set(mass, held);
       objU.uIntensity.value = io.intensity;
 
       overU.uTime.value = t;
       overU.uWarp.value = warpS;
       overU.uFlash.value = flash;
       overU.uVeil.value = veil;
-      overU.uSwallow.value = swallow;
       overU.uIntensity.value = io.intensity;
       overU.uRoll.value = roll;
-      overU.uHoleD.value = holeD;
-      overU.uDisk.value = disk;
+      overU.uHole.value.set(mass, held);
     },
     resize(w, h) {
       camera.aspect = w / Math.max(1, h);
