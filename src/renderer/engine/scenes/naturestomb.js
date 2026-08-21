@@ -1,118 +1,356 @@
-// Nature's Tomb — three organisms under dark-field light: an egg cell that
-// divides by mitosis (or un-divides), a slime mold foraging across its plate,
-// and a mycelium growing out from a spore. One knob picks the organism, one
-// knob and the strikes drive its development, sway morphs its generator.
+// Nature's Tomb — four organisms under dark-field light on one plate: a CELL
+// LINE that cleaves from a zygote to a blastula and then morphs on through the
+// single-celled protists into primitive multicellular colonies, a SLIME MOLD
+// foraging across its dish, a MYCELIUM growing out from a spore, and a DOUBLE
+// HELIX of B-form DNA. One knob picks the organism, one knob and the strikes
+// drive its development, one knob picks the species, sway morphs whichever
+// generator is on screen.
 //
-//   ORGANISM    KNOB 6 (io.knobs[5]) picks it: the centre (the 0.5 default) is
-//               the EGG CELL, turning right dissolves into the SLIME MOLD,
-//               turning left into the MYCELIUM. The value is smoothed with a
-//               0.15 s time constant, so the dissolve runs exactly as fast as
-//               the knob is turned — a flick cuts, a slow turn cross-fades.
-//   LEVEL       KNOB 5 (io.knobs[4]) sets the development level 0..4 the
-//               moment it moves, and any pad STRIKE steps it one stage,
-//               reversing at the top and at the bottom; the level eases over
-//               ~1.3 s so every stage plays out. Driving it DOWN reverses the
-//               development. What the level means:
-//                 egg cell    the division count 1 → 2 → 4 → 8 → 16
-//                             blastomeres (each stage along the next axis,
-//                             centres easing apart as radii shrink by 2^-1/3,
-//                             a smooth-min neck as the cleavage furrow);
-//                             driving it down merges the cells back
-//                 slime mold  the colony's reach across the plate: the
-//                             plasmodium pours out of its inoculum, forages
-//                             to the rim, finds the oat flakes on the way and
-//                             wires them into its vein network; driving it
-//                             down retracts the colony and the outer veins
-//                             starve and fade
-//                 mycelium    the hyphal growth in time: germ tubes leave the
-//                             spore, extend, branch and fill the plate; the
-//                             level scrubs that growth forward and back
-//   THE EGG     A zygote inside its zona pellucida: a glassy outer shell with
-//               a fresnel rim and mild refraction, cytoplasm with granular
-//               texture, wrap lighting, a subsurface glow through the
-//               membrane, a wet specular, and a nucleus with a nucleolus seen
-//               through the cytoplasm (a second short march from the membrane
-//               hit, attenuated by depth). An SDF raymarch of up to sixteen
-//               spheres whose centres and radii the CPU computes per frame.
+//   ORGANISM    KNOB 6 (io.knobs[5]) picks it in quarter turns — MYCELIUM,
+//               SLIME MOLD, CELL LINE (the 0.5 default lands on it), DOUBLE
+//               HELIX — with a little hysteresis at the band edges. The
+//               selection is smoothed with a 0.15 s time constant, so the
+//               dissolve runs exactly as fast as the knob is turned: a flick
+//               cuts, a slow sweep cross-fades. Only the organisms with weight
+//               run their generators.
+//   LEVEL       KNOB 5 (io.knobs[4]) sets the development 0..1 the moment it
+//               moves, and any pad STRIKE steps it ONE STAGE OF THE ORGANISM
+//               ON SCREEN, reversing at the top and at the bottom; the level
+//               eases over ~1.3 s so every stage plays out. Driving it DOWN
+//               reverses the development. The stage count is the organism's
+//               own — sixteen for the cell line, three for the helix, six for
+//               each simulation — so one strike always means one step of what
+//               you are looking at.
+//   SPECIES     KNOB 7 (io.knobs[6]) picks one of eight seeded parameter sets
+//               for the organism on screen (quantized with hysteresis, so the
+//               knob is a selector, not a smear). It is the "no two runs look
+//               alike" dial: a slime mold species, a fungal species, a base
+//               sequence and duplex flavour, the cell line's irregularity.
+//   THE CELL LINE   Sixteen stages on one continuous axis, every boundary a
+//               morph and never a cut:
+//                 0..6   CLEAVAGE — 1 → 2 → 4 → 8 → 16 → 32 → 64 blastomeres.
+//                        Radii shrink by 2^-1/3, so CELL VOLUME is conserved
+//                        at every division and the embryo grows no cytoplasm.
+//                        The heap's own envelope does widen — a jammed pack of
+//                        sixty-four spheres at a real packing fraction reaches
+//                        a fifth further out than the zygote's surface — but it
+//                        is clamped at the zona, which never moves, so what the
+//                        eye sees is crowding and not growth. The seats
+//                        the cells take are PACKED, not laid on a lattice: a
+//                        binary lattice can only ever be 4 × 2 × 2 at sixteen
+//                        cells, which welds them along the twice-divided axis
+//                        and opens gaps across the other two. Each stage's
+//                        seats are relaxed once at scene creation — the two
+//                        children are placed either side of the parent across
+//                        the cleavage plane, then the heap is shrunk pass by
+//                        pass while overlapping pairs are pushed back apart
+//                        until it JAMS at the spacing where that many spheres
+//                        fill the zona at a real packing fraction. That is
+//                        compaction, the event that rounds a real embryo up
+//                        into a berry, and it leaves every count a crowded
+//                        ball. A smooth-min neck is the cleavage furrow, each
+//                        pair is drawn with the WALL it shares (the bisector
+//                        of the two nearest centres, shaded as a groove with a
+//                        bright junction line), and the aggregate is clamped
+//                        at the zona so the outer cells flatten against it.
+//                        Driving the level down merges the cells back.
+//                 7      BLASTULA — the 64 blastomeres migrate outward onto a
+//                        shell of 96 smaller cells and a fluid-filled
+//                        blastocoel opens inside them; the cavity is lit
+//                        through the shell by its chord. Each morula cell is
+//                        paired with the seat on the shell nearest its own
+//                        direction, so the stage change is an outward
+//                        migration and not a scramble across the embryo; the
+//                        thirty-two seats left over grow in place from
+//                        nothing. The wall's cells are sized to the SEAT
+//                        SPACING — half the nearest-neighbour distance of 96
+//                        points on that sphere, with a little overlap — so the
+//                        layer closes and the neighbours press into each
+//                        other, which is what makes the blastocoel a cavity
+//                        instead of a colander.
+//                 8..12  THE PROTISTS — AMOEBA (streaming pseudopods whose
+//                        extensions run on a slow noise, granular endoplasm
+//                        crowding the centre, nucleus and contractile
+//                        vacuole), PARAMECIUM (a slipper body, ciliary rows
+//                        beating in a metachronal wave that travels down the
+//                        body as real displacement, an oral groove cut into
+//                        the ventral side, macronucleus and two contractile
+//                        vacuoles), EUGLENA (a spindle drawn to a posterior
+//                        point, an anterior flagellum carrying a travelling
+//                        sine wave, the eyespot beside the reservoir,
+//                        chloroplast discs through the pellicle's helical
+//                        striations), DIATOM (a centric silica frustule at a
+//                        fixed tilt so the girdle band shows, its valve face
+//                        pitted with hexagonally packed areolae, radial
+//                        costae and a ring of marginal spines), RADIOLARIAN
+//                        (a central capsule inside a perforated mineral
+//                        lattice with six axial and eight diagonal spicules).
+//                 13..15 PRIMITIVE MULTICELLULAR — VOLVOX (a hollow sphere of
+//                        flagellated cells in a glassy matrix. Its cells are
+//                        SEPARATED, unlike the blastula's: a Volvox colony is
+//                        individuals suspended in gel, not an epithelium, so
+//                        the wall it makes is a lattice of distinct cells
+//                        inside one glassy sphere. The flagellar rows stand
+//                        fixed on the colony and only the beat moves, a
+//                        metachronal wave running pole to pole, so the fringe
+//                        never turns by itself; daughter colonies sit inside),
+//                        FILAMENT (the sphere unrolls into a beaded chain of
+//                        cells with a heterocyst every seventh), SPONGE (a
+//                        vase-shaped body, ostia punched through the wall, the
+//                        osculum open at the top, spicules in the mesohyl).
+//               Stages that are aggregates of cells share one renderer; the
+//               protists and the sponge are analytic solids. EVERY boundary is
+//               carried by the cells themselves. Aggregate to aggregate they
+//               travel seat to seat (the morula onto the blastula's wall, the
+//               colony unrolling into a chain). Protist to protist the two
+//               distance fields mix, so a euglena's spindle grows a diatom's
+//               pores. Aggregate to protist the cells travel onto the
+//               ORGANISM'S OWN SURFACE — each protist and the sponge carries a
+//               layout of ninety-six seats laid on its body, and the crossing
+//               is the same seat-by-seat pour — and only over the back half of
+//               the crossing does the analytic solid come up underneath them.
+//               By then the two surfaces are in the same place, so the
+//               handover reads as ninety-six cells fusing into one body. It is
+//               done that way because the two fields cannot simply be mixed:
+//               the cell field is culled per ray, so away from the cells it is
+//               a bound and not a distance, and mixing that bound into a
+//               solid's field ate the solid away wherever the cull came back
+//               empty. The extra march costs one march for the length of the
+//               crossing and nothing at all outside it.
+//   THE CELLS   Up to ninety-six cells at a time, far more than a march can
+//               test at every step, so the aggregate is culled before it
+//               is marched: the CPU bins the cells into eight octant groups
+//               and writes them into the uniform array in group order with a
+//               bounding sphere per group; the fragment shader tests those
+//               eight spheres against the ray, then makes two cheap passes
+//               over the surviving cells — the first for the nearest true
+//               ray/sphere entry, the second keeping the fourteen cells whose
+//               centres lie near the ray AND near that entry — and marches the
+//               smooth union of only those. The march therefore costs a
+//               bounded fourteen spheres a step no matter how many cells are
+//               on the plate. Shading: granular cytoplasm with per-cell tint
+//               and grain from a hash of the cell index, wrap light, a
+//               subsurface glow, a wet specular, and — hit analytically on the
+//               cell the ray actually entered, so no neighbour's nucleus can
+//               print through the wall of the cell in front of it — a LIT
+//               nucleus with a nucleolus, shaded off its own normal under the
+//               same two-light rig, rimmed, and dimmed by the depth of
+//               cytoplasm it is seen through.
 //   SLIME MOLD  A Physarum polycephalum plasmodium, simulated rather than
-//               drawn: the classic agent model (Jones 2010) — a few thousand
-//               protoplasm agents on a trail map sense the trail ahead at
-//               three sensors, turn toward the strongest, step, deposit; the
-//               map diffuses and decays each frame — runs on the CPU and
-//               uploads the trail as an 8-bit texture; that IS the network
-//               (thick veins where the flow concentrates, fan-shaped fronts at
-//               the edge, nodes at the food). The shader lights the trail as
-//               a glossy yellow plasmodium: height from the trail, a normal
-//               from its gradient, wrap light, a wet specular, a subsurface
-//               glow, and a slow pulse running along the veins (the shuttle
-//               streaming, which the beat drives). Food: nine oat flakes on
-//               the plate switch on as the colony's reach meets them.
-//   MYCELIUM    Hyphae as one instanced mesh of screen-space capsules: a
-//               growth simulation (germ tubes from the spore, tip extension
-//               with persistence and a radial bias, lateral branching, tips
-//               dying at the plate's rim) lays segments down in time order,
-//               so the visible prefix of the list is the colony at a point in
-//               its growth. The simulation is re-run from the same random
-//               table whenever sway moves, so the network deforms
-//               continuously instead of re-seeding. The fragment shader draws
-//               each segment as a glassy tube — bright core, translucent
-//               walls, septa across it — with the growth front glowing as the
-//               apices; the plate and the spore come from the quad.
-//   GESTURES    SWAY is each organism's morph: the egg's membrane tension (a
-//               noise displacement that jiggles and softens the membranes),
-//               the slime mold's sensing (sensor angle, turn angle and sensor
-//               reach — a fine lattice becomes a coarse web of thick trunk
-//               veins, live, the network re-forming as it moves), the
-//               mycelium's branching angle and tortuosity (a tight radial
-//               brush opens into a spreading, curling web). PRESS squeezes:
-//               it flattens the embryo, crowds the colony into a smaller
-//               reach so the veins thicken, squashes the mycelium. The hand
-//               PANS the plate (X) and DOLLIES the eye (Y) — translation only,
-//               nothing rotates. Bass swells the cytoplasm and the veins, the
-//               beat pulses them, treble shimmers the granules, the level
+//               drawn: Jones's agent model — protoplasm agents on a trail map
+//               sense at three sensors ahead, turn toward the strongest, step
+//               if the cell is free (one agent per cell, the exclusion that
+//               keeps veins thin instead of collapsing the colony into one
+//               slug), deposit; the map is box-blurred and decays. Every
+//               parameter of that model is species-dependent — sensor angle
+//               and distance, turn angle, step, deposit, decay, agent density,
+//               a random-turn rate that opens a broad fan front, one to FOUR
+//               inoculation points each with its OWN reach — grown to the
+//               plate's radius plus its own offset from the centre, so the
+//               discs union to the whole dish at full development however far
+//               off-centre the spores were dropped, and colonies expand and
+//               fuse — and the food layout (ring, scatter, clusters, a
+//               row) with its own attractant strength. The species table is
+//               four ARCHETYPES the seed picks between and then jitters, so a
+//               strain is a different network MORPHOLOGY and not merely a
+//               different scale: a fine reticulum, coarse trunk veins in a
+//               sparse mesh, a broad fan front, and a shuttle-streaming
+//               network anchored hard to its food. The trail is displayed
+//               against its own equilibrium (deposit over decay), so a heavy
+//               depositor shows veins instead of saturating into a sheet.
+//               Sway morphs sensing live on top of the species; the level is
+//               the colony's reach, and at full development that reach is the
+//               whole dish for every strain. A flake the colony has not
+//               reached is a dull speckled husk the dark field still picks out
+//               — it is already leaking a fifth of its attractant onto the
+//               plate, which is what draws the veins to it — and the moment an
+//               AGENT STEPS ONTO IT it lights, for good, and the veins wire it
+//               in at full strength.
+//   MYCELIUM    A hyphal growth simulation laid down in time order as one
+//               instanced mesh of screen-space capsules, so the visible prefix
+//               of the list is the colony at a point in its growth. Per
+//               species: germ tube count, branching angle and interval,
+//               branch rate, internode length, tortuosity, radial tropism,
+//               gravitropism into the slab, negative autotropism (tips steer
+//               down the gradient of a density grid, away from their own
+//               colony), anastomosis (a tip meeting an older hypha fuses to
+//               it and stops, closing a loop in the network), rhizomorph cords
+//               (a cord tip lays three parallel hyphae as a bundle) and
+//               sporangia (a swollen, spore-bearing head on tips that die
+//               late). The network is re-run from the same random table
+//               whenever sway moves, so it deforms continuously instead of
+//               re-seeding.
+//   DOUBLE HELIX  B-form DNA built properly: two antiparallel sugar-phosphate
+//               backbones at 10.5 base pairs per turn, the second strand set
+//               140° round the axis rather than 180° so the major and minor
+//               grooves come out in the right ratio; base pairs as rungs with
+//               two hydrogen bonds for A-T and three for G-C, each base tinted
+//               from its own palette slot. The strands are laid in opposite
+//               senses and SHOW it: each nucleotide's phosphate bead sits off
+//               centre along its segment, and to the other side on the other
+//               strand, so the beads march 5'->3' one way down the molecule and
+//               3'->5' the other. The development level runs it from
+//               a plain duplex, through a replication fork — the strands
+//               splaying into a Y above the fork, a polymerase bubble at the
+//               junction, a continuous leading strand and Okazaki fragments on
+//               the lagging one — to a nucleosome-wrapped chromatin fibre, the
+//               duplex making 1.65 turns round each histone core with linker
+//               DNA between. Sway sweeps the torsion: from B-form it unwinds
+//               toward an open ladder, then winds back through B-form into an
+//               overwound, writhing supercoil. NOTHING SPINS: the geometry is
+//               static and the hand's X turns the molecule about its own axis,
+//               so the apparent rotation is always the performer's.
+//   GESTURES    SWAY is each organism's morph: the cell line's membrane
+//               tension (a noise displacement that jiggles and softens the
+//               membranes, damped on the mineral forms), the slime mold's
+//               sensing, the mycelium's branching angle and tortuosity, the
+//               helix's torsion. PRESS squeezes: it flattens the embryo,
+//               crowds the colony, squashes the mycelium, compresses the
+//               helix. The hand PANS the plate (X) and DOLLIES the eye (Y) —
+//               translation only — except on the helix, where X is the
+//               molecule's azimuth. Bass swells the cytoplasm and the veins,
+//               the beat pulses them, treble shimmers the granules, the level
 //               lifts the plate's rim glow.
+//   ASSIGNMENT  meta.controls exposes the whole surface to the assignment
+//               panel: actions to pick each organism, step the development up
+//               or down and re-seed the simulations; params for development,
+//               organism, species, morph and squeeze. The raw knob reads above
+//               stay as the no-assignment fallback — whichever moved last
+//               wins — and morph/squeeze take the larger of the gesture and
+//               the assigned control, so assigning one never kills the other.
 //
-// Two draw calls: the quad (the egg raymarch, the slime mold's plate, the
-// mycelium's plate and spore — whichever organisms have weight, blended by
-// it) and the hyphae mesh (only while the mycelium has weight). GLSL3. Colour:
-// cytoplasm and plasmodium from palette 3/4 lifted toward white, nucleus from
-// palette 1, membrane rim and fans palette 0, the plate and hyphae from
-// palette 2 lifted toward white, the spore from palette 1/0.
+// Three draw calls: the quad (the cell-line raymarch, the plasmodium's plate,
+// the mycelium's plate and spore, the helix's dark-field column — whichever
+// organisms have weight, blended by it), the hyphae mesh and the helix mesh.
+// GLSL3. Colour: cytoplasm and plasmodium from palette 3/4 lifted toward
+// white, nuclei and organelles from palette 1, membranes and fans palette 0,
+// plate, hyphae and backbones from palette 2 lifted toward white, the four
+// bases from palette 0/1/3/4.
 
-export const meta = { id: 'naturestomb', name: "Nature's Tomb", mood: 'cellular' };
+export const meta = {
+  id: 'naturestomb',
+  name: "Nature's Tomb",
+  mood: 'cellular',
+  controls: {
+    actions: [
+      { key: 'cellLine', label: 'cell line' },
+      { key: 'slimeMold', label: 'slime mold' },
+      { key: 'mycelium', label: 'mycelium' },
+      { key: 'doubleHelix', label: 'double helix' },
+      { key: 'developUp', label: 'develop up' },
+      { key: 'developDown', label: 'develop down' },
+      { key: 'reseed', label: 're-seed' },
+    ],
+    params: [
+      { key: 'development', label: 'development', min: 0, max: 1, default: 0 },
+      { key: 'organism', label: 'organism', min: 0, max: 3, default: 2 },
+      { key: 'species', label: 'species', min: 0, max: 7, default: 0 },
+      { key: 'morph', label: 'morph', min: 0, max: 1, default: 0 },
+      { key: 'squeeze', label: 'squeeze', min: 0, max: 1, default: 0 },
+    ],
+  },
+};
 
-const MAX_CELLS = 16;
+// --- the cell line -------------------------------------------------------------
+const MAXC = 96; // cells the uniform array carries (the blastula and Volvox fill it)
+const LOCAL = 14; // cells the march may consider at once, after culling
 const R0 = 1.08; // zygote radius
-const ZONA = 1.3; // zona pellucida radius (fixed — the embryo compacts inside it)
-const SEP = 0.6; // centre separation per stage, as a fraction of the child radius
-const DISH = 1.5; // the plate's radius (world units) for the slime mold and the mycelium
+// The zona pellucida. It is FIXED: the cleavage stages are clamped to
+// ZONA × 0.955 and the shell is drawn at ZONA, so the embryo compacts inside a
+// shell that does not move, however the jammed heap inside it packs.
+const ZONA = 1.3;
+const CLEAVE_S = 2 * R0 * 0.96; // the aggregate's span; every division works inside it
+// Successive cleavage planes cycle x, y, z and then x, y, z again at half the
+// separation (the child radius has halved by then), so six divisions land the
+// sixty-four blastomeres on a 4 × 4 × 4 packing that FILLS the embryo. Six
+// distinct oblique axes would have put every cell at a corner and left the
+// morula hollow.
 const AXES = [
   [1, 0, 0],
   [0, 1, 0],
   [0, 0, 1],
-  [0.57735, 0.57735, -0.57735],
+  [1, 0, 0],
+  [0, 1, 0],
+  [0, 0, 1],
 ];
-const FOOD_N = 9; // oat flakes on the plate
-const MAX_TIPS = 480; // simultaneous hyphal tips
-const MYC_STEP = 0.031; // hyphal extension per growth step (world units)
+// stage kinds: 0 an aggregate of cells, 1 an analytic solid (form id in FORM)
+const KIND = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 1];
+const FORM = [-1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3, 4, -1, -1, 5];
+const STAGES = 16;
+const SHELL_N = 96; // cells on the blastula / Volvox shell
+const FIL_N = 16; // cells in the filament (long enough to run off both edges)
+const FIL_SP = 0.375; // spacing along the chain
+// how rigid each analytic form is (the sway jiggle is a membrane, not silica)
+const FORM_SOFT = [1, 0.85, 0.7, 0.12, 0.15, 0.45];
+// bounding radius of each analytic form at unit scale, so the march never
+// starts further out than it must (the euglena's flagellum makes its bound
+// large), and the factor the forms are blown up by to fill the plate
+const FORM_BOUND = [1.16, 1.08, 1.62, 0.92, 1.08, 1.16];
+const FORM_SCALE = 1.45;
+// N seats spread evenly over a sphere of radius R sit a nearest-neighbour
+// spacing of 2R·√(3.6276/N) apart — each seat owns 4πR²/N of the wall, laid
+// out as a hexagon of side s, area (√3/2)s². Sizing the cells to THAT closes
+// the wall; the hand-picked radius the blastula used before left every pair
+// 0.07 apart with the smooth-min neck far too small to bridge them, so the
+// "distinct outer cell layer" was a bag of separate balls you could see
+// straight through. Volvox keeps small, separated cells on purpose: its cells
+// really are individuals suspended in a glassy matrix, not a closed epithelium.
+const seatR = (R, n, overlap) => R * Math.sqrt(3.6276 / n) * overlap;
+const BLAST_R = seatR(1.0, SHELL_N, 1.18);
+
+// --- the plate -----------------------------------------------------------------
+const DISH = 1.5; // the plate's radius (world units) for the slime mold and the mycelium
+const FOOD_N = 10; // oat flakes the plate can carry
+
+// --- the mycelium ---------------------------------------------------------------
+const MAX_TIPS = 640; // simultaneous hyphal tips
 const MYC_STEPS = 96; // growth steps the scrub covers (the rim stops most tips before)
-const RND_LEN = 65536; // the mycelium's random table (power of two)
+const RND_LEN = 65536; // the growth simulation's random table (power of two)
+const GW = 96; // density / occupancy grid side, over the plate
+
+// --- the double helix ------------------------------------------------------------
+const BP = 42; // base pairs built — about four turns, running off frame at both ends
+const SUB = 3; // backbone segments per base pair, so the strands read as curves
+const HELIX_SEGS = 1400;
+const RISE = 0.163; // world units per base pair
+const HRAD = 0.50; // backbone helix radius: pitch / diameter = 1.71, B-form's own ratio
+const TWIST0 = 0.5984; // 2π / 10.5 base pairs per turn
+const GROOVE = 2.4435; // 140° between the strands — this is what makes the grooves unequal
+const NUC = 3; // histone cores on the chromatin fibre
+const COILR = 0.55; // nucleosome superhelix radius
 
 const GLSL = /* glsl */ `
   #define PI 3.14159265359
+  #define TAU 6.28318530718
   uniform vec2 uRes;
-  uniform vec4 uCells[16]; // xyz centre, w radius
-  uniform int uCount;
-  uniform float uTime, uDist, uZona, uJig, uPress, uBeat, uBass, uHigh, uLevelA, uLevel, uIntensity;
+  uniform vec4 uCells[MAXC];   // xyz centre, w radius, written in octant-group order
+  uniform vec4 uGroups[8];     // per group: xyz bounding centre, w bounding radius
+  uniform vec2 uSpan[8];       // per group: x first index, y count
+  uniform vec4 uPseudo[6];     // the amoeba's pseudopods: xyz tip, w radius
+  uniform vec4 uDaugh[4];      // Volvox daughter colonies: xyz centre, w radius
+  uniform vec4 uFood[10];      // oat flakes: xy plate position, z radius, w lit
+  uniform int uFormA, uFormB;
+  uniform float uTime, uDist, uZonaW, uJig, uSoft, uPress, uBeat, uBass, uHigh;
+  uniform float uLevelA, uIntensity, uCellW, uProtW, uFormF, uNeck, uCap, uCavity, uCavR;
+  uniform float uCilia, uDaughN, uFoodN, uHetero, uGrain, uFormScale, uFringe, uFringeR;
   uniform vec2 uPan;
   uniform vec3 uPal0, uPal1, uPal2, uPal3, uPal4;
-  uniform vec3 uOrg;        // organism weights: x egg cell, y slime mold, z mycelium
-  uniform sampler2D uTrail; // the plasmodium's trail map, 0..1
-  uniform float uTexel;     // one trail texel in uv
-  uniform float uDish, uFlow;
+  uniform vec4 uOrg;           // organism weights: x mycelium, y slime, z cell line, w helix
+  uniform sampler2D uTrail;    // the plasmodium's trail map, 0..1
+  uniform float uTexel;        // one trail texel in uv
+  uniform float uDish, uFlow, uTintA, uTintB;
   in vec2 vUv;
   out vec4 fragColor;
 
+  // the culled cell list for this pixel's ray (see cullCells), and a
+  // conservative lower bound on how far the aggregate is from that ray when
+  // the list comes back empty — a finite number, so a blend against another
+  // field stays a blend instead of letting the other field through
+  int gN;
+  int gLoc[LOCAL];
+  float gFar;
+
+  float h11(float n) { return fract(sin(n * 127.1) * 43758.5453); }
   float h31(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
   float noise3(vec3 p) {
     vec3 i = floor(p), f = fract(p);
@@ -125,6 +363,22 @@ const GLSL = /* glsl */ `
     float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
     return mix(b, a, h) - k * h * (1.0 - h);
   }
+  float smax(float a, float b, float k) { return -smin(-a, -b, k); }
+  float sdCap(vec3 p, vec3 a, vec3 b, float r) {
+    vec3 pa = p - a, ba = b - a;
+    float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
+    return length(pa - ba * h) - r;
+  }
+  float sdEll(vec3 p, vec3 r) {
+    float k0 = length(p / r);
+    float k1 = length(p / (r * r));
+    return k0 * (k0 - 1.0) / max(k1, 1e-5);
+  }
+  // a tapered spicule from the origin along +x of a folded space
+  float spike(float along, float perp, float len, float r0) {
+    float h = clamp(along / len, 0.0, 1.0);
+    return length(vec2(along - h * len, perp)) - mix(r0, 0.004, h);
+  }
   float iSphere(vec3 ro, vec3 rd, vec3 c, float r, out float edge) {
     vec3 oc = ro - c;
     float b = dot(oc, rd);
@@ -134,105 +388,606 @@ const GLSL = /* glsl */ `
     if (h < 0.0) return -1.0;
     return -b - sqrt(h);
   }
-  // the blastomeres: smooth union of the live cells, jiggled by sway, swollen by bass
-  float mapCells(vec3 p) {
-    p.y *= 1.0 + uPress * 0.22; // press squeezes the embryo flat
-    float d = 1e9;
-    for (int i = 0; i < 16; i++) {
-      if (i >= uCount) break;
-      vec4 c = uCells[i];
-      float di = length(p - c.xyz) - c.w * (1.0 + uBass * 0.04);
-      d = (i == 0) ? di : smin(d, di, c.w * 0.22);
+  // chord length of a ray inside a sphere, 0 if it misses
+  float chord(vec3 ro, vec3 rd, float r) {
+    float b = dot(ro, rd);
+    float h = b * b - dot(ro, ro) + r * r;
+    return h < 0.0 ? 0.0 : 2.0 * sqrt(h);
+  }
+  // an octahedral map of a direction, so a flat hex grid can be laid over a
+  // sphere without a pole
+  vec2 octa(vec3 n) {
+    n /= max(abs(n.x) + abs(n.y) + abs(n.z), 1e-5);
+    vec2 uv = n.xz;
+    if (n.y < 0.0) uv = (1.0 - abs(uv.yx)) * vec2(uv.x >= 0.0 ? 1.0 : -1.0, uv.y >= 0.0 ? 1.0 : -1.0);
+    return uv;
+  }
+  float hexDist(vec2 p, float s) {
+    vec2 h = vec2(1.0, 1.7320508) * s;
+    vec2 a = mod(p, h) - h * 0.5;
+    vec2 b = mod(p + h * 0.5, h) - h * 0.5;
+    return min(length(a), length(b));
+  }
+
+  // ---- the cell aggregate --------------------------------------------------
+  // Ninety-six spheres are far too many to test at every march step, so the
+  // list is culled once per pixel, in three cheap sweeps: the eight octant
+  // groups the CPU packed are tested against the ray first, then the cells of
+  // the surviving groups give the nearest true entry point, then only the
+  // cells near BOTH the ray and that entry are kept. The march that follows
+  // costs a bounded LOCAL spheres a step whatever the cell count is.
+  void cullCells(vec3 ro, vec3 rd) {
+    gN = 0;
+    gFar = 1e9;
+    float tHit = 1e9;
+    for (int g = 0; g < 8; g++) {
+      float n = uSpan[g].y;
+      if (n < 0.5) continue;
+      vec4 gs = uGroups[g];
+      vec3 oc = gs.xyz - ro;
+      float tc = dot(oc, rd);
+      float d2 = dot(oc, oc) - tc * tc;
+      float rr = gs.w + uNeck;
+      if (d2 > rr * rr) { gFar = min(gFar, sqrt(d2) - gs.w); continue; }
+      int s = int(uSpan[g].x);
+      int cnt = int(n);
+      for (int i = 0; i < MAXC; i++) {
+        if (i >= cnt) break;
+        vec4 c = uCells[s + i];
+        vec3 o2 = c.xyz - ro;
+        float t2 = dot(o2, rd);
+        float p2 = dot(o2, o2) - t2 * t2;
+        gFar = min(gFar, sqrt(max(p2, 0.0)) - c.w);
+        float r2 = c.w + uNeck * 0.5;
+        float hh = r2 * r2 - p2;
+        if (hh <= 0.0) continue;
+        float te = t2 - sqrt(hh);
+        if (te < tHit) tHit = te;
+      }
     }
-    d += uJig * 0.05 * (noise3(p * 3.0 + vec3(0.0, uTime * 0.35, 0.0)) - 0.5);
+    // Second sweep, in two passes: the cells that can shape the surface near
+    // the entry first, then — ONLY IF THERE IS ROOM LEFT — the ones further
+    // down the ray. The window round the entry is what bounds the march's
+    // cost, but taking it as an exclusion cost a hard black line round every
+    // cell that had another cell behind it: a ray passing just OUTSIDE a cell
+    // still crosses that cell's inflated test sphere, so the near cell set the
+    // entry, the window then threw away the cell BEHIND it, and the march ran
+    // through a list holding only a cell it misses and hit nothing at all.
+    // Where the aggregate is crowded the first pass fills the list and the
+    // second exits on its first test, so the bound is unchanged.
+    for (int pass = 0; pass < 2; pass++) {
+      if (gN >= LOCAL) break;
+      for (int g = 0; g < 8; g++) {
+        float n = uSpan[g].y;
+        if (n < 0.5) continue;
+        vec4 gs = uGroups[g];
+        vec3 oc = gs.xyz - ro;
+        float tc = dot(oc, rd);
+        float d2 = dot(oc, oc) - tc * tc;
+        float rr = gs.w + uNeck;
+        if (d2 > rr * rr) continue;
+        int s = int(uSpan[g].x);
+        int cnt = int(n);
+        for (int i = 0; i < MAXC; i++) {
+          if (i >= cnt) break;
+          if (gN >= LOCAL) break;
+          vec4 c = uCells[s + i];
+          vec3 o2 = c.xyz - ro;
+          float t2 = dot(o2, rd);
+          float p2 = dot(o2, o2) - t2 * t2;
+          float r2 = c.w + uNeck;
+          if (p2 > r2 * r2) continue;
+          bool near = tHit > 1e8 || abs(t2 - tHit) <= 2.6 * (c.w + uNeck);
+          if (near != (pass == 0)) continue;
+          gLoc[gN] = s + i;
+          gN++;
+        }
+      }
+    }
+  }
+  float dCells(vec3 p) {
+    if (gN == 0) return max(gFar, 0.02);
+    float d = 1e9;
+    for (int j = 0; j < LOCAL; j++) {
+      if (j >= gN) break;
+      vec4 c = uCells[gLoc[j]];
+      float di = length(p - c.xyz) - c.w;
+      d = (j == 0) ? di : smin(d, di, uNeck);
+    }
+    // the flagella of a Volvox colony: the rows stand FIXED on the sphere and
+    // only the beat moves, a metachronal wave running pole to pole down the
+    // axis — a travelling wave, never a turn of the pattern about the axis
+    if (uCilia > 0.0) {
+      vec3 n = normalize(p);
+      float rows = 0.5 + 0.5 * sin(atan(n.z, n.x) * 13.0);
+      float beat = 0.5 + 0.5 * sin(n.y * 9.0 - uFlow * 2.4);
+      d -= uCilia * rows * beat * smoothstep(-0.2, 0.4, d / max(uNeck, 1e-3) + 0.6);
+    }
+    // crowded against the zona: the outer cells flatten where they meet it,
+    // rounded off at the contact rather than creased, the way a blastomere
+    // pressed to the shell actually sits
+    return smax(d, length(p) - uCap, uNeck * 0.8);
+  }
+  // which of the kept cells owns this point (for its own tint and grain), and
+  // how far the point is from the wall it shares with its nearest neighbour
+  float cellSeed(vec3 p, out float wall) {
+    float b1 = 1e9, b2 = 1e9, seed = 0.0;
+    for (int j = 0; j < LOCAL; j++) {
+      if (j >= gN) break;
+      vec4 c = uCells[gLoc[j]];
+      float di = length(p - c.xyz) - c.w;
+      if (di < b1) { b2 = b1; b1 = di; seed = float(gLoc[j]); }
+      else if (di < b2) { b2 = di; }
+    }
+    wall = (b2 > 1e8) ? 1.0 : smoothstep(0.0, max(uNeck, 1e-4) * 0.9, b2 - b1);
+    return seed;
+  }
+
+  // ---- the analytic forms ---------------------------------------------------
+  // 0 amoeba, 1 paramecium, 2 euglena, 3 diatom, 4 radiolarian, 5 sponge.
+  // Each is a distance field about the origin at roughly unit scale, so any
+  // two of them — and a cell aggregate — blend by a mix of their distances.
+  vec3 diaSpace(vec3 p) {
+    // the frustule is held at a fixed tilt so the girdle band shows beside the
+    // valve face; the matrices are constants — nothing here turns with time
+    vec3 q = p;
+    q.yz = mat2(0.52, -0.854, 0.854, 0.52) * q.yz;
+    q.xy = mat2(0.94, -0.342, 0.342, 0.94) * q.xy;
+    return q;
+  }
+  float dAmoeba(vec3 p) {
+    float d = sdEll(p, vec3(0.60, 0.50, 0.52));
+    for (int i = 0; i < 6; i++) {
+      vec4 ps = uPseudo[i];
+      d = smin(d, sdCap(p, ps.xyz * 0.20, ps.xyz, ps.w), 0.20);
+    }
     return d;
   }
-  float mapNuc(vec3 p) {
+  float dParam(vec3 p) {
+    // the slipper: a broad posterior smoothly joined to a tapered anterior,
+    // bent along its length
+    vec3 q = p;
+    q.y += 0.15 * q.x * q.x - 0.05;
+    float d = sdEll(q - vec3(-0.20, 0.0, 0.0), vec3(0.70, 0.37, 0.34));
+    d = smin(d, sdEll(q - vec3(0.50, 0.03, 0.0), vec3(0.44, 0.24, 0.22)), 0.24);
+    // the oral groove, a furrow cut obliquely into the ventral side
+    float g = sdCap(q, vec3(0.52, -0.20, 0.19), vec3(-0.06, -0.28, 0.05), 0.17);
+    d = smax(d, -g, 0.10);
+    if (uCilia > 0.0) {
+      // ciliary rows round the body, beating in a metachronal wave that
+      // travels from the anterior astern (a travelling wave, not a rotation)
+      float rows = 0.5 + 0.5 * cos(atan(q.z, q.y) * 22.0);
+      float wave = 0.5 + 0.5 * sin(q.x * 16.0 - uFlow * 3.4);
+      d -= uCilia * rows * wave * clamp(1.15 - 0.7 * abs(q.x), 0.0, 1.0);
+    }
+    return d;
+  }
+  float dEuglena(vec3 p) {
+    float d = sdEll(p, vec3(0.30, 0.70, 0.28));
+    d = smin(d, sdCap(p, vec3(0.0, -0.52, 0.0), vec3(0.0, -0.98, 0.0), 0.05), 0.20);
+    // the flagellum: a travelling sine wave off the anterior reservoir
+    vec3 f = p - vec3(0.05, 0.66, 0.0);
+    float y = clamp(f.y, 0.0, 0.92);
+    float amp = 0.15 * smoothstep(0.0, 0.30, y);
+    float ph = y * 12.0 - uFlow * 4.2;
+    float df = length(vec3(f.x - amp * sin(ph), f.y - y, f.z - amp * 0.45 * cos(ph))) - 0.026;
+    return min(d, df);
+  }
+  float dDiatom(vec3 p) {
+    vec3 q = diaSpace(p);
+    float rr = length(q.xz);
+    vec2 dd = vec2(rr - 0.70, abs(q.y) - 0.16);
+    float d = min(max(dd.x, dd.y), 0.0) + length(max(dd, 0.0)) - 0.06;
+    // areolae: hexagonally packed pits sunk into both valve faces
+    float face = smoothstep(0.09, 0.15, abs(q.y)) * (1.0 - smoothstep(0.58, 0.70, rr));
+    d += 0.030 * face * smoothstep(0.052, 0.008, hexDist(q.xz, 0.112));
+    // costae radiating to the margin, and a ring of marginal spines
+    float ang = atan(q.z, q.x);
+    float sec = TAU / 26.0;
+    float aa = mod(ang + sec * 0.5, sec) - sec * 0.5;
+    vec2 rp = vec2(cos(aa), sin(aa)) * rr;
+    d = min(d, sdCap(vec3(rp.x, q.y, rp.y), vec3(0.66, 0.0, 0.0), vec3(0.83, 0.0, 0.0), 0.017));
+    return d;
+  }
+  float dRadio(vec3 p) {
+    float d = length(p) - 0.30;                          // the central capsule
+    float lp = max(length(p), 1e-4);
+    vec3 n = p / lp;
+    float shell = abs(lp - 0.70) - 0.052;
+    // an ordered lattice of pores through the mineral shell
+    float hd = hexDist(octa(n) * 4.6, 0.5);
+    shell = max(shell, (0.20 - hd) * 0.5);
+    d = min(d, shell);
+    vec3 a = abs(p);
+    float s1 = spike(a.x, length(a.yz), 0.98, 0.016);
+    float s2 = spike(a.y, length(a.xz), 0.98, 0.016);
+    float s3 = spike(a.z, length(a.xy), 0.98, 0.016);
+    float dg = dot(a, vec3(0.57735));
+    float s4 = spike(dg, length(a - 0.57735 * dg), 0.86, 0.013);
+    return min(d, min(min(s1, s2), min(s3, s4)));
+  }
+  // the sponge is held tipped toward the eye — a constant, like the diatom's
+  // — so the osculum reads as an opening and not as a rim seen edge-on
+  vec3 spgSpace(vec3 p) {
+    vec3 q = p;
+    q.yz = mat2(0.8525, -0.5227, 0.5227, 0.8525) * q.yz;
+    return q;
+  }
+  float dSponge(vec3 p) {
+    vec3 q = spgSpace(p);
+    float rad = 0.34 + 0.30 * smoothstep(-0.95, 0.85, q.y) + 0.05 * sin(q.y * 5.0);
+    float body = max(length(q.xz) - rad, abs(q.y + 0.05) - 0.90);
+    float inner = max(length(q.xz) - (rad - 0.15), -(q.y + 0.52));
+    body = smax(body, -inner, 0.06);                     // spongocoel and osculum
+    vec3 g = q * 7.0;
+    float pore = length(g - floor(g + 0.5)) / 7.0 - 0.052;
+    body = smax(body, -pore, 0.028);                     // ostia through the wall
+    return body;
+  }
+  float formD(vec3 p, int f) {
+    float d = 1e9;
+    if (f == 0) d = dAmoeba(p);
+    else if (f == 1) d = dParam(p);
+    else if (f == 2) d = dEuglena(p);
+    else if (f == 3) d = dDiatom(p);
+    else if (f == 4) d = dRadio(p);
+    else d = dSponge(p);
+    return d;
+  }
+  // organelles seen through the body, marched from the surface inward
+  float formOrgan(vec3 p, int f) {
+    float d = 1e9;
+    if (f == 0) {
+      d = min(length(p - vec3(0.06, -0.06, 0.0)) - 0.21,
+              length(p - vec3(0.26, 0.24, 0.16)) - 0.11);
+    } else if (f == 1) {
+      d = min(sdEll(p - vec3(0.02, 0.0, 0.0), vec3(0.22, 0.15, 0.15)),
+              min(length(p - vec3(0.46, 0.12, 0.0)) - 0.10,
+                  length(p + vec3(0.46, -0.12, 0.0)) - 0.10));
+    } else if (f == 2) {
+      float eye = length(p - vec3(0.06, 0.44, 0.20)) - 0.075;
+      vec3 q = p * 8.6;
+      float chl = length(q - floor(q + 0.5)) / 8.6 - 0.048;
+      d = min(eye, max(chl, length(p) - 0.60));
+    } else if (f == 3) {
+      vec3 q = diaSpace(p);
+      d = max(length(q.xz) - 0.42, abs(q.y) - 0.07);
+    } else if (f == 4) {
+      d = length(p) - 0.20;
+    } else {
+      // siliceous spicules glinting in the sponge's mesohyl
+      vec3 sq = spgSpace(p);
+      vec3 q2 = sq * 9.0;
+      d = max(length(q2 - floor(q2 + 0.5)) / 9.0 - 0.020, length(sq.xz) - 0.66);
+    }
+    return d;
+  }
+
+  // ---- the specimen field: EITHER the cell aggregate (mode 0) or an analytic
+  // form (mode 1), never a mix of the two distances. The cell field is culled
+  // per ray, so away from the cells it is a bound and not a distance; mixing
+  // that bound into a form's field erodes the form wherever the cull comes
+  // back empty, which broke every aggregate-to-protist boundary into shards.
+  // The two are marched separately instead and cross-faded by the level, so a
+  // blastula pours into an amoeba as a double exposure of two lit specimens.
+  float mapSpec(vec3 p, int mode) {
+    p.y *= 1.0 + uPress * 0.22;                          // press squeezes it flat
+    float d;
+    if (mode == 0) d = dCells(p);
+    else {
+      // the analytic forms are built at unit scale and blown up to fill the
+      // field of view; scaling the distance back keeps the march honest
+      vec3 q = p / uFormScale;
+      d = formD(q, uFormA);
+      if (uFormF > 0.002) d = mix(d, formD(q, uFormB), uFormF);
+      d *= uFormScale;
+    }
+    // the jiggle is a membrane, not silica — the analytic forms damp it
+    d += uJig * (mode == 0 ? 1.0 : uSoft) * 0.045 * (noise3(p * 3.0 + vec3(0.0, uTime * 0.35, 0.0)) - 0.5);
+    return d;
+  }
+  // the analytic forms' organelles, seen through the body. A cell's nucleus is
+  // NOT marched: it is the owning cell's own sphere, hit analytically in
+  // specimen(), which is both cheaper and correct — the min over every culled
+  // cell used to draw a neighbour's nucleus through the wall of the cell in
+  // front of it, as doubled, offset discs.
+  float mapOrgan(vec3 p) {
     p.y *= 1.0 + uPress * 0.22;
-    float d = 1e9;
-    for (int i = 0; i < 16; i++) {
-      if (i >= uCount) break;
-      vec4 c = uCells[i];
-      d = min(d, length(p - c.xyz) - c.w * 0.38);
-    }
-    return d;
+    vec3 q = p / uFormScale;
+    float d = formOrgan(q, uFormA);
+    if (uFormF > 0.002) d = mix(d, formOrgan(q, uFormB), uFormF);
+    return d * uFormScale;
   }
-  vec3 normalCells(vec3 p) {
+  vec3 normalOrgan(vec3 p) {
+    const vec2 e = vec2(0.0022, 0.0);
+    return normalize(vec3(
+      mapOrgan(p + e.xyy) - mapOrgan(p - e.xyy),
+      mapOrgan(p + e.yxy) - mapOrgan(p - e.yxy),
+      mapOrgan(p + e.yyx) - mapOrgan(p - e.yyx)));
+  }
+  vec3 normalSpec(vec3 p, int mode) {
     const vec2 e = vec2(0.0025, 0.0);
     return normalize(vec3(
-      mapCells(p + e.xyy) - mapCells(p - e.xyy),
-      mapCells(p + e.yxy) - mapCells(p - e.yxy),
-      mapCells(p + e.yyx) - mapCells(p - e.yyx)));
+      mapSpec(p + e.xyy, mode) - mapSpec(p - e.xyy, mode),
+      mapSpec(p + e.yxy, mode) - mapSpec(p - e.yxy, mode),
+      mapSpec(p + e.yyx, mode) - mapSpec(p - e.yyx, mode)));
   }
 
-  // ---- the egg cell: zona, blastomeres, nuclei
-  vec3 eggCell(vec3 ro, vec3 rd, vec3 E) {
-    vec3 col = vec3(0.0);
-    // dark-field halo outside the zona
-    float dC = length(cross(ro - E, rd));
-    vec3 zonaTint = mix(uPal2, vec3(1.0), 0.6);
-    col += zonaTint * 0.05 * exp(-(dC - uZona) * 5.0) * step(uZona, dC) * (0.6 + 0.4 * uLevelA);
-
-    float ez;
-    float tz = iSphere(ro, rd, E, uZona, ez);
-    if (tz > 0.0) {
-      vec3 pz = ro + rd * tz;
-      vec3 nz = normalize(pz - E);
-      float fz = pow(1.0 - max(dot(nz, -rd), 0.0), 3.0);
-      vec3 rdi = refract(rd, nz, 1.0 / 1.10);
-      // march the cells inside the zona along the refracted ray
-      vec3 p = pz;
-      float t = 0.0;
-      bool hit = false;
-      float tExit = 2.0 * uZona + 0.2;
-      for (int i = 0; i < STEPS; i++) {
-        float d = mapCells(p - E);
-        if (d < 0.0015) { hit = true; break; }
-        t += d * 0.92;
-        if (t > tExit) break;
-        p = pz + rdi * t;
-      }
-      vec3 inner = vec3(0.0);
-      if (hit) {
-        vec3 q0 = p - E;
-        vec3 n = normalCells(q0);
-        vec3 L = normalize(vec3(-0.55, 0.7, 0.5));
-        vec3 L2 = normalize(vec3(0.7, -0.3, 0.4));
-        float gr = noise3(q0 * 14.0 + vec3(0.0, uTime * 0.05, 0.0));
-        float gr2 = noise3(q0 * 40.0 + uTime * 0.02);
-        vec3 cyto = mix(mix(uPal3, uPal4, 0.3), vec3(1.0), 0.25);
-        cyto *= 0.85 + 0.22 * gr + 0.10 * gr2 * (1.0 + uHigh * 1.5);
-        float wrap = dot(n, L) * 0.5 + 0.5;
-        float lit = wrap * wrap;
-        float rim = pow(1.0 - max(dot(n, -rdi), 0.0), 2.0);
-        vec3 sss = mix(uPal4, uPal3, 0.5) * (0.35 * rim + 0.25 * pow(max(dot(rdi, L), 0.0), 3.0));
-        float spec = pow(max(dot(reflect(-L, n), -rdi), 0.0), 60.0) * 0.45 + pow(max(dot(reflect(-L2, n), -rdi), 0.0), 30.0) * 0.12;
-        inner = cyto * (0.12 + 0.88 * lit) + sss + vec3(spec) + uPal0 * rim * 0.25;
-        // the nucleus, seen through the cytoplasm
-        float tn = 0.02, depth = 0.0;
-        bool nuc = false;
-        vec3 q = q0;
-        for (int j = 0; j < NSTEPS; j++) {
-          q = q0 + rdi * tn;
-          float dn = mapNuc(q);
-          if (dn < 0.003) { nuc = true; depth = tn; break; }
-          if (mapCells(q) > 0.02) break;
-          tn += max(dn * 0.9, 0.01);
-        }
-        if (nuc) {
-          float nShade = 0.5 + 0.5 * noise3(q * 9.0);
-          vec3 nucCol = mix(uPal1, uPal0, 0.2) * (0.6 + 0.4 * nShade);
-          float nucleolus = smoothstep(0.6, 0.9, noise3(q * 18.0 + 3.0));
-          nucCol = mix(nucCol, uPal1 * 0.5, nucleolus * 0.6);
-          inner = mix(inner, nucCol, exp(-depth * 2.5) * 0.62);
-        }
-        inner *= 1.0 + uBeat * 0.12;
-      }
-      // the zona: glassy shell, thin bright band, rim
-      float ringZ = exp(-pow((dC - uZona * 0.965) / (uZona * 0.018), 2.0));
-      col += inner * (0.92 - 0.25 * fz) + zonaTint * (fz * 0.55 + 0.035) * (0.6 + 0.4 * uLevelA) + zonaTint * ringZ * 0.22;
-      col *= smoothstep(0.0, max(fwidth(ez) * 1.5, 0.0001), ez);
+  // ---- surface colour --------------------------------------------------------
+  vec3 cellAlbedo(vec3 p, float sd, float wall, out vec3 emis) {
+    float tint = h11(sd * 3.17 + 1.0);
+    float gr = noise3(p * (12.0 + 5.0 * uGrain) + vec3(0.0, uTime * 0.05, 0.0));
+    float gr2 = noise3(p * 40.0 + uTime * 0.02);
+    vec3 cyto = mix(mix(uPal3, uPal4, 0.15 + 0.45 * tint), vec3(1.0), 0.25);
+    // a heterocyst punctuates the filament: bigger, paler, thicker-walled
+    float het = uHetero * step(0.5, fract(sd / 7.0) * 7.0 - 5.5);
+    cyto = mix(cyto, mix(uPal1, vec3(1.0), 0.55), het * 0.8);
+    cyto *= 0.85 + 0.22 * gr + 0.10 * gr2 * (1.0 + uHigh * 1.5);
+    // the shared membrane: a shaded groove with a bright line along it, the
+    // way a cell junction reads under dark-field light
+    cyto *= 0.52 + 0.48 * wall;
+    emis = mix(uPal0, vec3(1.0), 0.45) * 0.30 * pow(1.0 - wall, 3.0);
+    return cyto;
+  }
+  vec3 formAlbedo(vec3 p, vec3 n, int f, out vec3 emis, out float gloss) {
+    emis = vec3(0.0);
+    gloss = 1.0;
+    vec3 al = vec3(0.0);
+    if (f == 0) {                                        // amoeba
+      float gr = noise3(p * 17.0 + vec3(0.0, uTime * 0.12, 0.0));
+      float gr2 = noise3(p * 44.0 - uTime * 0.05);
+      float core = smoothstep(0.78, 0.18, length(p));     // granules crowd the endoplasm
+      al = mix(mix(uPal2, vec3(1.0), 0.62), mix(uPal3, uPal4, 0.35), core * (0.5 + 0.5 * gr));
+      al *= 0.8 + 0.36 * gr2;
+    } else if (f == 1) {                                 // paramecium
+      vec3 q = p; q.y += 0.15 * q.x * q.x - 0.05;
+      float rows = 0.5 + 0.5 * cos(atan(q.z, q.y) * 17.0);
+      float wave = 0.5 + 0.5 * sin(q.x * 19.0 - uFlow * 3.4);
+      emis += mix(uPal0, vec3(1.0), 0.6) * rows * wave * 0.16 * (1.0 - abs(n.x));
+      al = mix(mix(uPal2, uPal3, 0.4), vec3(1.0), 0.42) * (0.86 + 0.2 * noise3(p * 26.0));
+    } else if (f == 2) {                                 // euglena
+      // the pellicle's helical striations, chloroplast discs beneath them,
+      // the eyespot beside the reservoir, and a clear hyaline flagellum
+      float strip = 0.5 + 0.5 * sin(atan(p.z, p.x) * 11.0 + p.y * 15.0);
+      float disc = smoothstep(0.42, 0.72, noise3(p * 15.0));
+      vec3 chl = mix(uPal2, vec3(1.0), 0.35);
+      al = mix(mix(uPal4, vec3(1.0), 0.62), chl, disc * 0.7) * (0.88 + 0.30 * strip);
+      float fl = smoothstep(0.60, 0.80, p.y) * smoothstep(0.30, 0.16, length(p.xz));
+      al = mix(al, mix(uPal2, vec3(1.0), 0.75), fl);
+      emis += mix(uPal2, vec3(1.0), 0.8) * fl * 0.40;
+      emis += mix(uPal3, uPal0, 0.25) * 2.2 * smoothstep(0.15, 0.04, length(p - vec3(0.06, 0.44, 0.20)));
+    } else if (f == 3) {                                 // diatom
+      gloss = 2.4;
+      vec3 q = diaSpace(p);
+      float rr = length(q.xz);
+      float pore = smoothstep(0.050, 0.020, hexDist(q.xz, 0.112));
+      float cost = 0.5 + 0.5 * cos(atan(q.z, q.x) * 26.0);
+      al = mix(uPal2, vec3(1.0), 0.72) * (0.7 + 0.5 * cost * smoothstep(0.2, 0.68, rr));
+      emis += mix(uPal2, vec3(1.0), 0.85) * pore * 0.22 * smoothstep(0.09, 0.14, abs(q.y));
+    } else if (f == 4) {                                 // radiolarian
+      gloss = 2.0;
+      float lp = length(p);
+      float capsule = smoothstep(0.34, 0.26, lp);
+      al = mix(mix(uPal2, vec3(1.0), 0.7), mix(uPal1, uPal0, 0.4), capsule) * (0.85 + 0.25 * noise3(p * 21.0));
+      emis += mix(uPal0, vec3(1.0), 0.4) * 0.20 * smoothstep(0.62, 0.74, lp);
+    } else {                                             // sponge
+      vec3 sq = spgSpace(p);
+      vec3 q = sq * 7.0;
+      float pr = length(q - floor(q + 0.5)) / 7.0;
+      float ost = smoothstep(0.075, 0.048, pr);
+      al = mix(mix(uPal2, uPal4, 0.35), vec3(1.0), 0.30) * (0.8 + 0.3 * noise3(p * 15.0));
+      emis += mix(uPal0, vec3(1.0), 0.35) * ost * 0.10;
+      // the osculum's throat, lit from inside
+      emis += mix(uPal2, vec3(1.0), 0.9) * 0.45 * smoothstep(0.55, 0.86, sq.y) * smoothstep(0.55, 0.30, length(sq.xz));
     }
+    return al;
+  }
+  vec3 organTintOf(vec3 p, int f) {
+    if (f == 2) {
+      // the eyespot burns beside the reservoir; the rest is chloroplast
+      float eye = smoothstep(0.11, 0.03, length(p - vec3(0.06, 0.44, 0.20)));
+      return mix(mix(uPal2, uPal3, 0.55), mix(uPal0, vec3(1.0), 0.3), eye);
+    }
+    if (f == 1) return mix(uPal1, vec3(1.0), 0.25);
+    if (f == 3) return mix(uPal3, uPal2, 0.4);
+    if (f == 5) return mix(uPal2, vec3(1.0), 0.8);
+    return mix(uPal1, uPal0, 0.2);
+  }
+  // the organelle tint follows the SAME blend the body does; switching forms
+  // on a hard threshold at half way flicked the euglena's eyespot out in one
+  // frame in the middle of an otherwise continuous crossing
+  vec3 organTint(vec3 p) {
+    vec3 t = organTintOf(p, uFormA);
+    if (uFormF > 0.002) t = mix(t, organTintOf(p, uFormB), uFormF);
+    return t;
+  }
+
+  // The two marches carry their OWN bounding radii. One number for both made
+  // the drawn zona jump 35 % wide in a single frame the instant a protist
+  // stage came into range — while its weight was still zero and nothing of it
+  // was drawn — because the bound was gated on the form being selected rather
+  // than on the form being visible.
+  uniform float uBound, uBoundF;
+
+  // ---- the specimen: bound, refract at the zona, march, light ---------------
+  // mode 0 marches the cell aggregate, mode 1 the analytic form; the level
+  // weighs the two calls against each other, and the plate glow and the
+  // colony's fringe are drawn in both because those weights sum to one. The
+  // ZONA is the embryo's own shell and is drawn round the cell march only.
+  vec3 specimen(vec3 ro, vec3 rd, vec3 E, int mode) {
+    vec3 col = vec3(0.0);
+    float bnd = mode == 0 ? uBound : uBoundF;
+    vec3 roL = ro - E;
+    float dC = length(cross(roL, rd));
+    vec3 zonaTint = mix(uPal2, vec3(1.0), 0.6);
+    col += zonaTint * 0.05 * exp(-(dC - bnd) * 5.0) * step(bnd, dC) * (0.6 + 0.4 * uLevelA);
+
+    // the flagellar fringe of a Volvox colony: hairs standing off the wall,
+    // beating in a metachronal wave round the sphere
+    if (uFringe > 0.0) {
+      vec3 cp = roL - rd * dot(roL, rd);
+      // the hairs stand in fixed rows round the limb; only the beat travels,
+      // and it travels DOWN the colony, so the fringe never turns by itself
+      float hair = pow(0.5 + 0.5 * sin(atan(cp.y, cp.x) * 72.0), 3.0);
+      float beat = 0.55 + 0.45 * sin(cp.y * 24.0 - uFlow * 2.6);
+      float band = exp(-max(0.0, dC - uFringeR) * 52.0) * step(uFringeR * 0.99, dC);
+      col += mix(uPal2, vec3(1.0), 0.6) * hair * beat * band * uFringe * 0.26;
+      // the glassy matrix the colony's cells are embedded in
+      float eg;
+      float tg = iSphere(roL, rd, vec3(0.0), uFringeR, eg);
+      if (tg > 0.0) {
+        vec3 ng = normalize(roL + rd * tg);
+        float fr = pow(1.0 - max(dot(ng, -rd), 0.0), 4.0);
+        col += mix(uPal2, vec3(1.0), 0.7) * (fr * 0.15 + 0.012) * uFringe;
+      }
+    }
+
+    float eb;
+    float tb = iSphere(roL, rd, vec3(0.0), bnd, eb);
+    // the hand can dolly the eye inside a long specimen's bounding sphere —
+    // then the march simply starts at the eye
+    bool inSphere = dot(roL, roL) < bnd * bnd;
+    if (tb <= 0.0 && !inSphere) return col;
+    if (inSphere) { tb = 0.0; eb = 1.0; }
+    float zw = (inSphere || mode == 1) ? 0.0 : uZonaW;
+    vec3 pb = roL + rd * tb;
+    vec3 nb = normalize(pb);
+    float fz = pow(1.0 - max(dot(nb, -rd), 0.0), 3.0);
+    vec3 rdi = normalize(mix(rd, refract(rd, nb, 1.0 / 1.10), zw));
+
+    // The cull has to run in the SAME space the field is evaluated in: press
+    // squeezes the march point inside mapSpec, so the ray is squeezed here too
+    // before the cell list is built. Culling the unsqueezed ray against the
+    // squeezed body dropped cells near the poles and punched holes in it.
+    vec3 sqv = vec3(1.0, 1.0 + uPress * 0.22, 1.0);
+    if (mode == 0) cullCells(pb * sqv, normalize(rdi * sqv));
+    else gN = 0;
+    vec3 p = pb;
+    float t = 0.0;
+    bool hit = false;
+    float tExit = 2.0 * bnd + 0.2;
+    for (int i = 0; i < SPEC_STEPS; i++) {
+      float d = mapSpec(p, mode);
+      if (d < 0.0018) { hit = true; break; }
+      t += d * 0.85;
+      if (t > tExit) break;
+      p = pb + rdi * t;
+    }
+
+    vec3 inner = vec3(0.0);
+    if (hit) {
+      vec3 q0 = p;
+      vec3 n = normalSpec(q0, mode);
+      vec3 L = normalize(vec3(-0.55, 0.7, 0.5));
+      vec3 L2 = normalize(vec3(0.7, -0.3, 0.4));
+      vec3 alb = vec3(0.0), emis = vec3(0.0);
+      float gloss = 1.0;
+      vec3 qs = q0 * sqv;                 // the hit point in the field's own space
+      float sd = 0.0, wallv = 1.0;
+      if (mode == 0) {
+        if (gN > 0) {
+          sd = cellSeed(qs, wallv);
+          alb = cellAlbedo(qs, sd, wallv, emis);
+        }
+      } else {
+        float g1;
+        vec3 qf = q0 / uFormScale;
+        alb = formAlbedo(qf, n, uFormA, emis, g1);
+        if (uFormF > 0.002) {
+          vec3 e2; float g2;
+          vec3 a2 = formAlbedo(qf, n, uFormB, e2, g2);
+          alb = mix(alb, a2, uFormF);
+          emis = mix(emis, e2, uFormF);
+          g1 = mix(g1, g2, uFormF);
+        }
+        gloss = g1;
+      }
+
+      float wrap = dot(n, L) * 0.5 + 0.5;
+      float lit = wrap * wrap;
+      float rim = pow(1.0 - max(dot(n, -rdi), 0.0), 2.0);
+      vec3 sss = mix(uPal4, uPal3, 0.5) * (0.35 * rim + 0.25 * pow(max(dot(rdi, L), 0.0), 3.0));
+      float spec = pow(max(dot(reflect(-L, n), -rdi), 0.0), 60.0 * gloss) * 0.45 * gloss
+        + pow(max(dot(reflect(-L2, n), -rdi), 0.0), 30.0 * gloss) * 0.12;
+      inner = alb * (0.12 + 0.88 * lit) + sss + vec3(spec) + uPal0 * rim * 0.25 + emis;
+
+      // ---- organelles, seen through the body. They are LIT BODIES, not flat
+      // stamped discs: each takes a normal, the same two-light rig as the
+      // membrane, a rim, a wet highlight and a Beer term for the cytoplasm it
+      // is seen under. A cell's nucleus is the OWNING cell's own sphere, hit
+      // analytically, so its silhouette is the sphere's own antialiased edge
+      // and no neighbour's nucleus prints through the wall in front of it.
+      if (mode == 0 && gN > 0) {
+        vec4 own = uCells[int(sd + 0.5)];
+        vec3 rs = normalize(rdi * sqv);
+        float en;
+        float tn = iSphere(qs, rs, own.xyz, own.w * 0.38, en);
+        if (tn > 0.0) {
+          vec3 pn = qs + rs * tn;
+          vec3 nn = normalize((pn - own.xyz) * sqv);
+          float nl = dot(nn, L) * 0.5 + 0.5;
+          vec3 nt = mix(uPal1, uPal0, 0.2);
+          vec3 oc = nt * (0.18 + 0.82 * nl * nl) * (0.78 + 0.32 * noise3(pn * 9.0));
+          oc += nt * pow(1.0 - max(dot(nn, -rdi), 0.0), 2.0) * 0.42
+              + vec3(1.0) * pow(max(dot(reflect(-L, nn), -rdi), 0.0), 44.0) * 0.10;
+          // the nucleolus: a denser body inside the nucleus
+          oc = mix(oc, uPal1 * 0.45, smoothstep(0.55, 0.9, noise3(pn * 18.0 + 3.0)) * 0.55);
+          float aaN = smoothstep(0.0, max(fwidth(en) * 1.5, 0.0001), en);
+          inner = mix(inner, oc, aaN * exp(-tn * 2.6) * 0.70);
+        }
+      } else if (mode == 1) {
+        float tn = 0.02, depth = 0.02, minD = 1e9;
+        vec3 qb = q0;
+        for (int j = 0; j < NSTEPS; j++) {
+          vec3 q = q0 + rdi * tn;
+          float dn = mapOrgan(q);
+          if (dn < minD) { minD = dn; qb = q; depth = tn; }
+          if (dn < 0.0025) break;
+          if (mapSpec(q, 1) > 0.02) break;
+          tn += max(dn * 0.9, 0.012);
+        }
+        // the silhouette fades where the short march only grazes the body,
+        // instead of cutting off hard wherever it happened to converge
+        float cover = 1.0 - smoothstep(0.0, 0.05, minD);
+        if (cover > 0.002) {
+          vec3 no = normalOrgan(qb);
+          float nl = dot(no, L) * 0.5 + 0.5;
+          vec3 nt = organTint(qb / uFormScale);
+          vec3 oc = nt * (0.20 + 0.80 * nl * nl) * (0.78 + 0.32 * noise3(qb * 9.0));
+          oc += nt * pow(1.0 - max(dot(no, -rdi), 0.0), 2.0) * 0.38
+              + vec3(1.0) * pow(max(dot(reflect(-L, no), -rdi), 0.0), 48.0) * 0.12;
+          inner = mix(inner, oc, cover * exp(-depth * 2.5) * 0.62);
+        }
+      }
+
+      // the blastocoel: the fluid the shell of cells encloses, lit by its chord
+      if (mode == 0 && uCavity > 0.002) {
+        float b = dot(q0, rdi);
+        if (b < 0.0) {
+          inner += mix(uPal2, vec3(1.0), 0.5) * uCavity * chord(q0, rdi, uCavR) * 0.19 * (0.75 + 0.35 * uBass);
+        }
+      }
+      // daughter colonies sitting inside a Volvox sphere
+      if (mode == 0) {
+        for (int i = 0; i < 4; i++) {
+          if (float(i) >= uDaughN) break;
+          vec4 dg = uDaugh[i];
+          float e2;
+          float td = iSphere(q0, rdi, dg.xyz, dg.w, e2);
+          if (td > 0.0) {
+            vec3 pn = normalize(q0 + rdi * td - dg.xyz);
+            float cellPat = smoothstep(0.30, 0.06, hexDist(vec2(atan(pn.z, pn.x) * 0.9, pn.y * 1.6), 0.34));
+            inner += mix(uPal3, vec3(1.0), 0.35) * (0.07 + 0.20 * cellPat) * uCavity;
+          }
+        }
+      }
+      inner *= 1.0 + uBeat * 0.12;
+    }
+
+    float ringZ = exp(-pow((dC - bnd * 0.965) / (bnd * 0.018), 2.0));
+    float aa = smoothstep(0.0, max(fwidth(eb) * 1.5, 0.0001), eb);
+    vec3 shell = zonaTint * (fz * 0.55 + 0.035) * (0.6 + 0.4 * uLevelA) + zonaTint * ringZ * 0.22;
+    col += inner * (0.92 - 0.25 * fz * zw) + shell * zw * aa;
     return col;
   }
 
@@ -255,6 +1010,22 @@ const GLSL = /* glsl */ `
     col += plate(r);
     float inside = 1.0 - smoothstep(uDish * 0.985, uDish, r);
     if (inside <= 0.0) return col;
+    // the oat flakes: speckled scraps of substrate the veins anchor to. A
+    // flake out of reach is a dull husk the dark field still picks out; the
+    // moment the colony arrives it lights, which is how the network's targets
+    // read on the plate.
+    for (int i = 0; i < 10; i++) {
+      if (float(i) >= uFoodN) break;
+      vec4 fd = uFood[i];
+      vec2 dq = q - fd.xy;
+      float fr = length(dq / vec2(fd.z, fd.z * 0.72));
+      float m = smoothstep(1.0, 0.42, fr);
+      float rimF = smoothstep(1.05, 0.86, fr) * smoothstep(0.62, 0.9, fr);
+      float speck = 0.45 + 0.55 * noise3(vec3(dq * 70.0, 0.0));
+      vec3 husk = mix(uPal2, vec3(1.0), 0.45);
+      col += husk * (m * speck * 0.09 + rimF * 0.16);
+      col += mix(uPal1, vec3(1.0), 0.55) * m * speck * 0.55 * fd.w * (1.0 + uBeat * 0.5);
+    }
     vec2 uvT = q / (2.0 * uDish) + 0.5;
     float tr = texture(uTrail, uvT).r;
     float tx = texture(uTrail, uvT + vec2(uTexel, 0.0)).r - texture(uTrail, uvT - vec2(uTexel, 0.0)).r;
@@ -268,11 +1039,11 @@ const GLSL = /* glsl */ `
     vec3 L = normalize(vec3(-0.5, 0.65, 0.6));
     float wrap = dot(n, L) * 0.5 + 0.5;
     float spec = pow(max(dot(reflect(-L, n), -rd), 0.0), 48.0);
-    // granular protoplasm; the shuttle streaming pulses along the veins
     float gr = noise3(vec3(q * 26.0, uTime * 0.08));
     float stream = 0.82 + 0.18 * sin(uFlow - tr * 7.0 + gr * 2.5);
-    vec3 cyto = mix(mix(uPal3, uPal4, 0.2), vec3(1.0), 0.22);
-    vec3 fan = mix(uPal3, uPal0, 0.55);
+    // the species tint: where this strain sits between the palette's stops
+    vec3 cyto = mix(mix(uPal3, uPal4, uTintA), vec3(1.0), 0.22);
+    vec3 fan = mix(uPal3, uPal0, 0.25 + 0.6 * uTintB);
     vec3 plasm = fan * body * (0.16 + 0.24 * wrap) * (0.8 + 0.3 * gr)
       + cyto * vein * (0.3 + 0.55 * wrap * wrap) * stream * (0.9 + 0.2 * gr) * (1.0 + uBass * 0.3)
       + mix(cyto, vec3(1.0), 0.4) * ridge * 0.35 * stream
@@ -304,15 +1075,37 @@ const GLSL = /* glsl */ `
     return col;
   }
 
+  // ---- the helix's dark-field column: scattered light round the molecule
+  vec3 helixField(vec3 ro, vec3 rd, vec3 E) {
+    vec3 oc = ro - E;
+    vec3 ax = vec3(0.0, 1.0, 0.0);
+    vec3 nn = cross(rd, ax);
+    float ln = length(nn);
+    float dl = ln > 1e-4 ? abs(dot(oc, nn / ln)) : length(cross(oc, ax));
+    vec3 tint = mix(uPal2, vec3(1.0), 0.55);
+    float haze = noise3(vec3(oc.xy * 3.0, uTime * 0.05));
+    return tint * (0.11 * exp(-dl * 3.0) + 0.012 * haze) * (0.55 + 0.45 * uLevelA) * (1.0 + uBeat * 0.25);
+  }
+
   void main() {
     vec2 uv = (vUv - 0.5) * vec2(uRes.x / uRes.y, 1.0);
     vec3 ro = vec3(0.0, 0.0, uDist);
     vec3 rd = normalize(vec3(uv * 1.05, -1.0));
     vec3 E = vec3(uPan.x, uPan.y, 0.0); // the specimen, panned by the hand
     vec3 col = vec3(0.0);
-    if (uOrg.x > 0.002) col += eggCell(ro, rd, E) * uOrg.x;
+    if (uOrg.x > 0.002) col += mycPlate(ro, rd, E) * uOrg.x;
     if (uOrg.y > 0.002) col += slimeMold(ro, rd, E) * uOrg.y;
-    if (uOrg.z > 0.002) col += mycPlate(ro, rd, E) * uOrg.z;
+    if (uOrg.z > 0.002) {
+      // the cell aggregate and the analytic form are marched separately and
+      // weighed against each other; the weights always sum to one
+      float wc = clamp(uCellW, 0.0, 1.0);
+      float wf = uProtW * (1.0 - wc);
+      vec3 sp = vec3(0.0);
+      if (wc > 0.002) sp += specimen(ro, rd, E, 0) * wc;
+      if (wf > 0.002) sp += specimen(ro, rd, E, 1) * wf;
+      col += sp * uOrg.z;
+    }
+    if (uOrg.w > 0.002) col += helixField(ro, rd, E) * uOrg.w;
     fragColor = vec4(col * uIntensity, 1.0);
   }
 `;
@@ -320,16 +1113,18 @@ const GLSL = /* glsl */ `
 // ------------------------------------------------------------- the hyphae
 // Screen-space capsules from aP0 to aP1 (plate-local, the same pinhole as the
 // quad: a point at depth d = uDist − z lands at uv = xy / (1.05 d)), so the
-// tubes sit exactly on the plate the quad draws.
+// tubes sit exactly on the plate the quad draws. aInfo carries the generation
+// with a cord flag added at +32, the cap kind (0 none, 1 apex, 2 sporangium,
+// 3 anastomosis), a per-segment random and the growth step it was laid at.
 const MYC_VERT = /* glsl */ `
   uniform vec2 uRes, uPan;
-  uniform float uDist, uPress, uBass, uCount, uTotal, uWeight;
+  uniform float uDist, uPress, uBass, uCount, uTotal, uWeight, uThick;
   in vec2 aQuad;  // per vertex: side -1..1, along 0 (start) .. 1 (end)
   in vec3 aP0;
   in vec3 aP1;
-  in vec4 aInfo;  // generation, tip flag, random, growth step
+  in vec4 aInfo;
   out vec2 vQ;
-  out float vLenR, vTip, vA, vGen, vRnd;
+  out float vLenR, vTip, vA, vGen, vRnd, vKind;
   vec2 toUv(vec3 p) {
     p.y /= 1.0 + uPress * 0.22; // press squashes the colony like the embryo
     float d = max(uDist - p.z, 0.3);
@@ -338,6 +1133,9 @@ const MYC_VERT = /* glsl */ `
   void main() {
     float id = float(gl_InstanceID);
     float vis = step(id + 0.5, uCount);
+    float gen = mod(aInfo.x, 32.0);
+    float cord = step(32.0, aInfo.x);      // a rhizomorph strand runs thicker
+    float kind = aInfo.y;
     vec2 s0 = toUv(aP0);
     vec2 s1 = toUv(aP1);
     float aspect = uRes.x / uRes.y;
@@ -347,23 +1145,26 @@ const MYC_VERT = /* glsl */ `
     vec2 nrm = vec2(-dir.y, dir.x);
     float depth = uDist - 0.5 * (aP0.z + aP1.z);
     float pxH = 1.0 / uRes.y;
-    // radius in height units: thicker main hyphae, thinner branches, bass swells
-    float radPx = (2.7 * pow(0.86, aInfo.x)) * (3.4 / depth) * (1.0 + uBass * 0.3);
+    // radius in height units: thicker main hyphae and cords, thinner branches,
+    // a swollen head on a sporangium, bass swells them all
+    float radPx = uThick * pow(0.87, gen) * (1.0 + cord * 1.15) * (3.4 / depth) * (1.0 + uBass * 0.3);
+    radPx *= (kind > 1.5 && kind < 2.5) ? 3.2 : 1.0;
     float rad = max(radPx, 0.9) * pxH;
     vLenR = len / rad;
     // segments butt flat against each other (no additive doubling at the
     // joints); only a hypha's last segment — its apex — gets a round cap
-    float cap = aInfo.y;
+    float cap = step(0.5, kind);
     vec2 pos = mix(s0, s1 + dir * rad * cap, aQuad.y) + nrm * aQuad.x * rad;
     vec2 ndc = pos / vec2(aspect, 1.0) * 2.0;
     gl_Position = vec4(ndc * vis, vis > 0.5 ? 0.0 : 2.0, 1.0);
     vQ = vec2(aQuad.x, aQuad.y * (vLenR + cap));
     // the growth front glows as the apices; once grown, the true tips do
     float front = smoothstep(uCount - 70.0, uCount, id);
-    vTip = max(front, aInfo.y * smoothstep(uTotal * 0.97, uTotal, uCount));
-    vGen = aInfo.x;
+    vTip = max(front, step(0.5, kind) * smoothstep(uTotal * 0.97, uTotal, uCount));
+    vGen = gen;
     vRnd = aInfo.z;
-    vA = uWeight * vis * (0.55 + 0.25 * smoothstep(4.6, 2.6, depth)) * pow(0.9, aInfo.x);
+    vKind = kind;
+    vA = uWeight * vis * (0.42 + 0.22 * smoothstep(4.6, 2.6, depth)) * pow(0.9, gen);
   }
 `;
 
@@ -371,8 +1172,9 @@ const MYC_FRAG = /* glsl */ `
   uniform vec3 uPal0, uPal1, uPal2;
   uniform float uIntensity, uBeat, uHigh, uTime;
   in vec2 vQ;
-  in float vLenR, vTip, vA, vGen, vRnd;
+  in float vLenR, vTip, vA, vGen, vRnd, vKind;
   out vec4 fragColor;
+  float h1(float n) { return fract(sin(n * 127.1) * 43758.5453); }
   void main() {
     float along = vQ.y; // 0 at the start, vLenR at the end, beyond it only on a capped apex
     float u = clamp(along, 0.0, vLenR);
@@ -386,12 +1188,126 @@ const MYC_FRAG = /* glsl */ `
     // septa: faint cross-walls along the hypha
     float s = fract((u + vRnd * 9.0) / 9.0);
     float sept = 1.0 - 0.18 * (1.0 - smoothstep(0.0, 0.05, abs(s - 0.5))) * step(0.5, vLenR);
-    vec3 hyaline = mix(vec3(1.0), mix(uPal2, uPal0, 0.5), 0.45);
+    vec3 hyaline = mix(vec3(1.0), mix(uPal2, uPal0, 0.5), 0.62);
     vec3 col = hyaline * (0.22 * body + 0.55 * core + 0.4 * wall) * sept;
     // the apex: a swollen, brighter tip at the far end
     float apex = exp(-((along - vLenR) * (along - vLenR) + vQ.x * vQ.x) * 1.2) * vTip;
     col += mix(uPal0, vec3(1.0), 0.5) * apex * (1.1 + uBeat * 0.8);
+    // a sporangium: a spore-speckled head; an anastomosis: a bright fusion node
+    if (vKind > 1.5 && vKind < 2.5) {
+      float spore = h1(floor(vQ.x * 9.0) * 31.0 + floor(along * 9.0) * 7.0 + vRnd * 51.0);
+      col += mix(uPal1, vec3(1.0), 0.35) * body * (0.45 + 0.85 * spore) * (1.0 + uBeat * 0.5);
+    } else if (vKind > 2.5) {
+      col += mix(uPal0, vec3(1.0), 0.6) * core * 0.7;
+    }
     col *= 1.0 + uHigh * 0.2 * sin(uTime * 6.0 + vRnd * 40.0);
+    fragColor = vec4(col * vA * uIntensity, 1.0);
+  }
+`;
+
+// ------------------------------------------------------------- the helix
+// The same screen-space capsule projection, plus the hand's azimuth about the
+// molecule's own axis — the ONLY thing that turns it, and never a clock.
+// aInfo: x role (0 backbone, 1 base, 2 hydrogen bond, 3 histone core,
+// 4 polymerase, 5 daughter strand), y palette slot, z random, w strand.
+const HX_VERT = /* glsl */ `
+  uniform vec2 uRes, uPan;
+  uniform float uDist, uPress, uBass, uCount, uWeight, uAzim;
+  in vec2 aQuad;
+  in vec3 aP0;
+  in vec3 aP1;
+  in vec4 aInfo;
+  out vec2 vQ;
+  out float vLenR, vA, vRole, vSlot, vRnd, vStrand, vDepth;
+  vec3 spin(vec3 p) {
+    float c = cos(uAzim), s = sin(uAzim);
+    return vec3(p.x * c - p.z * s, p.y / (1.0 + uPress * 0.30), p.x * s + p.z * c);
+  }
+  vec2 toUv(vec3 p) {
+    float d = max(uDist - p.z, 0.3);
+    return (p.xy + uPan) / (1.05 * d);
+  }
+  void main() {
+    float id = float(gl_InstanceID);
+    float vis = step(id + 0.5, uCount);
+    vec3 a = spin(aP0), b = spin(aP1);
+    vec2 s0 = toUv(a), s1 = toUv(b);
+    float aspect = uRes.x / uRes.y;
+    vec2 d = s1 - s0;
+    float len = length(d);
+    vec2 dir = len > 0.00001 ? d / len : vec2(1.0, 0.0);
+    vec2 nrm = vec2(-dir.y, dir.x);
+    float depth = uDist - 0.5 * (a.z + b.z);
+    float pxH = 1.0 / uRes.y;
+    // radii are world units here — a histone core is a real bead, not a
+    // fixed number of pixels — converted through the pinhole at this depth
+    float role = aInfo.x;
+    float radW = 0.030;
+    if (role > 0.5 && role < 1.5) radW = 0.024;
+    else if (role > 1.5 && role < 2.5) radW = 0.012;
+    else if (role > 2.5 && role < 4.5) radW = max(aInfo.w, 0.0001);
+    else if (role > 4.5) radW = 0.022;
+    float rad = max(radW * (1.0 + uBass * 0.25) / (1.05 * depth), 0.8 * pxH);
+    vLenR = len / rad;
+    // round caps at BOTH ends: a molecule is tubes and beads, and a bead is a
+    // zero-length segment that has to come out a disc, not a half-disc
+    vec2 pos = mix(s0 - dir * rad, s1 + dir * rad, aQuad.y) + nrm * aQuad.x * rad;
+    vec2 ndc = pos / vec2(aspect, 1.0) * 2.0;
+    gl_Position = vec4(ndc * vis, vis > 0.5 ? 0.0 : 2.0, 1.0);
+    vQ = vec2(aQuad.x, aQuad.y * (vLenR + 2.0) - 1.0);
+    vRole = role;
+    vSlot = aInfo.y;
+    vRnd = aInfo.z;
+    vStrand = aInfo.w;
+    vDepth = depth;
+    // depth cue: the near strand burns, the far one recedes — the only way an
+    // additive molecule reads as a solid
+    vA = uWeight * vis * (0.30 + 0.70 * smoothstep(4.4, 2.5, depth));
+  }
+`;
+
+const HX_FRAG = /* glsl */ `
+  uniform vec3 uPalA[5];
+  uniform float uIntensity, uBeat, uHigh, uTime;
+  in vec2 vQ;
+  in float vLenR, vA, vRole, vSlot, vRnd, vStrand, vDepth;
+  out vec4 fragColor;
+  void main() {
+    float along = vQ.y;
+    float u = clamp(along, 0.0, vLenR);
+    float dx = along - u;
+    float d2 = dx * dx + vQ.x * vQ.x;
+    if (d2 > 1.0) discard;
+    float core = exp(-d2 * 4.5);
+    float body = 1.0 - d2;
+    float wall = smoothstep(0.35, 0.9, d2) * (1.0 - smoothstep(0.9, 1.0, d2));
+    vec3 tint = uPalA[int(vSlot + 0.5)];
+    vec3 col;
+    if (vRole < 0.5) {
+      // The sugar-phosphate backbone, with a phosphate bead at each nucleotide.
+      // The bead sits OFF CENTRE, and to the other side on the other strand —
+      // the two strands are laid in opposite senses, so the beads march 5'->3'
+      // one way down the molecule and 3'->5' the other. That offset is the only
+      // thing on the backbone that reads as a direction, and it is what makes
+      // the antiparallel construction visible rather than merely true.
+      vec3 c = mix(tint, vec3(1.0), 0.55 - 0.18 * vStrand);
+      float bead = exp(-pow((u / max(vLenR, 0.001)) - mix(0.30, 0.70, vStrand), 2.0) * 13.0);
+      col = c * (0.30 * body + 0.62 * core + 0.35 * wall) * (0.85 + 0.40 * bead);
+    } else if (vRole < 1.5) {
+      col = mix(tint, vec3(1.0), 0.18) * (0.34 * body + 0.55 * core);
+    } else if (vRole < 2.5) {
+      col = mix(tint, vec3(1.0), 0.7) * (0.20 * body + 0.55 * core) * (0.8 + 0.5 * uBeat);
+    } else if (vRole < 3.5) {
+      // a histone octamer: a matte bead the fibre wraps
+      float sh = 0.35 + 0.65 * sqrt(max(0.0, 1.0 - d2));
+      col = mix(tint, vec3(1.0), 0.30) * (0.62 * sh + 0.40 * wall);
+    } else if (vRole < 4.5) {
+      // the polymerase bubble: translucent, brighter at its rim
+      col = mix(tint, vec3(1.0), 0.45) * (0.10 * body + 0.42 * wall) * (1.0 + 0.4 * uBeat);
+    } else {
+      col = mix(tint, vec3(1.0), 0.65) * (0.28 * body + 0.60 * core + 0.3 * wall);
+    }
+    col *= 1.0 + uHigh * 0.18 * sin(uTime * 5.0 + vRnd * 37.0);
     fragColor = vec4(col * vA * uIntensity, 1.0);
   }
 `;
@@ -401,13 +1317,23 @@ export function createScene(ctx) {
   const scene = new THREE.Scene();
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   const tier = quality.tier;
-  const STEPS = tier === 'low' ? 28 : tier === 'high' ? 56 : 40;
+  const SPEC_STEPS = tier === 'low' ? 26 : tier === 'high' ? 56 : 40;
   const NSTEPS = tier === 'low' ? 12 : tier === 'high' ? 20 : 16;
   const SW = tier === 'low' ? 192 : tier === 'high' ? 320 : 256; // trail map side
   const MYC_SEGS = tier === 'low' ? 6000 : tier === 'high' ? 16000 : 11000;
 
-  // --- the quad: egg, plasmodium, plate ----------------------------------------
-  const cells = new Float32Array(MAX_CELLS * 4);
+  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+  const approach = (v, to, tau, dt) => v + (to - v) * (1 - Math.exp(-dt / tau));
+  const smooth01 = (u) => { u = clamp(u, 0, 1); return u * u * (3 - 2 * u); };
+  const hash1 = (n) => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+
+  // --- the quad: specimen, plasmodium, plate, helix column ---------------------
+  const cells = new Float32Array(MAXC * 4);   // packed in octant-group order
+  const groups = new Float32Array(8 * 4);
+  const spans = new Float32Array(8 * 2);
+  const pseudo = new Float32Array(6 * 4);
+  const daugh = new Float32Array(4 * 4);
+  const foodU = new Float32Array(FOOD_N * 4);
   const pal = Array.from({ length: 5 }, () => ({ value: new THREE.Color(1, 1, 1) }));
   const SCELLS = SW * SW;
   const trailBytes = new Uint8Array(SCELLS);
@@ -420,30 +1346,55 @@ export function createScene(ctx) {
   const U = {
     uRes: { value: new THREE.Vector2(ctx.width, ctx.height) },
     uCells: { value: cells },
-    uCount: { value: 1 },
+    uGroups: { value: groups },
+    uSpan: { value: spans },
+    uPseudo: { value: pseudo },
+    uDaugh: { value: daugh },
+    uFood: { value: foodU },
+    uFormA: { value: 0 },
+    uFormB: { value: 0 },
     uTime: { value: 0 },
     uDist: { value: 3.4 },
-    uZona: { value: ZONA },
+    uZonaW: { value: 1 },
     uJig: { value: 0 },
+    uSoft: { value: 1 },
     uPress: { value: 0 },
     uBeat: { value: 0 },
     uBass: { value: 0 },
     uHigh: { value: 0 },
     uLevelA: { value: 0 },
-    uLevel: { value: 0 },
     uIntensity: { value: 1 },
+    uCellW: { value: 1 },
+    uProtW: { value: 0 },
+    uFormF: { value: 0 },
+    uNeck: { value: 0.24 },
+    uCap: { value: ZONA },
+    uCavity: { value: 0 },
+    uCavR: { value: 0.8 },
+    uCilia: { value: 0 },
+    uDaughN: { value: 0 },
+    uFoodN: { value: 0 },
+    uHetero: { value: 0 },
+    uGrain: { value: 0 },
+    uFormScale: { value: FORM_SCALE },
+    uFringe: { value: 0 },
+    uFringeR: { value: 1.2 },
+    uBound: { value: ZONA },
+    uBoundF: { value: ZONA },
     uPan: { value: new THREE.Vector2(0, 0) },
-    uOrg: { value: new THREE.Vector3(1, 0, 0) },
+    uOrg: { value: new THREE.Vector4(0, 0, 1, 0) },
     uTrail: { value: trailTex },
     uTexel: { value: 1 / SW },
     uDish: { value: DISH },
     uFlow: { value: 0 },
+    uTintA: { value: 0.3 },
+    uTintB: { value: 0.5 },
     uPal0: pal[0], uPal1: pal[1], uPal2: pal[2], uPal3: pal[3], uPal4: pal[4],
   };
   const mat = new THREE.ShaderMaterial({
     glslVersion: THREE.GLSL3,
     uniforms: U,
-    defines: { STEPS, NSTEPS },
+    defines: { SPEC_STEPS, NSTEPS, MAXC, LOCAL },
     vertexShader: /* glsl */ `
       out vec2 vUv;
       void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
@@ -456,24 +1407,30 @@ export function createScene(ctx) {
   quad.renderOrder = 0;
   scene.add(quad);
 
-  // --- the hyphae: one instanced mesh of capsules --------------------------------
-  const mycGeo = new THREE.InstancedBufferGeometry();
-  mycGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1, 0, 0, 1, 0, 0, -1, 1, 0, 1, 1, 0]), 3));
-  mycGeo.setAttribute('aQuad', new THREE.BufferAttribute(new Float32Array([-1, 0, 1, 0, -1, 1, 1, 1]), 2));
-  mycGeo.setIndex([0, 1, 2, 2, 1, 3]);
-  const mycP0 = new Float32Array(MYC_SEGS * 3);
-  const mycP1 = new Float32Array(MYC_SEGS * 3);
-  const mycInfo = new Float32Array(MYC_SEGS * 4);
-  const attrP0 = new THREE.InstancedBufferAttribute(mycP0, 3);
-  const attrP1 = new THREE.InstancedBufferAttribute(mycP1, 3);
-  const attrInfo = new THREE.InstancedBufferAttribute(mycInfo, 4);
-  attrP0.setUsage(THREE.DynamicDrawUsage);
-  attrP1.setUsage(THREE.DynamicDrawUsage);
-  attrInfo.setUsage(THREE.DynamicDrawUsage);
-  mycGeo.setAttribute('aP0', attrP0);
-  mycGeo.setAttribute('aP1', attrP1);
-  mycGeo.setAttribute('aInfo', attrInfo);
-  mycGeo.instanceCount = 1;
+  // one capsule quad, shared by the hyphae and the helix
+  function capsuleGeometry(n) {
+    const g = new THREE.InstancedBufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1, 0, 0, 1, 0, 0, -1, 1, 0, 1, 1, 0]), 3));
+    g.setAttribute('aQuad', new THREE.BufferAttribute(new Float32Array([-1, 0, 1, 0, -1, 1, 1, 1]), 2));
+    g.setIndex([0, 1, 2, 2, 1, 3]);
+    const p0 = new Float32Array(n * 3);
+    const p1 = new Float32Array(n * 3);
+    const info = new Float32Array(n * 4);
+    const a0 = new THREE.InstancedBufferAttribute(p0, 3);
+    const a1 = new THREE.InstancedBufferAttribute(p1, 3);
+    const ai = new THREE.InstancedBufferAttribute(info, 4);
+    a0.setUsage(THREE.DynamicDrawUsage);
+    a1.setUsage(THREE.DynamicDrawUsage);
+    ai.setUsage(THREE.DynamicDrawUsage);
+    g.setAttribute('aP0', a0);
+    g.setAttribute('aP1', a1);
+    g.setAttribute('aInfo', ai);
+    g.instanceCount = 1;
+    return { g, p0, p1, info, a0, a1, ai };
+  }
+
+  // --- the hyphae -------------------------------------------------------------
+  const myc = capsuleGeometry(MYC_SEGS);
   const mpal = Array.from({ length: 3 }, () => ({ value: new THREE.Color(1, 1, 1) }));
   const MU = {
     uRes: { value: new THREE.Vector2(ctx.width, ctx.height) },
@@ -484,6 +1441,7 @@ export function createScene(ctx) {
     uCount: { value: 0 },
     uTotal: { value: 1 },
     uWeight: { value: 0 },
+    uThick: { value: 2.7 },
     uIntensity: { value: 1 },
     uBeat: { value: 0 },
     uHigh: { value: 0 },
@@ -501,109 +1459,673 @@ export function createScene(ctx) {
     side: THREE.DoubleSide, // the capsule's winding follows the segment's direction
     blending: THREE.AdditiveBlending,
   });
-  const hyphae = new THREE.Mesh(mycGeo, mycMat);
+  const hyphae = new THREE.Mesh(myc.g, mycMat);
   hyphae.frustumCulled = false;
   hyphae.renderOrder = 1;
   hyphae.visible = false;
   scene.add(hyphae);
 
-  const approach = (v, to, tau, dt) => v + (to - v) * (1 - Math.exp(-dt / tau));
-  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-  const smooth01 = (u) => { u = clamp(u, 0, 1); return u * u * (3 - 2 * u); };
+  // --- the helix ---------------------------------------------------------------
+  const hx = capsuleGeometry(HELIX_SEGS);
+  const hxPal = new Float32Array(15);
+  const HU = {
+    uRes: { value: new THREE.Vector2(ctx.width, ctx.height) },
+    uPan: { value: new THREE.Vector2(0, 0) },
+    uDist: { value: 3.4 },
+    uPress: { value: 0 },
+    uBass: { value: 0 },
+    uCount: { value: 0 },
+    uWeight: { value: 0 },
+    uAzim: { value: 0 },
+    uIntensity: { value: 1 },
+    uBeat: { value: 0 },
+    uHigh: { value: 0 },
+    uTime: { value: 0 },
+    uPalA: { value: hxPal },
+  };
+  const hxMat = new THREE.ShaderMaterial({
+    glslVersion: THREE.GLSL3,
+    uniforms: HU,
+    vertexShader: HX_VERT,
+    fragmentShader: HX_FRAG,
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+  });
+  const helix = new THREE.Mesh(hx.g, hxMat);
+  helix.frustumCulled = false;
+  helix.renderOrder = 2;
+  helix.visible = false;
+  scene.add(helix);
 
-  // --- the egg: cell table for a continuous level -------------------------------
-  // every cell i takes the side bit j of its index along axis j for each
-  // completed or in-progress stage
-  function computeCells(L) {
-    let count = 1;
-    for (let j = 0; j < 4; j++) if (L - j > 1e-4) count *= 2;
-    for (let i = 0; i < MAX_CELLS; i++) {
-      let x = 0, y = 0, z = 0, rad = R0;
-      for (let j = 0; j < 4; j++) {
-        const p = clamp(L - j, 0, 1);
-        if (p <= 0) break;
-        const sm = smooth01(p);
-        const side = (i >> j) & 1 ? 1 : -1;
-        const rNext = R0 * Math.pow(2, -(j + 1) / 3);
-        const sep = rNext * SEP * sm;
-        x += AXES[j][0] * side * sep;
-        y += AXES[j][1] * side * sep;
-        z += AXES[j][2] * side * sep;
-        rad += (rNext - rad) * sm;
+  // --- the cell line: layouts for every aggregate stage --------------------------
+  // Cleavage is continuous in the level, so a fractional stage is a furrow in
+  // progress; the later aggregates are discrete layouts the level lerps
+  // between, which is what turns a morula into a blastula (cells migrating
+  // outward as the cavity opens) and a Volvox sphere into a filament.
+  const layA = new Float32Array(MAXC * 4);
+  const layB = new Float32Array(MAXC * 4);
+  const raw = new Float32Array(MAXC * 4);
+  const bins = new Int32Array(MAXC);
+  const gcount = new Int32Array(8);
+  const gstart = new Int32Array(8);
+  const JIT = new Float32Array(MAXC * 3);
+  for (let i = 0; i < MAXC * 3; i++) JIT[i] = hash1(i * 1.7 + 0.3) - 0.5;
+  let cellCount = 0;
+  let cellNeck = 0.24;
+  let cellCap = ZONA;
+  let cellBound = ZONA;
+  let cellGrain = 0;
+
+  // THE PACKED CLEAVAGE SEATS. Volume is conserved — N blastomeres of radius
+  // R0·N^(-1/3) always fill the same space — so the embryo never grows and the
+  // cells simply crowd. A binary LATTICE cannot express that: cycling the
+  // cleavage plane x, y, z, x… puts sixteen cells on a 4 × 2 × 2 block, which
+  // welds them along the twice-divided axis and opens gaps across the other
+  // two, so the sixteen-cell stage read as fewer cells than the eight. The
+  // seats are therefore relaxed once, here: the two children are placed either
+  // side of the parent across the cleavage plane, then the heap is shrunk pass
+  // by pass while every overlapping pair is pushed back apart, until it JAMS
+  // at the spacing where N spheres of that radius fill the zona at a real
+  // random-close-packing fraction. That is compaction, and it leaves every
+  // count a crowded ball whose outer cells flatten against the zona. Seeding
+  // each stage from its own parents keeps cell i near cell i's parent, so the
+  // furrow still reads as one cell splitting in two.
+  const PACK = [];                 // PACK[j] = the 2^j relaxed centres, xyz
+  const PACKR = new Float32Array(7); // and the blastomere radius at that stage
+  const AGG = 1.30;                // where the jammed heap's outer surface lands
+  const RCP = 0.64;                // random close packing fraction
+  function stageSpacing(j, r) {
+    // two, four and eight blastomeres are huge and simply halve inside the
+    // zona, so the furrow's own separation is the spacing that reads
+    if (j <= 3) return CLEAVE_S * 0.5;
+    const rc = Math.max(0.05, AGG - r);
+    return 2 * Math.cbrt((RCP * rc * rc * rc) / (1 << j));
+  }
+  function buildPackings() {
+    PACK[0] = new Float32Array(3);
+    PACKR[0] = R0;
+    for (let j = 1; j <= 6; j++) {
+      const n = 1 << j;
+      const r = R0 * Math.pow(2, -j / 3);
+      const sep = stageSpacing(j, r);
+      const rc = j <= 3 ? 9 : Math.max(0.05, AGG - r); // small counts are unconstrained
+      const P = new Float32Array(n * 3);
+      const par = PACK[j - 1];
+      const ax = (j - 1) % 3;
+      for (let i = 0; i < n; i++) {
+        const p = i & ((1 << (j - 1)) - 1);
+        const side = (i >> (j - 1)) & 1 ? 1 : -1;
+        P[i * 3] = par[p * 3] + (ax === 0 ? side * sep * 0.5 : 0);
+        P[i * 3 + 1] = par[p * 3 + 1] + (ax === 1 ? side * sep * 0.5 : 0);
+        P[i * 3 + 2] = par[p * 3 + 2] + (ax === 2 ? side * sep * 0.5 : 0);
+        // a hair of asymmetry so a symmetric seed cannot deadlock the relaxer
+        P[i * 3] += (hash1(i * 1.7 + j * 5.3) - 0.5) * sep * 0.02;
+        P[i * 3 + 1] += (hash1(i * 2.9 + j * 7.1) - 0.5) * sep * 0.02;
+        P[i * 3 + 2] += (hash1(i * 4.1 + j * 9.7) - 0.5) * sep * 0.02;
       }
-      cells[i * 4] = x; cells[i * 4 + 1] = y; cells[i * 4 + 2] = z; cells[i * 4 + 3] = rad;
+      const s2 = sep * sep;
+      for (let it = 0; it < 200; it++) {
+        for (let k = 0; k < n * 3; k++) P[k] *= 0.995;
+        for (let pass = 0; pass < 2; pass++) {
+          for (let a = 0; a < n; a++) {
+            for (let b = a + 1; b < n; b++) {
+              const dx = P[b * 3] - P[a * 3];
+              const dy = P[b * 3 + 1] - P[a * 3 + 1];
+              const dz = P[b * 3 + 2] - P[a * 3 + 2];
+              const d2 = dx * dx + dy * dy + dz * dz;
+              if (d2 >= s2 || d2 < 1e-12) continue;
+              const d = Math.sqrt(d2);
+              const k = ((sep - d) / d) * 0.5;
+              P[b * 3] += dx * k; P[b * 3 + 1] += dy * k; P[b * 3 + 2] += dz * k;
+              P[a * 3] -= dx * k; P[a * 3 + 1] -= dy * k; P[a * 3 + 2] -= dz * k;
+            }
+          }
+        }
+        for (let a = 0; a < n; a++) {
+          const l = Math.hypot(P[a * 3], P[a * 3 + 1], P[a * 3 + 2]);
+          if (l > rc) { const k = rc / l; P[a * 3] *= k; P[a * 3 + 1] *= k; P[a * 3 + 2] *= k; }
+        }
+      }
+      PACK[j] = P;
+      PACKR[j] = r;
     }
+  }
+  buildPackings();
+
+  // A fractional stage is a furrow in progress: cell i of stage j becomes
+  // cells i and i + 2^j of stage j + 1, so both children pour out of the
+  // parent's seat as the level crosses the stage.
+  function cleavageLayout(L, out) {
+    const j0 = clamp(Math.floor(L), 0, 6);
+    const j1 = Math.min(6, j0 + 1);
+    const dividing = L - j0 > 1e-4 && j1 > j0;
+    const q = dividing ? smooth01(clamp(L - j0, 0, 1)) : 0;
+    const count = 1 << (dividing ? j1 : j0);
+    const A = PACK[j0], B = PACK[j1];
+    const mask = (1 << j0) - 1;
+    const rad = PACKR[j0] + (PACKR[j1] - PACKR[j0]) * q;
+    for (let i = 0; i < count; i++) {
+      const p = i & mask;
+      const bi = dividing ? i : p;
+      let x = A[p * 3] + (B[bi * 3] - A[p * 3]) * q;
+      let y = A[p * 3 + 1] + (B[bi * 3 + 1] - A[p * 3 + 1]) * q;
+      let z = A[p * 3 + 2] + (B[bi * 3 + 2] - A[p * 3 + 2]) * q;
+      // a little irregularity so the aggregate is a packing, not a lattice
+      const jw = rad * 0.18 * (0.35 + cellGrain) * smooth01(L);
+      x += JIT[i * 3] * jw;
+      y += JIT[i * 3 + 1] * jw;
+      z += JIT[i * 3 + 2] * jw;
+      // hold the whole embryo at a fixed oblique angle, so the eye never
+      // looks straight down a cleavage axis into a flat grid of cells
+      // (a constant, not a clock — nothing here turns)
+      const rx = x * 0.8139 + z * 0.5810;
+      const rz0 = z * 0.8139 - x * 0.5810;
+      out[i * 4] = rx;
+      out[i * 4 + 1] = y * 0.9287 - rz0 * 0.3709;
+      out[i * 4 + 2] = y * 0.3709 + rz0 * 0.9287;
+      out[i * 4 + 3] = rad;
+    }
+    for (let i = count; i < MAXC; i++) { out[i * 4] = 0; out[i * 4 + 1] = 0; out[i * 4 + 2] = 0; out[i * 4 + 3] = 0; }
     return count;
   }
+  // The morula's sixty-four cells migrate outward onto the blastula's wall.
+  // Pairing each one with the seat on the shell that lies nearest its own
+  // direction turns that stage change into an outward migration instead of a
+  // scramble across the embryo; the thirty-two seats left over are the cells
+  // the wall gains, and they grow in place from nothing.
+  const SHELL_SLOT = new Int32Array(SHELL_N);
+  {
+    const taken = new Uint8Array(SHELL_N);
+    const sdx = new Float32Array(SHELL_N * 3);
+    for (let i = 0; i < SHELL_N; i++) {
+      const y = 1 - 2 * (i + 0.5) / SHELL_N;
+      const rr = Math.sqrt(Math.max(0, 1 - y * y));
+      const th = i * 2.39996;
+      sdx[i * 3] = Math.cos(th) * rr; sdx[i * 3 + 1] = y; sdx[i * 3 + 2] = Math.sin(th) * rr;
+    }
+    const M = PACK[6];
+    let spare = 64;
+    for (let i = 0; i < SHELL_N; i++) SHELL_SLOT[i] = -1;
+    for (let c = 0; c < 64; c++) {
+      const l = Math.hypot(M[c * 3], M[c * 3 + 1], M[c * 3 + 2]) || 1;
+      const dx = M[c * 3] / l, dy = M[c * 3 + 1] / l, dz = M[c * 3 + 2] / l;
+      let best = -1, bd = -2;
+      for (let s = 0; s < SHELL_N; s++) {
+        if (taken[s]) continue;
+        const d = dx * sdx[s * 3] + dy * sdx[s * 3 + 1] + dz * sdx[s * 3 + 2];
+        if (d > bd) { bd = d; best = s; }
+      }
+      taken[best] = 1;
+      SHELL_SLOT[best] = c;
+    }
+    for (let s = 0; s < SHELL_N; s++) if (SHELL_SLOT[s] < 0) SHELL_SLOT[s] = spare++;
+  }
+  // ---- the protists as CELL CLOUDS -------------------------------------------
+  // The brief asks the cells to MORPH into the organism, and a cross-dissolve
+  // of two superimposed bodies is not a morph. A cell aggregate and an
+  // analytic solid cannot share one distance field — the aggregate is culled
+  // per ray, so away from the cells it is a bound and not a distance, and
+  // mixing that bound into a solid's field erodes the solid wherever the cull
+  // comes back empty. So the morph is done on the CELL side: every protist and
+  // the sponge carries a layout of MAXC seats laid ON its own surface, and an
+  // aggregate-to-protist crossing is the same seat-by-seat travel every
+  // aggregate-to-aggregate crossing already uses. The cells swim out and take
+  // the organism's shape; only over the back half of the crossing does the
+  // analytic body fade in under them, and by then the two surfaces are in the
+  // same place, so the handover reads as the cells fusing into one body.
+  const FIBD = new Float32Array(MAXC * 3);   // one golden-angle spiral, shared
+  for (let i = 0; i < MAXC; i++) {
+    const y = 1 - 2 * (i + 0.5) / MAXC;
+    const rr = Math.sqrt(Math.max(0, 1 - y * y));
+    const th = i * 2.39996;
+    FIBD[i * 3] = Math.cos(th) * rr;
+    FIBD[i * 3 + 1] = y;
+    FIBD[i * 3 + 2] = Math.sin(th) * rr;
+  }
+  // the diatom and the sponge are held at a fixed tilt in the shader (a
+  // constant, not a clock), so a cloud laid in the form's own space has to be
+  // rotated back out of it to land where the field draws the body
+  const cq = new Float32Array(3);
+  function unDia(x, y, z) {
+    const ty = 0.342 * x + 0.94 * y;
+    cq[0] = 0.94 * x - 0.342 * y;
+    cq[1] = 0.52 * ty - 0.854 * z;
+    cq[2] = 0.854 * ty + 0.52 * z;
+  }
+  function unSpg(x, y, z) {
+    cq[0] = x;
+    cq[1] = 0.8525 * y - 0.5227 * z;
+    cq[2] = 0.5227 * y + 0.8525 * z;
+  }
+  function cloudFor(f, out) {
+    const N = MAXC;
+    for (let i = 0; i < N; i++) {
+      const dx = FIBD[i * 3], dy = FIBD[i * 3 + 1], dz = FIBD[i * 3 + 2];
+      let x = 0, y = 0, z = 0;
+      if (f === 0) {
+        // AMOEBA — seventy-two seats over the endoplasm's envelope, the rest
+        // four-deep out along each of the six pseudopods, so the cells stream
+        // into the lobes as the lobes stream
+        if (i < 72) { x = dx * 0.60; y = dy * 0.50; z = dz * 0.52; }
+        else {
+          const k = (i - 72) % 6, j = ((i - 72) / 6) | 0;
+          const v = 0.24 + 0.76 * ((j + 1) / 4);   // out to the lobe's tip
+          x = pseudo[k * 4] * v; y = pseudo[k * 4 + 1] * v; z = pseudo[k * 4 + 2] * v;
+        }
+      } else if (f === 1) {
+        // PARAMECIUM — a slipper: an ellipsoid tapered toward the anterior and
+        // then bent along its length, the same bend the field applies
+        const tp = 1 - 0.30 * smooth01((dx + 0.2) / 1.1);
+        const qx = dx * 0.92 - 0.03;
+        x = qx; y = dy * 0.355 * tp - 0.15 * qx * qx + 0.05; z = dz * 0.33 * tp;
+      } else if (f === 2) {
+        // EUGLENA — a spindle drawn to a posterior point
+        const nd = dy < 0 ? -dy : 0;
+        const c3 = nd * nd * nd;
+        const tp = 1 - 0.70 * c3;
+        x = dx * 0.30 * tp; y = dy * 0.70 - 0.30 * c3 * nd; z = dz * 0.28 * tp;
+      } else if (f === 3) {
+        // DIATOM — the two valve faces and the girdle band between them
+        let qx, qy, qz;
+        if (i < 66) {
+          const j = i % 33;
+          const rr = 0.70 * Math.sqrt((j + 0.4) / 33);
+          const th = i * 2.39996;
+          qx = Math.cos(th) * rr; qz = Math.sin(th) * rr; qy = (i < 33 ? 0.16 : -0.16);
+        } else {
+          const j = i - 66;
+          const th = j * 2.39996;
+          qx = Math.cos(th) * 0.70; qz = Math.sin(th) * 0.70; qy = ((j % 3) - 1) * 0.08;
+        }
+        unDia(qx, qy, qz);
+        x = cq[0]; y = cq[1]; z = cq[2];
+      } else if (f === 4) {
+        // RADIOLARIAN — the mineral shell itself
+        x = dx * 0.70; y = dy * 0.70; z = dz * 0.70;
+      } else {
+        // SPONGE — the seats climb the vase's wall in a phyllotactic spiral,
+        // on the same radius profile the field uses
+        const qy = -0.92 + 1.74 * ((i + 0.5) / N);
+        const rad = 0.34 + 0.30 * smooth01((qy + 0.95) / 1.8) + 0.05 * Math.sin(qy * 5);
+        const th = i * 2.39996;
+        unSpg(Math.cos(th) * rad, qy, Math.sin(th) * rad);
+        x = cq[0]; y = cq[1]; z = cq[2];
+      }
+      out[i * 4] = x * FORM_SCALE;
+      out[i * 4 + 1] = y * FORM_SCALE;
+      out[i * 4 + 2] = z * FORM_SCALE;
+    }
+    // size the seats to the cloud's OWN spacing — half the mean nearest
+    // neighbour with a little overlap — so the skin closes over whatever shape
+    // it was laid on, the same rule the blastula's wall follows. Ninety-six
+    // squared distance tests, and only while a crossing is running.
+    let sum = 0;
+    for (let i = 0; i < N; i++) {
+      const ax = out[i * 4], ay = out[i * 4 + 1], az = out[i * 4 + 2];
+      let b = 1e9;
+      for (let j = 0; j < N; j++) {
+        if (j === i) continue;
+        const ddx = out[j * 4] - ax, ddy = out[j * 4 + 1] - ay, ddz = out[j * 4 + 2] - az;
+        const d2 = ddx * ddx + ddy * ddy + ddz * ddz;
+        if (d2 < b) b = d2;
+      }
+      sum += Math.sqrt(b);
+    }
+    const r = Math.max(0.06, (sum / N) * 0.61);
+    for (let i = 0; i < N; i++) out[i * 4 + 3] = r * (1 + JIT[i * 3] * 0.16 * cellGrain);
+    return N;
+  }
 
-  // --- the slime mold: Physarum agents on a trail map -----------------------------
+  // a hollow ball of cells: the blastula's wall, and Volvox's colony
+  function shellLayout(out, n, R, r, jit) {
+    for (let i = 0; i < n; i++) {
+      const o = n === SHELL_N ? SHELL_SLOT[i] : i;
+      const y = 1 - 2 * (i + 0.5) / n;
+      const rr = Math.sqrt(Math.max(0, 1 - y * y));
+      const th = i * 2.39996;
+      const jx = JIT[o * 3] * jit, jy = JIT[o * 3 + 1] * jit, jz = JIT[o * 3 + 2] * jit;
+      out[o * 4] = Math.cos(th) * rr * R + jx;
+      out[o * 4 + 1] = y * R + jy;
+      out[o * 4 + 2] = Math.sin(th) * rr * R + jz;
+      out[o * 4 + 3] = r * (1 + JIT[o * 3] * 0.22 * cellGrain);
+    }
+    for (let i = n; i < MAXC; i++) { out[i * 4 + 3] = 0; }
+    return n;
+  }
+  // the colony unrolls into a chain: a beaded filament with heterocysts
+  function filamentLayout(out, n) {
+    for (let i = 0; i < n; i++) {
+      const u = (i - (n - 1) / 2) * FIL_SP;
+      const het = i % 7 === 6;
+      out[i * 4] = u;
+      out[i * 4 + 1] = 0.26 * Math.sin(u * 0.8) + JIT[i * 3 + 1] * 0.02;
+      out[i * 4 + 2] = 0.11 * Math.sin(u * 1.7);
+      out[i * 4 + 3] = (het ? 0.255 : 0.222) * (1 + JIT[i * 3] * 0.12 * cellGrain);
+    }
+    for (let i = n; i < MAXC; i++) {
+      // the cells the chain sheds fold back onto it along its WHOLE length, so
+      // a crossing into a chain draws its cells in everywhere instead of
+      // piping eighty of them out of one end
+      const src = i % n;
+      out[i * 4] = out[src * 4];
+      out[i * 4 + 1] = out[src * 4 + 1];
+      out[i * 4 + 2] = out[src * 4 + 2];
+      out[i * 4 + 3] = 0;
+    }
+    return n;
+  }
+  function layoutFor(stage, out) {
+    if (stage <= 6) return cleavageLayout(stage, out);
+    if (stage === 7) return shellLayout(out, SHELL_N, 1.00, BLAST_R, 0.012);
+    if (stage === 13) return shellLayout(out, SHELL_N, 1.06, 0.125, 0.008);
+    if (stage === 14) return filamentLayout(out, FIL_N);
+    return cloudFor(FORM[stage], out);   // the protists, and the sponge
+  }
+  // the zona the cells are clamped to: the cleavage stages compact inside it,
+  // everything past the morula has left it behind. Lerped between stages like
+  // every other layout number, because releasing the clamp in one frame popped
+  // the outer cells out by four per cent at the top of the cleavage.
+  const capFor = (stage) => (stage <= 6 ? ZONA * 0.955 : 3.0);
+  // pack the cells into eight octant groups with a bounding sphere each, so
+  // the fragment shader can throw whole groups away before it tests a cell
+  function packCells(count) {
+    for (let g = 0; g < 8; g++) gcount[g] = 0;
+    let live = 0;
+    for (let i = 0; i < count; i++) {
+      if (raw[i * 4 + 3] < 1e-3) { bins[i] = -1; continue; }
+      const g = (raw[i * 4] >= 0 ? 1 : 0) | (raw[i * 4 + 1] >= 0 ? 2 : 0) | (raw[i * 4 + 2] >= 0 ? 4 : 0);
+      bins[i] = g;
+      gcount[g]++;
+      live++;
+    }
+    let acc = 0;
+    for (let g = 0; g < 8; g++) { gstart[g] = acc; acc += gcount[g]; gcount[g] = 0; }
+    let meanR = 0, bound = 0;
+    for (let i = 0; i < count; i++) {
+      const g = bins[i];
+      if (g < 0) continue;
+      const o = (gstart[g] + gcount[g]) * 4;
+      gcount[g]++;
+      cells[o] = raw[i * 4];
+      cells[o + 1] = raw[i * 4 + 1];
+      cells[o + 2] = raw[i * 4 + 2];
+      cells[o + 3] = raw[i * 4 + 3];
+      meanR += raw[i * 4 + 3];
+      const l = Math.hypot(raw[i * 4], raw[i * 4 + 1], raw[i * 4 + 2]) + raw[i * 4 + 3];
+      if (l > bound) bound = l;
+    }
+    for (let g = 0; g < 8; g++) {
+      const s = gstart[g], n = gcount[g];
+      spans[g * 2] = s;
+      spans[g * 2 + 1] = n;
+      if (!n) { groups[g * 4 + 3] = 0; continue; }
+      let cx = 0, cy = 0, cz = 0;
+      for (let i = s; i < s + n; i++) { cx += cells[i * 4]; cy += cells[i * 4 + 1]; cz += cells[i * 4 + 2]; }
+      cx /= n; cy /= n; cz /= n;
+      let rad = 0;
+      for (let i = s; i < s + n; i++) {
+        const d = Math.hypot(cells[i * 4] - cx, cells[i * 4 + 1] - cy, cells[i * 4 + 2] - cz) + cells[i * 4 + 3];
+        if (d > rad) rad = d;
+      }
+      groups[g * 4] = cx; groups[g * 4 + 1] = cy; groups[g * 4 + 2] = cz; groups[g * 4 + 3] = rad;
+    }
+    cellCount = live;
+    meanR = live ? meanR / live : 0.2;
+    cellNeck = Math.max(0.025, meanR * 0.17);
+    cellBound = bound;
+    return live;
+  }
+  // the whole cell axis, from a continuous level in stages
+  function computeCells(L) {
+    const s0 = clamp(Math.floor(L), 0, STAGES - 1);
+    const s1 = Math.min(STAGES - 1, s0 + 1);
+    const f = smooth01(clamp(L - s0, 0, 1));
+    const k0 = KIND[s0], k1 = KIND[s1];
+    let count = 0;
+    if (k0 === 1 && k1 === 1) {
+      // protist to protist: no cells at all, the two fields simply mix
+      for (let i = 0; i < MAXC; i++) raw[i * 4 + 3] = 0;
+      cellCount = 0;
+      for (let g = 0; g < 8; g++) { spans[g * 2 + 1] = 0; groups[g * 4 + 3] = 0; }
+      cellBound = 0;
+      cellCap = 3.0;
+      return 0;
+    }
+    if (k0 === 0 && k1 === 0 && s1 <= 6) {
+      count = cleavageLayout(clamp(L, 0, 6), raw);
+      cellCap = ZONA * 0.955;
+    } else {
+      // EVERY other crossing is the same seat-by-seat travel — the morula onto
+      // the blastula's wall, the blastula onto the amoeba's surface, the
+      // radiolarian's surface onto the Volvox shell, the filament onto the
+      // sponge — so the cells THEMSELVES carry the shape change
+      const nA = layoutFor(s0, layA);
+      const nB = layoutFor(s1, layB);
+      count = Math.max(nA, nB);
+      for (let i = 0; i < count; i++) {
+        const o = i * 4;
+        const ax = i < nA ? layA[o] : layB[o], ay = i < nA ? layA[o + 1] : layB[o + 1];
+        const az = i < nA ? layA[o + 2] : layB[o + 2], ar = i < nA ? layA[o + 3] : 0;
+        const bx = i < nB ? layB[o] : layA[o], by = i < nB ? layB[o + 1] : layA[o + 1];
+        const bz = i < nB ? layB[o + 2] : layA[o + 2], br = i < nB ? layB[o + 3] : 0;
+        raw[o] = ax + (bx - ax) * f;
+        raw[o + 1] = ay + (by - ay) * f;
+        raw[o + 2] = az + (bz - az) * f;
+        raw[o + 3] = ar + (br - ar) * f;
+      }
+      cellCap = capFor(s0) + (capFor(s1) - capFor(s0)) * f;
+    }
+    return packCells(count);
+  }
+
+  // --- the slime mold: Physarum agents on a trail map ------------------------------
   // Jones's model: each agent senses the trail at three sensors ahead, turns
   // toward the strongest, steps, deposits; the map is box-blurred and decays.
-  // The colony's reach is a disc the agents turn back from; the population
-  // tracks the disc's area, newcomers pouring out of the inoculum at the centre.
-  const SAGENTS = Math.floor(SCELLS * 0.14);
+  // Everything that shapes the network — sensing geometry, turn rate, deposit,
+  // decay, density, the random-turn rate that opens a fan front, how many
+  // inoculation points there are and where, the food layout and its pull — is
+  // drawn from the species table, so one strain builds a fine reticulum and
+  // the next a sparse mesh of trunk veins between fused colonies.
+  const SAGENTS = Math.floor(SCELLS * 0.17); // capacity; the species sets the live count
   const trail = new Float32Array(SCELLS);
   const trail2 = new Float32Array(SCELLS);
   const occ = new Uint8Array(SCELLS); // one agent per cell — the exclusion that keeps veins thin
   const agX = new Float32Array(SAGENTS);
   const agY = new Float32Array(SAGENTS);
   const agH = new Float32Array(SAGENTS);
-  let agActive = 0; // agents stepping this frame (the first agActive)
-  let agSpawned = 0; // agents that have ever been placed
-  let spawnR = 0; // the reach the last placement filled out to
+  const agI = new Uint8Array(SAGENTS);
+  const MAX_INOC = 4;
+  const inocX = new Float32Array(MAX_INOC);
+  const inocY = new Float32Array(MAX_INOC);
+  const inocD = new Float32Array(MAX_INOC); // each inoculum's distance from the plate's centre
+  const inocR = new Float32Array(MAX_INOC); // and its own reach this frame
   const foodX = new Float32Array(FOOD_N);
   const foodY = new Float32Array(FOOD_N);
-  for (let k = 0; k < FOOD_N; k++) {
-    const a = k * 2.39996 + 0.7;
-    const r = (SW * 0.5 - 3) * (0.3 + 0.62 * ((k + 1) / FOOD_N));
-    foodX[k] = SW * 0.5 + Math.cos(a) * r;
-    foodY[k] = SW * 0.5 + Math.sin(a) * r;
-  }
-  const TRAIL_MAX = 26;
-  const DEP = 5;
-  const DECAY = 0.905;
-  const BYTE_K = 255 / TRAIL_MAX;
+  const foodOn = new Uint8Array(FOOD_N);
+  // which flake, if any, a trail cell belongs to — the colony lights a flake by
+  // ARRIVING on it, not by being within some radius of a spore
+  const foodMap = new Int16Array(SCELLS);
+  let agSpawned = 0; // agents that have ever been placed
+  let agActive = 0;  // and how many are being stepped right now
+  let spawnG = 0;    // the growth the last placement filled out to
+  const SP = {
+    sa: 0.4, sd: 8, ra: 0.5, ss: 1, dep: 5, decay: 0.905, tmax: 22, bk: 255 / 22,
+    dens: 0.14, rnd: 0.02, inoc: 1, food: 0, foodN: 9, foodStr: 2.4, tintA: 0.2, tintB: 0.5,
+  };
 
+  // Four archetypes the seed picks between and then jitters, so a species is
+  // a different NETWORK MORPHOLOGY and not merely a different scale: a fine
+  // reticulum, coarse trunk veins in a sparse mesh, a broad fan front, and a
+  // shuttle-streaming network anchored hard to its food. The densities are a
+  // floor as well as a shape: a strain that runs the plate at a quarter of the
+  // agent count still has to cover it, so the sparse archetypes buy their
+  // sparseness from vein thickness and sensing, not from an empty dish.
+  const ARCHE = [
+    //  sa    sd    ra    ss   dep  decay  dens   rnd  inoc food  fstr
+    [0.34, 4.2, 0.32, 0.9, 3.2, 0.862, 0.105, 0.02, 1, 1, 1.2],
+    [0.92, 18.0, 0.82, 1.5, 6.5, 0.950, 0.082, 0.02, 2, 0, 3.2],
+    [0.26, 7.0, 0.24, 1.35, 4.0, 0.900, 0.130, 0.24, 1, 3, 0.5],
+    [0.60, 11.0, 0.55, 1.0, 5.0, 0.932, 0.088, 0.05, 3, 2, 3.6],
+  ];
+  // the strain's own draws, hoisted with their seed so picking a species
+  // builds no closure — nothing in the per-frame path allocates
+  let spSeed = 1;
+  const h = (k) => hash1(spSeed * 7.13 + k * 19.77 + 0.11);
+  const spj = (k) => 0.8 + 0.4 * h(k);   // the +/-20% jitter on an archetype
+  function slimeSpecies(seed) {
+    spSeed = seed;
+    const A = ARCHE[Math.floor(h(0) * 4 * 0.999)];
+    const j = spj;
+    SP.sa = A[0] * j(1);
+    SP.sd = A[1] * j(2) * (SW / 256);
+    SP.ra = A[2] * j(3);
+    SP.ss = A[3] * j(4) * (SW / 256);
+    SP.dep = A[4] * j(5);
+    SP.decay = clamp(A[5] * (0.985 + 0.03 * h(6)), 0.84, 0.962);
+    SP.dens = A[6] * j(7);
+    // the trail's own equilibrium (deposit over decay) sets the display range,
+    // so a heavy depositor does not simply saturate to a flat sheet and every
+    // species shows its veins at the same contrast
+    SP.tmax = clamp(SP.dep / (1 - SP.decay) * 0.42, 8, 400);
+    SP.bk = 255 / SP.tmax;
+    SP.rnd = A[7] * j(8);
+    SP.inoc = clamp(A[8] + (h(9) > 0.6 ? 1 : 0), 1, MAX_INOC);
+    SP.food = A[9];
+    SP.foodN = 4 + Math.floor(h(11) * (FOOD_N - 3));
+    SP.foodStr = A[10] * j(12);
+    SP.tintA = h(13);
+    SP.tintB = h(14);
+    // the inoculation points, and the food the colony will find
+    const C = SW * 0.5, Rmax = SW * 0.5 - 3;
+    for (let k = 0; k < SP.inoc; k++) {
+      const a = h(20 + k) * 6.2831853;
+      const r = SP.inoc === 1 ? 0 : Rmax * (0.18 + 0.42 * h(30 + k));
+      inocX[k] = C + Math.cos(a) * r;
+      inocY[k] = C + Math.sin(a) * r;
+      inocD[k] = r;
+    }
+    for (let k = 0; k < FOOD_N; k++) {
+      let fx = C, fy = C;
+      if (SP.food === 0) {                                   // a ring of flakes
+        const a = (k / SP.foodN) * 6.2831853 + h(40) * 3.0;
+        fx = C + Math.cos(a) * Rmax * 0.74;
+        fy = C + Math.sin(a) * Rmax * 0.74;
+      } else if (SP.food === 1) {                            // scattered
+        const a = k * 2.39996 + h(41) * 6.0;
+        const r = Rmax * (0.28 + 0.62 * ((k + 1) / SP.foodN));
+        fx = C + Math.cos(a) * r;
+        fy = C + Math.sin(a) * r;
+      } else if (SP.food === 2) {                            // two clusters
+        const c = k % 2;
+        const a = h(42 + c) * 6.2831853;
+        const cr = Rmax * 0.62;
+        fx = C + Math.cos(a) * cr + (h(50 + k) - 0.5) * Rmax * 0.24;
+        fy = C + Math.sin(a) * cr + (h(60 + k) - 0.5) * Rmax * 0.24;
+      } else {                                               // a row across the plate
+        const a = h(43) * 3.1415927;
+        const u = ((k + 0.5) / SP.foodN - 0.5) * 1.7 * Rmax;
+        fx = C + Math.cos(a) * u;
+        fy = C + Math.sin(a) * u;
+      }
+      const lim = Rmax - 6;
+      const dx = fx - C, dy = fy - C, dl = Math.hypot(dx, dy);
+      if (dl > lim) { fx = C + (dx / dl) * lim; fy = C + (dy / dl) * lim; }
+      foodX[k] = fx;
+      foodY[k] = fy;
+    }
+    // stamp the flakes' footprints, so a stepping agent knows the moment it
+    // walks onto one
+    foodMap.fill(0);
+    for (let k = 0; k < SP.foodN; k++) {
+      const ix = foodX[k] | 0, iy = foodY[k] | 0;
+      for (let oy = -4; oy <= 4; oy++) {
+        for (let ox = -4; ox <= 4; ox++) {
+          if (ox * ox + oy * oy > 16) continue;
+          foodMap[(iy + oy) * SW + ix + ox] = k + 1;
+        }
+      }
+    }
+  }
+  function slimeReset() {
+    trail.fill(0);
+    trail2.fill(0);
+    occ.fill(0);
+    foodOn.fill(0);
+    foodU.fill(0);
+    agSpawned = 0;
+    agActive = 0;
+    spawnG = 0;
+  }
   function slimeStep(swayV, pressV, devel) {
-    const W = SW;
-    const SA = 0.39 + swayV * 0.75;
-    const RA = 0.45 + swayV * 0.5;
-    const SD = (4.0 + swayV * 9.0) * (W / 256);
-    const SS = 1.0 * (W / 256);
+    const W = SW, last = W - 1;
+    // sway morphs the sensing live, on top of whatever the species is
+    const SA = SP.sa + swayV * 0.70;
+    const RA = SP.ra + swayV * 0.45;
+    const SD = SP.sd * (1 + swayV * 1.3);
+    const SS = SP.ss;
+    const DEP = SP.dep;
     const cx = W * 0.5, cy = W * 0.5;
     const Rmax = W * 0.5 - 3;
-    const R = Rmax * (0.14 + 0.86 * devel) * (1 - 0.42 * pressV);
-    const R2 = R * R;
-    const frac = (R / Rmax) * (R / Rmax) * 1.15 + 0.02;
-    const nAct = Math.floor(SAGENTS * (frac > 1 ? 1 : frac));
-    // newcomers fill the ground the reach has just gained, uniformly by area
-    // (a spread population is what makes the model wire a network rather
-    // than pile into one slug); re-activated agents keep their old places
-    if (nAct > agSpawned) {
-      const r0sq = spawnR * spawnR, r1sq = R * R;
-      for (let i = agSpawned; i < nAct; i++) {
-        const a = Math.random() * 6.2831853;
-        const rr = Math.sqrt(r0sq + (r1sq - r0sq) * Math.random());
-        agX[i] = cx + Math.cos(a) * rr;
-        agY[i] = cy + Math.sin(a) * rr;
-        agH[i] = Math.random() * 6.2831853;
-        occ[(agY[i] | 0) * W + (agX[i] | 0)] = 1;
-      }
-      agSpawned = nAct;
-      spawnR = R;
+    // THE LEVEL IS THE COLONY'S REACH, and at full development the reach is the
+    // whole dish. Each inoculum therefore carries its own radius, grown to
+    // Rmax + its own offset from the centre, so the discs UNION to the plate
+    // however far off-centre the spores were dropped — a single shared radius
+    // measured from each spore left the far side of a two-spore plate
+    // unreachable at any development level, and its flakes could never light.
+    const growth = clamp((0.14 + 0.86 * devel) * (1 - 0.42 * pressV), 0, 1);
+    for (let k = 0; k < SP.inoc; k++) inocR[k] = (Rmax + inocD[k]) * growth;
+    const Rp2 = Rmax * Rmax;
+    const frac = growth * growth * 1.15 + 0.02;
+    const nAct = Math.min(SAGENTS, Math.floor(SCELLS * SP.dens * (frac > 1 ? 1 : frac)));
+    // The population follows the reach BOTH WAYS. An agent that stops being
+    // stepped has to give its cell back: the exclusion bit is cleared only by
+    // that agent's own next move, so a colony driven down used to leave every
+    // retired agent's bit set and then grow back into a dish of invisible
+    // obstacles — noticeably noisier and more broken on the way down than up.
+    if (nAct < agActive) {
+      for (let i = nAct; i < agActive; i++) occ[(agY[i] | 0) * W + (agX[i] | 0)] = 0;
+    } else if (nAct > agActive) {
+      const back = nAct < agSpawned ? nAct : agSpawned;
+      for (let i = agActive; i < back; i++) occ[(agY[i] | 0) * W + (agX[i] | 0)] = 1;
     }
     agActive = nAct;
-    const last = W - 1;
+    // newcomers fill the ground the reach has just gained, uniformly by area
+    // around their own inoculum (a spread population is what makes the model
+    // wire a network rather than pile into one slug)
+    if (nAct > agSpawned) {
+      for (let i = agSpawned; i < nAct; i++) {
+        const k = i % SP.inoc;
+        const a = Math.random() * 6.2831853;
+        const R = inocR[k];
+        const r0 = (Rmax + inocD[k]) * spawnG;
+        // most newcomers pour onto the ground the reach has just gained, the
+        // rest anywhere in the disc, so the interior keeps its mesh instead of
+        // emptying out behind an advancing front
+        const rr = Math.random() < 0.35
+          ? Math.sqrt(Math.random()) * R
+          : Math.sqrt(r0 * r0 + (R * R - r0 * r0) * Math.random());
+        let x = inocX[k] + Math.cos(a) * rr;
+        let y = inocY[k] + Math.sin(a) * rr;
+        const dx = x - cx, dy = y - cy, dl = Math.hypot(dx, dy);
+        if (dl > Rmax - 1) { x = cx + (dx / dl) * (Rmax - 1); y = cy + (dy / dl) * (Rmax - 1); }
+        agX[i] = x; agY[i] = y; agI[i] = k;
+        agH[i] = Math.random() * 6.2831853;
+        occ[(y | 0) * W + (x | 0)] = 1;
+      }
+      agSpawned = nAct;
+      spawnG = growth;
+    }
     for (let i = 0; i < nAct; i++) {
       let x = agX[i], y = agY[i], h = agH[i];
-      // sense
       let sx = x + Math.cos(h) * SD, sy = y + Math.sin(h) * SD;
       const f = trail[(sy < 0 ? 0 : sy > last ? last : sy | 0) * W + (sx < 0 ? 0 : sx > last ? last : sx | 0)];
       sx = x + Math.cos(h + SA) * SD; sy = y + Math.sin(h + SA) * SD;
       const l = trail[(sy < 0 ? 0 : sy > last ? last : sy | 0) * W + (sx < 0 ? 0 : sx > last ? last : sx | 0)];
       sx = x + Math.cos(h - SA) * SD; sy = y + Math.sin(h - SA) * SD;
       const r = trail[(sy < 0 ? 0 : sy > last ? last : sy | 0) * W + (sx < 0 ? 0 : sx > last ? last : sx | 0)];
-      // steer
       if (f > l && f > r) {
         // straight on
       } else if (f < l && f < r) {
@@ -613,14 +2135,18 @@ export function createScene(ctx) {
       } else if (r > l) {
         h -= RA;
       }
-      // step, turning back at the colony's reach
+      // the random-turn rate: high, and the front spreads as a fan instead of
+      // condensing into veins
+      if (SP.rnd > 0 && Math.random() < SP.rnd) h += (Math.random() - 0.5) * 1.9;
       let nx = x + Math.cos(h) * SS, ny = y + Math.sin(h) * SS;
-      const dx = nx - cx, dy = ny - cy;
-      if (dx * dx + dy * dy > R2) {
-        h = Math.atan2(cy - y, cx - x) + (Math.random() - 0.5) * 1.6;
+      const k = agI[i];
+      const idx = nx - inocX[k], idy = ny - inocY[k];
+      const pdx = nx - cx, pdy = ny - cy;
+      const Rk = inocR[k];
+      if (idx * idx + idy * idy > Rk * Rk || pdx * pdx + pdy * pdy > Rp2) {
+        h = Math.atan2(inocY[k] - y, inocX[k] - x) + (Math.random() - 0.5) * 1.6;
         nx = x + Math.cos(h) * SS; ny = y + Math.sin(h) * SS;
       }
-      // one agent per cell: a taken cell blocks the move and turns the agent
       const from = (y | 0) * W + (x | 0);
       const to = (ny | 0) * W + (nx | 0);
       if (to !== from) {
@@ -632,22 +2158,32 @@ export function createScene(ctx) {
         occ[from] = 0;
         occ[to] = 1;
       }
+      // an agent stepping onto a flake IS the colony arriving on it
+      const fm = foodMap[to];
+      if (fm !== 0) foodOn[fm - 1] = 1;
       agX[i] = nx; agY[i] = ny; agH[i] = h;
       trail[to] += DEP;
     }
-    // food within reach keeps attracting: a soft mound of attractant the
-    // veins find from a distance and anchor to
-    const Rf = R - 4;
-    for (let k = 0; k < FOOD_N; k++) {
+    // A flake diffuses attractant whether or not the plasmodium has found it —
+    // faintly while it is only a scent on the plate, at full strength once the
+    // veins are on it. It LIGHTS the moment an agent walks onto it (foodMap
+    // above) and stays lit: a distance from a spore is not arrival, and with
+    // off-centre inocula it was a test flakes on the far side could never pass.
+    for (let k = 0; k < SP.foodN; k++) {
       const fx = foodX[k], fy = foodY[k];
-      const ddx = fx - cx, ddy = fy - cy;
-      if (ddx * ddx + ddy * ddy > Rf * Rf) continue;
+      const on = foodOn[k] === 1;
+      const o = k * 4;
+      foodU[o] = (fx / SW - 0.5) * 2 * DISH;
+      foodU[o + 1] = (fy / SW - 0.5) * 2 * DISH;
+      foodU[o + 2] = 0.055;
+      foodU[o + 3] = on ? 1 : 0.18;
+      const str = SP.foodStr * (on ? 1 : 0.2);
       const ix = fx | 0, iy = fy | 0;
       for (let oy = -5; oy <= 5; oy++) {
         for (let ox = -5; ox <= 5; ox++) {
           const d2 = ox * ox + oy * oy;
           if (d2 > 25) continue;
-          trail[(iy + oy) * W + ix + ox] += 2.4 * Math.exp(-d2 * 0.12);
+          trail[(iy + oy) * W + ix + ox] += str * Math.exp(-d2 * 0.12);
         }
       }
     }
@@ -658,7 +2194,8 @@ export function createScene(ctx) {
       for (let x = 1; x < last; x++) trail2[b + x] = trail[b + x - 1] + trail[b + x] + trail[b + x + 1];
       trail2[b + last] = trail[b + last - 1] + trail[b + last] * 2;
     }
-    const k9 = DECAY / 9;
+    const k9 = SP.decay / 9;
+    const tmax = SP.tmax, bk = SP.bk;
     for (let y = 0; y < W; y++) {
       const b = y * W;
       const bu = (y === 0 ? 0 : y - 1) * W;
@@ -666,100 +2203,184 @@ export function createScene(ctx) {
       for (let x = 0; x < W; x++) {
         const v = (trail2[bu + x] + trail2[b + x] + trail2[bd + x]) * k9;
         trail[b + x] = v;
-        trailBytes[b + x] = v >= TRAIL_MAX ? 255 : (v * BYTE_K) | 0;
+        trailBytes[b + x] = v >= tmax ? 255 : (v * bk) | 0;
       }
     }
     trailTex.needsUpdate = true;
   }
 
   // --- the mycelium: hyphal growth in time order ----------------------------------
-  // Germ tubes leave the spore; every step each live tip extends by MYC_STEP
-  // with heading persistence, a radial bias (hyphae grow away from the colony)
-  // and noise; it branches laterally at the branching angle; it dies at the
-  // plate's rim. Segments are appended in (step, tip) order, so the first N
-  // are the colony N segments into its growth. The same random table is read
-  // in the same order every run, so changing the angle or the tortuosity
-  // deforms the network instead of re-seeding it.
+  // Germ tubes leave the spore; every step each live tip extends by the
+  // species' internode with heading persistence, tortuosity, a radial tropism,
+  // gravitropism into the slab and NEGATIVE AUTOTROPISM — it reads the
+  // gradient of a density grid its own colony has written and steers down it,
+  // away from itself. A tip that runs into an older hypha ANASTOMOSES: it lays
+  // one last connecting segment, fuses and stops, which is what closes loops in
+  // a real network. A cord tip lays three parallel hyphae as a rhizomorph. Tips
+  // that die late enough swell into sporangia. Segments are appended in
+  // (step, tip) order, so the first N are the colony N segments into its
+  // growth, and the random table is read in the same order every run, so
+  // changing an angle deforms the network instead of re-seeding it.
   const RND = new Float32Array(RND_LEN);
   for (let i = 0; i < RND_LEN; i++) RND[i] = Math.random();
   const tipX = new Float32Array(MAX_TIPS), tipY = new Float32Array(MAX_TIPS), tipZ = new Float32Array(MAX_TIPS);
   const tipHx = new Float32Array(MAX_TIPS), tipHy = new Float32Array(MAX_TIPS), tipHz = new Float32Array(MAX_TIPS);
   const tipGen = new Uint8Array(MAX_TIPS);
   const tipAlive = new Uint8Array(MAX_TIPS);
+  const tipCord = new Uint8Array(MAX_TIPS);
   const tipGap = new Uint16Array(MAX_TIPS);
   const tipSeg = new Int32Array(MAX_TIPS);
   const stepStart = new Int32Array(MYC_STEPS + 2);
+  const dens = new Float32Array(GW * GW);
+  const mark = new Int32Array(GW * GW);
+  const markStep = new Int32Array(GW * GW);
   let mycTotal = 0;
   let mycSteps = 0;
-
-  function growMycelium(branchAngle, tort) {
-    let rc = 0;
-    let nTips = 0;
-    let seg = 0;
-    const GERM = 8;
+  const MYP = {
+    germ: 8, angle: 0.58, prob: 0.15, gap: 3, step: 0.031, tort: 0.35,
+    radial: 0.07, grav: 0.4, auto: 0.0, anas: 0.0, cord: 0.0, spor: 0.0, thick: 2.7, maxGen: 8,
+  };
+  // the fungal strain's draws, hoisted with their seed for the same reason
+  let mySeed = 1;
+  const mh = (k) => hash1(mySeed * 5.31 + k * 23.13 + 0.57);
+  function mycSpecies(seed) {
+    mySeed = seed;
+    MYP.germ = 4 + Math.floor(mh(1) * 11);
+    MYP.angle = 0.30 + mh(2) * 0.85;
+    MYP.prob = 0.05 + mh(3) * 0.26;
+    MYP.gap = 2 + Math.floor(mh(4) * 6);
+    MYP.step = 0.020 + mh(5) * 0.026;
+    MYP.tort = 0.10 + mh(6) * 0.80;
+    MYP.radial = mh(7) * 0.14;
+    MYP.grav = 0.2 + mh(8) * 0.7;
+    MYP.auto = mh(9) * mh(9) * 0.9;
+    MYP.anas = mh(10) * 0.85;
+    MYP.cord = mh(11) * mh(11) * 0.35;
+    MYP.spor = mh(12) * 0.8;
+    MYP.thick = 1.75 + mh(13) * 1.45;
+    MYP.maxGen = 4 + Math.floor(mh(14) * 6);
+  }
+  const gIdx = (x, y) => {
+    let gx = ((x + DISH) / (2 * DISH) * GW) | 0;
+    let gy = ((y + DISH) / (2 * DISH) * GW) | 0;
+    if (gx < 0) gx = 0; else if (gx >= GW) gx = GW - 1;
+    if (gy < 0) gy = 0; else if (gy >= GW) gy = GW - 1;
+    return gy * GW + gx;
+  };
+  // hoisted so a regrow inside update() allocates nothing
+  let mSeg = 0;
+  function mput(x0, y0, z0, x1, y1, z1, gen, cord, kind, rnd, st) {
+    const o3 = mSeg * 3, o4 = mSeg * 4;
+    myc.p0[o3] = x0; myc.p0[o3 + 1] = y0; myc.p0[o3 + 2] = z0;
+    myc.p1[o3] = x1; myc.p1[o3 + 1] = y1; myc.p1[o3 + 2] = z1;
+    myc.info[o4] = gen + (cord ? 32 : 0);
+    myc.info[o4 + 1] = kind;
+    myc.info[o4 + 2] = rnd;
+    myc.info[o4 + 3] = st;
+    mSeg++;
+  }
+  function growMycelium(swayV, seedOff) {
+    let rc = seedOff | 0;
+    dens.fill(0);
+    mark.fill(0);
+    markStep.fill(0);
+    const branchAngle = MYP.angle + swayV * 0.62;
+    const tort = MYP.tort + swayV * 0.55;
+    const stepLen = MYP.step;
+    const GERM = MYP.germ;
     for (let k = 0; k < GERM; k++) {
-      const a = (k / GERM) * 6.2831853 + RND[rc++] * 0.6;
-      tipX[k] = Math.cos(a) * 0.06; tipY[k] = Math.sin(a) * 0.06; tipZ[k] = (RND[rc++] - 0.5) * 0.05;
-      tipHx[k] = Math.cos(a); tipHy[k] = Math.sin(a); tipHz[k] = (RND[rc++] - 0.5) * 0.3;
+      const a = (k / GERM) * 6.2831853 + RND[rc++ & (RND_LEN - 1)] * 0.6;
+      tipX[k] = Math.cos(a) * 0.06; tipY[k] = Math.sin(a) * 0.06; tipZ[k] = (RND[rc++ & (RND_LEN - 1)] - 0.5) * 0.05;
+      tipHx[k] = Math.cos(a); tipHy[k] = Math.sin(a); tipHz[k] = (RND[rc++ & (RND_LEN - 1)] - 0.5) * 0.3;
       tipGen[k] = 0; tipAlive[k] = 1; tipGap[k] = 0; tipSeg[k] = -1;
+      tipCord[k] = RND[rc++ & (RND_LEN - 1)] < MYP.cord ? 1 : 0;
     }
-    nTips = GERM;
+    let nTips = GERM;
+    mSeg = 0;
     const rim = DISH * 0.965;
+    const INFO = myc.info;
     let step = 0;
-    for (; step < MYC_STEPS && seg < MYC_SEGS; step++) {
-      stepStart[step] = seg;
+    for (; step < MYC_STEPS && mSeg < MYC_SEGS - 8; step++) {
+      stepStart[step] = mSeg;
       let live = 0;
       const nNow = nTips;
-      for (let i = 0; i < nNow && seg < MYC_SEGS; i++) {
-        // three draws per tip-step, always, so the branch decisions hold across morphs
-        const r0 = RND[rc++ & (RND_LEN - 1)], r1 = RND[rc++ & (RND_LEN - 1)], r2 = RND[rc++ & (RND_LEN - 1)];
+      for (let i = 0; i < nNow && mSeg < MYC_SEGS - 8; i++) {
+        // four draws per tip-step, always, so the decisions hold across morphs
+        const r0 = RND[rc++ & (RND_LEN - 1)], r1 = RND[rc++ & (RND_LEN - 1)];
+        const r2 = RND[rc++ & (RND_LEN - 1)], r3 = RND[rc++ & (RND_LEN - 1)];
         if (!tipAlive[i]) continue;
         live++;
         let x = tipX[i], y = tipY[i], z = tipZ[i];
         let hx = tipHx[i], hy = tipHy[i], hz = tipHz[i];
-        // heading: noise, radial bias, the slab's flatness
         const c = Math.cos((r0 - 0.5) * tort), s = Math.sin((r0 - 0.5) * tort);
         const nhx = hx * c - hy * s, nhy = hx * s + hy * c;
         const rl = Math.sqrt(x * x + y * y) + 1e-5;
-        hx = nhx + (x / rl) * 0.07; hy = nhy + (y / rl) * 0.07;
-        hz = hz * 0.7 + (r1 - 0.5) * 0.12 - z * 0.4;
+        hx = nhx + (x / rl) * MYP.radial;
+        hy = nhy + (y / rl) * MYP.radial;
+        // negative autotropism: read the colony's own density and turn away
+        if (MYP.auto > 0.01) {
+          const gx = ((x + DISH) / (2 * DISH) * GW) | 0;
+          const gy = ((y + DISH) / (2 * DISH) * GW) | 0;
+          if (gx > 0 && gy > 0 && gx < GW - 1 && gy < GW - 1) {
+            const b = gy * GW + gx;
+            hx -= (dens[b + 1] - dens[b - 1]) * MYP.auto * 0.020;
+            hy -= (dens[b + GW] - dens[b - GW]) * MYP.auto * 0.020;
+          }
+        }
+        hz = hz * 0.7 + (r1 - 0.5) * 0.12 - z * MYP.grav; // gravitropism into the slab
         const hl = Math.sqrt(hx * hx + hy * hy + hz * hz);
         hx /= hl; hy /= hl; hz /= hl;
-        const nx = x + hx * MYC_STEP, ny = y + hy * MYC_STEP, nz = z + hz * MYC_STEP;
-        // lay the segment
-        const o3 = seg * 3, o4 = seg * 4;
-        mycP0[o3] = x; mycP0[o3 + 1] = y; mycP0[o3 + 2] = z;
-        mycP1[o3] = nx; mycP1[o3 + 1] = ny; mycP1[o3 + 2] = nz;
-        mycInfo[o4] = tipGen[i]; mycInfo[o4 + 2] = r2; mycInfo[o4 + 3] = step;
-        if (tipSeg[i] >= 0) mycInfo[tipSeg[i] * 4 + 1] = 0;
-        tipSeg[i] = seg;
-        mycInfo[o4 + 1] = 1; // the newest segment of a hypha is its tip until it extends
-        seg++;
+        const nx = x + hx * stepLen, ny = y + hy * stepLen, nz = z + hz * stepLen;
+        const cell = gIdx(nx, ny);
+        // anastomosis: a tip that meets an older hypha fuses to it and stops
+        const other = mark[cell];
+        const fuse = other !== 0 && other !== i + 1 && step - markStep[cell] > 5 && r3 < MYP.anas;
+        const cord = tipCord[i] === 1;
+        mput(x, y, z, nx, ny, nz, tipGen[i], cord, fuse ? 3 : 1, r2, step);
+        const mine = mSeg - 1;
+        if (cord && mSeg < MYC_SEGS - 4) {
+          // a rhizomorph cord: the bundle runs as three parallel hyphae
+          const px = -hy * 0.016, py = hx * 0.016;
+          mput(x + px, y + py, z, nx + px, ny + py, nz, tipGen[i] + 1, cord, 0, r2 * 0.7, step);
+          mput(x - px, y - py, z, nx - px, ny - py, nz, tipGen[i] + 1, cord, 0, r2 * 0.3, step);
+        }
+        if (tipSeg[i] >= 0) INFO[tipSeg[i] * 4 + 1] = 0;
+        tipSeg[i] = mine;
+        dens[cell] += 1;
+        mark[cell] = i + 1;
+        markStep[cell] = step;
         tipX[i] = nx; tipY[i] = ny; tipZ[i] = nz;
         tipHx[i] = hx; tipHy[i] = hy; tipHz[i] = hz;
         tipGap[i]++;
-        // the rim stops the tip
-        if (nx * nx + ny * ny > rim * rim) { tipAlive[i] = 0; continue; }
-        // lateral branching
-        if (tipGap[i] >= 3 && r2 < 0.15 && nTips < MAX_TIPS && tipGen[i] < 8) {
+        const late = step > MYC_STEPS * 0.45;
+        if (fuse) { tipAlive[i] = 0; continue; }
+        if (nx * nx + ny * ny > rim * rim) {
+          tipAlive[i] = 0;
+          if (late && r0 < MYP.spor) INFO[mine * 4 + 1] = 2; // a sporangium at the rim
+          continue;
+        }
+        if (late && r1 < MYP.spor * 0.02) { tipAlive[i] = 0; INFO[mine * 4 + 1] = 2; continue; }
+        if (tipGap[i] >= MYP.gap && r2 < MYP.prob && nTips < MAX_TIPS && tipGen[i] < MYP.maxGen) {
           const side = r1 < 0.5 ? 1 : -1;
           const ca = Math.cos(branchAngle * side), sa = Math.sin(branchAngle * side);
           const j = nTips++;
           tipX[j] = nx; tipY[j] = ny; tipZ[j] = nz;
           tipHx[j] = hx * ca - hy * sa; tipHy[j] = hx * sa + hy * ca; tipHz[j] = hz * 0.5 + (r0 - 0.5) * 0.2;
           tipGen[j] = tipGen[i] + 1; tipAlive[j] = 1; tipGap[j] = 0; tipSeg[j] = -1;
+          tipCord[j] = r3 < MYP.cord ? 1 : 0;
           tipGap[i] = 0;
         }
       }
       if (!live) break;
     }
     mycSteps = Math.max(1, step);
-    stepStart[step] = seg;
-    mycTotal = seg;
-    attrP0.needsUpdate = true;
-    attrP1.needsUpdate = true;
-    attrInfo.needsUpdate = true;
-    MU.uTotal.value = Math.max(1, seg);
+    stepStart[step] = mSeg;
+    mycTotal = mSeg;
+    myc.a0.needsUpdate = true;
+    myc.a1.needsUpdate = true;
+    myc.ai.needsUpdate = true;
+    MU.uTotal.value = Math.max(1, mSeg);
+    MU.uThick.value = MYP.thick;
   }
   // the visible prefix for a development level, linear in growth time
   function mycCount(devel) {
@@ -770,46 +2391,332 @@ export function createScene(ctx) {
     return Math.min(mycTotal, Math.max(1, Math.round(a + (b - a) * f)));
   }
 
+  // --- the double helix ------------------------------------------------------------
+  // B-form geometry: 10.5 base pairs per turn, the second backbone set 140°
+  // round the axis rather than 180° so the major and minor grooves come out
+  // unequal, antiparallel (the strands are laid in opposite senses), base pairs
+  // as rungs with two hydrogen bonds for A-T and three for G-C. The level runs
+  // it from a plain duplex through a replication fork to a chromatin fibre;
+  // sway is the torsion. Everything here is static geometry — the hand's
+  // azimuth in the vertex shader is the only thing that turns it.
+  const axP = new Float32Array(BP * 3);
+  const frN = new Float32Array(BP * 3);
+  const frB = new Float32Array(BP * 3);
+  const seq = new Uint8Array(BP);
+  const SLOT = [0, 1, 3, 4]; // A, T, G, C take their own palette stops
+  let hxCount = 0;
+  const WK = 2.3; // superhelical frequency of the writhe
+
+  function helixSequence(seed) {
+    for (let k = 0; k < BP; k++) seq[k] = Math.floor(hash1(seed * 3.71 + k * 1.13) * 4) & 3;
+  }
+  // hoisted scratch, so a rebuild inside update() allocates nothing
+  let hn = 0, hTwist = TWIST0, hWF = 0, hKf = 0;
+  const hPa = new Float32Array(3), hPb = new Float32Array(3);
+  const hPc = new Float32Array(3), hPd = new Float32Array(3);
+  function hput(ax0, ay0, az0, ax1, ay1, az1, role, slot, rnd, w) {
+    if (hn >= HELIX_SEGS) return;
+    const o3 = hn * 3, o4 = hn * 4;
+    hx.p0[o3] = ax0; hx.p0[o3 + 1] = ay0; hx.p0[o3 + 2] = az0;
+    hx.p1[o3] = ax1; hx.p1[o3 + 1] = ay1; hx.p1[o3 + 2] = az1;
+    hx.info[o4] = role; hx.info[o4 + 1] = slot; hx.info[o4 + 2] = rnd; hx.info[o4 + 3] = w;
+    hn++;
+  }
+  // The molecule's axis, evaluated at any fractional base index: a gentle
+  // superhelical writhe at rest, blending into the chromatin path where the
+  // duplex makes 1.65 turns round each histone core with straight linker DNA
+  // between. Continuous in kf, so the sub-sampled backbone reads as a curve.
+  let hWN = 0, hWrithe = 0, hRad = HRAD, hRise = RISE, hSpace = 1;
+  const coreY = (i) => (i + 0.5 - NUC / 2) * hSpace;
+  const coreX = (i) => 0.18 * Math.cos(i * 2.1);
+  const coreZ = (i) => 0.18 * Math.sin(i * 2.1);
+  const WRAP = 0.70; // of each nucleosome's span the duplex spends wrapped
+  const hFa = new Float32Array(3), hFb = new Float32Array(3);
+  function axisAt(kf, out) {
+    const y0 = (kf - (BP - 1) / 2) * hRise;
+    let x = hWrithe * Math.cos(WK * y0);
+    let y = y0;
+    let z = hWrithe * Math.sin(WK * y0);
+    if (hWN > 0.002) {
+      const u = clamp(BP > 1 ? kf / (BP - 1) : 0, 0, 0.99999);
+      const cellU = u * NUC;
+      const ci = Math.min(NUC - 1, Math.floor(cellU));
+      const lf = cellU - ci;
+      let nx, ny, nz;
+      if (lf < WRAP) {
+        const a = (lf / WRAP) * 1.65 * 6.2831853;
+        nx = coreX(ci) + Math.cos(a) * COILR;
+        nz = coreZ(ci) + Math.sin(a) * COILR;
+        ny = coreY(ci) + (lf / WRAP - 0.5) * 0.30;
+      } else {
+        const g = (lf - WRAP) / (1 - WRAP);
+        const ae = 1.65 * 6.2831853;
+        const ex = coreX(ci) + Math.cos(ae) * COILR, ez = coreZ(ci) + Math.sin(ae) * COILR;
+        const ey = coreY(ci) + 0.16;
+        const ni = ci + 1;
+        const sx = coreX(ni) + COILR, sz = coreZ(ni);
+        const sy = coreY(ni) - 0.16;
+        nx = ex + (sx - ex) * g; ny = ey + (sy - ey) * g; nz = ez + (sz - ez) * g;
+      }
+      x += (nx - x) * hWN; y += (ny - y) * hWN; z += (nz - z) * hWN;
+    }
+    out[0] = x; out[1] = y; out[2] = z;
+  }
+  // frames by parallel transport up the molecule, so the twist never flips
+  // where the coil's tangent crosses a world axis
+  function buildFrames() {
+    let pnx = 0, pny = 0, pnz = 1;
+    for (let k = 0; k < BP; k++) {
+      axisAt(k, hFa);
+      axP[k * 3] = hFa[0]; axP[k * 3 + 1] = hFa[1]; axP[k * 3 + 2] = hFa[2];
+      axisAt(k - 0.15, hFa);
+      axisAt(k + 0.15, hFb);
+      let tx = hFb[0] - hFa[0], ty = hFb[1] - hFa[1], tz = hFb[2] - hFa[2];
+      const tl = Math.hypot(tx, ty, tz) || 1;
+      tx /= tl; ty /= tl; tz /= tl;
+      const dt = pnx * tx + pny * ty + pnz * tz;
+      let nx = pnx - tx * dt, ny = pny - ty * dt, nz = pnz - tz * dt;
+      let nl = Math.hypot(nx, ny, nz);
+      if (nl < 1e-4) { nx = ty; ny = -tx; nz = 0; nl = Math.hypot(nx, ny, nz) || 1; }
+      nx /= nl; ny /= nl; nz /= nl;
+      pnx = nx; pny = ny; pnz = nz;
+      frN[k * 3] = nx; frN[k * 3 + 1] = ny; frN[k * 3 + 2] = nz;
+      frB[k * 3] = ty * nz - tz * ny;
+      frB[k * 3 + 1] = tz * nx - tx * nz;
+      frB[k * 3 + 2] = tx * ny - ty * nx;
+    }
+  }
+  // a point on strand `which` at fractional base index kf, `frac` of the way
+  // out to the backbone: 1 is the backbone itself, 0.34 the base's inner edge
+  function pointAt(kf, which, frac, out) {
+    axisAt(kf, hFa);
+    const k0 = Math.min(BP - 1, Math.max(0, Math.floor(kf)));
+    const k1 = Math.min(BP - 1, k0 + 1);
+    const m = kf - k0;
+    const o0 = k0 * 3, o1 = k1 * 3;
+    let nx = frN[o0] + (frN[o1] - frN[o0]) * m;
+    let ny = frN[o0 + 1] + (frN[o1 + 1] - frN[o0 + 1]) * m;
+    let nz = frN[o0 + 2] + (frN[o1 + 2] - frN[o0 + 2]) * m;
+    const nl = Math.hypot(nx, ny, nz) || 1;
+    nx /= nl; ny /= nl; nz /= nl;
+    let bx = frB[o0] + (frB[o1] - frB[o0]) * m;
+    let by = frB[o0 + 1] + (frB[o1 + 1] - frB[o0 + 1]) * m;
+    let bz = frB[o0 + 2] + (frB[o1 + 2] - frB[o0 + 2]) * m;
+    const bl = Math.hypot(bx, by, bz) || 1;
+    bx /= bl; by /= bl; bz /= bl;
+    const sep = kf <= hKf ? 0 : ((kf - hKf) / (BP - 1 - hKf)) * hWF;
+    const R = hRad * (1 + 2.3 * sep) * frac;
+    const th = which === 0
+      ? (1 - sep) * (kf * hTwist) + sep * 1.5708
+      : (1 - sep) * (kf * hTwist + GROOVE) - sep * 1.5708;
+    const c = Math.cos(th), sn = Math.sin(th);
+    out[0] = hFa[0] + R * (c * nx + sn * bx);
+    out[1] = hFa[1] + R * (c * ny + sn * by);
+    out[2] = hFa[2] + R * (c * nz + sn * bz);
+  }
+  function buildHelix(devH, swayV) {
+    hn = 0;
+    // sway sweeps the torsion: B-form unwinds toward an open ladder, then
+    // winds back through B-form into an overwound, writhing supercoil
+    const twistF = swayV < 0.45 ? 1 - (swayV / 0.45) * 0.80 : 0.20 + ((swayV - 0.45) / 0.55) * 1.12;
+    const twist = TWIST0 * twistF;
+    const writhe = smooth01((swayV - 0.55) / 0.45) * 0.40;
+    const wF = devH < 1 ? smooth01(devH) : smooth01(2 - devH);
+    const wN = smooth01(devH - 1);
+    hTwist = twist;
+    hWF = wF;
+    hKf = Math.floor(BP * 0.42);
+    // the duplex thins and shortens as it condenses onto the histones, so
+    // the wrap reads at the same scale a real nucleosome does
+    hWN = wN;
+    hWrithe = writhe;
+    hRad = HRAD * (1 - 0.55 * wN);
+    hRise = RISE * (1 - 0.45 * wN);
+    hSpace = (BP * hRise) / NUC;
+    buildFrames();
+    // the two sugar-phosphate backbones, sub-sampled so the strands read as
+    // curves rather than a ten-sided polygon a turn, and laid in opposite
+    // senses (5'->3' one way, 3'->5' the other): antiparallel by construction,
+    // and visibly so — the fragment shader keys each segment's phosphate bead
+    // off aInfo.w, the strand, so the beads sit off centre in opposite
+    // directions and the two backbones read as running against each other
+    const steps = (BP - 1) * SUB;
+    for (let s = 0; s < steps; s++) {
+      const ka = s / SUB, kb = (s + 1) / SUB;
+      pointAt(ka, 0, 1, hPa);
+      pointAt(kb, 0, 1, hPb);
+      hput(hPa[0], hPa[1], hPa[2], hPb[0], hPb[1], hPb[2], 0, 2, hash1(s * 1.7), 0);
+      pointAt(ka, 1, 1, hPc);
+      pointAt(kb, 1, 1, hPd);
+      hput(hPd[0], hPd[1], hPd[2], hPc[0], hPc[1], hPc[2], 0, 2, hash1(s * 2.3), 1);
+    }
+    // the base pairs: two bases reaching in, joined by their hydrogen bonds;
+    // past the fork they are unpaired and stand as stubs on their own strand
+    for (let k = 0; k < BP; k++) {
+      const sepF = k <= hKf ? 0 : ((k - hKf) / (BP - 1 - hKf)) * wF;
+      const bA = seq[k];
+      const bB = bA ^ 1; // A pairs with T, G with C
+      pointAt(k, 0, 1, hPa);
+      pointAt(k, 1, 1, hPb);
+      const inner = sepF < 0.92 ? 0.34 : 0.72;
+      pointAt(k, 0, inner, hPc);
+      pointAt(k, 1, inner, hPd);
+      hput(hPa[0], hPa[1], hPa[2], hPc[0], hPc[1], hPc[2], 1, SLOT[bA], hash1(k * 3.1), 0);
+      hput(hPb[0], hPb[1], hPb[2], hPd[0], hPd[1], hPd[2], 1, SLOT[bB], hash1(k * 4.9), 1);
+      if (sepF < 0.35) {
+        const nb = bA >= 2 ? 3 : 2; // G-C holds with three bonds, A-T with two
+        const o = k * 3;
+        const ux = frB[o], uy = frB[o + 1], uz = frB[o + 2];
+        for (let j = 0; j < nb; j++) {
+          const off = (j - (nb - 1) / 2) * 0.032;
+          hput(hPc[0] + ux * off, hPc[1] + uy * off, hPc[2] + uz * off,
+            hPd[0] + ux * off, hPd[1] + uy * off, hPd[2] + uz * off, 2, SLOT[bA], hash1(k * 5.3 + j), 0);
+        }
+      }
+    }
+    // the daughter strands the polymerase leaves behind the fork: continuous
+    // on the leading template, Okazaki fragments on the lagging one
+    if (wF > 0.02) {
+      for (let s = hKf * SUB; s < steps; s++) {
+        const ka = s / SUB, kb = (s + 1) / SUB;
+        const fa = 1 - 0.44 * wF * Math.min(1, (ka - hKf) / 3);
+        const fb = 1 - 0.44 * wF * Math.min(1, (kb - hKf) / 3);
+        pointAt(ka, 0, fa, hPa);
+        pointAt(kb, 0, fb, hPb);
+        hput(hPa[0], hPa[1], hPa[2], hPb[0], hPb[1], hPb[2], 5, 3, hash1(s * 6.1), 0);
+        if ((s - hKf * SUB) % 25 < 17) {
+          pointAt(ka, 1, fa, hPc);
+          pointAt(kb, 1, fb, hPd);
+          hput(hPd[0], hPd[1], hPd[2], hPc[0], hPc[1], hPc[2], 5, 4, hash1(s * 7.7), 1);
+        }
+      }
+    }
+    // the polymerase bubble sits on the junction; the histone cores carry the
+    // wrapped fibre - both scale in from nothing so neither pops
+    if (wF > 0.005) {
+      const o = hKf * 3;
+      hput(axP[o], axP[o + 1], axP[o + 2], axP[o] + 0.001, axP[o + 1], axP[o + 2], 4, 0, 0.5, 0.62 * wF);
+    }
+    if (wN > 0.005) {
+      for (let i = 0; i < NUC; i++) {
+        hput(coreX(i), coreY(i), coreZ(i), coreX(i) + 0.001, coreY(i), coreZ(i), 3, 1, 0.5, 0.44 * wN);
+      }
+    }
+    hxCount = hn;
+    hx.g.instanceCount = Math.max(1, hn);
+    hx.a0.needsUpdate = true;
+    hx.a1.needsUpdate = true;
+    hx.ai.needsUpdate = true;
+    HU.uCount.value = hn;
+  }
+
   // --- state ------------------------------------------------------------------------
+  const ORG_STAGES = [6, 6, STAGES, 3]; // mycelium, slime mold, cell line, helix
+  const ORG_MYC = 0, ORG_SLIME = 1, ORG_CELL = 2, ORG_HELIX = 3;
+
   let level = 0, target = 0, dir = 1;
-  let knobPrev = null, strikePrev = 0;
-  let jig = 0, press = 0, bass = 0, high = 0, lvl = 0, dist = 3.4, panX = 0, panY = 0, pulse = 0, beatPrev = 0;
-  let orgS = 0, flow = 0;
-  let mycSway = -1; // the sway the network was last grown for (−1: never)
+  let knobLvlPrev = null, knobOrgPrev = null, knobSpcPrev = null, strikePrev = 0;
+  let orgTarget = ORG_CELL, orgPos = ORG_CELL;
+  // the strain the scene comes up on is the one the params declare, so a
+  // project that saves species 0 gets species 0 and two launches of the same
+  // show match; "no two runs look alike" lives in the seeded table and the
+  // re-seed action, not in an unrepeatable draw at creation
+  let speciesIdx = 0;
+  let reseedN = 0;
+  let paramMorph = null, paramSqueeze = null;
+  let jig = 0, press = 0, bass = 0, high = 0, lvl = 0, dist = 3.4;
+  let panX = 0, panY = 0, azim = 0, pulse = 0, beatPrev = 0, flow = 0;
+  let mycSway = -1, mycDirty = true;
+  let hxSway = -1, hxLevel = -1, hxDirty = true;
+  let seedOff = 0;
+
+  function applySpecies() {
+    const seed = speciesIdx * 13.37 + reseedN * 3.77 + 1.0;
+    cellGrain = hash1(seed * 2.91);
+    seedOff = (reseedN * 977 + speciesIdx * 131) & (RND_LEN - 1);
+    slimeSpecies(seed);
+    slimeReset();
+    mycSpecies(seed);
+    helixSequence(seed);
+    mycDirty = true;
+    hxDirty = true;
+  }
+  function stepLevel(s) {
+    const org = clamp(Math.round(orgPos), 0, 3);
+    const n = ORG_STAGES[org] - 1;
+    const q = Math.round(target * n) + s;
+    target = clamp(q, 0, n) / n;
+  }
+  // the daughter colonies a Volvox sphere carries — fixed positions inside the
+  // parent, seen through its glassy wall (they sit still; nothing here turns)
+  const DAUGH = [0.40, 0.30, 0.12, 0.26, -0.38, -0.22, 0.24, 0.22, 0.10, -0.46, -0.28, 0.19, -0.20, 0.44, -0.30, 0.16];
+  for (let i = 0; i < 16; i++) daugh[i] = DAUGH[i];
+
+  applySpecies();
+  computeCells(0);
+  growMycelium(0, seedOff);
+  mycSway = 0;
+  buildHelix(0, 0);
+  hxSway = 0; hxLevel = 0;
 
   return {
     scene,
     camera,
     update(dt, t, io) {
-      // ---- the level: KNOB 5 sets it, any strike steps it
-      const k = io.knobs[4];
-      if (knobPrev === null) knobPrev = k;
-      if (Math.abs(k - knobPrev) > 1 / 256) {
-        knobPrev = k;
-        target = k * 4;
-        dir = target >= level ? 1 : -1;
+      // ---- the organism: KNOB 6 in quarter turns, with hysteresis at the edges
+      const k6 = io.knobs[5];
+      if (knobOrgPrev === null) knobOrgPrev = k6;
+      if (Math.abs(k6 - knobOrgPrev) > 1 / 256) {
+        knobOrgPrev = k6;
+        const b = clamp(Math.floor(k6 * 4), 0, 3);
+        if (b !== orgTarget && (k6 < orgTarget * 0.25 - 0.02 || k6 > (orgTarget + 1) * 0.25 + 0.02)) orgTarget = b;
+      }
+      orgPos = approach(orgPos, orgTarget, 0.15, dt);
+      const wMyc = Math.max(0, 1 - Math.abs(orgPos - ORG_MYC));
+      const wSlime = Math.max(0, 1 - Math.abs(orgPos - ORG_SLIME));
+      const wCell = Math.max(0, 1 - Math.abs(orgPos - ORG_CELL));
+      const wHelix = Math.max(0, 1 - Math.abs(orgPos - ORG_HELIX));
+
+      // ---- the species: KNOB 7, quantized to the eight seeded parameter sets
+      const k7 = io.knobs[6];
+      if (knobSpcPrev === null) knobSpcPrev = k7;
+      if (Math.abs(k7 - knobSpcPrev) > 1 / 256) {
+        knobSpcPrev = k7;
+        const s = clamp(Math.floor(k7 * 8), 0, 7);
+        if (s !== speciesIdx && (k7 < speciesIdx * 0.125 - 0.012 || k7 > (speciesIdx + 1) * 0.125 + 0.012)) {
+          speciesIdx = s;
+          applySpecies();
+        }
+      }
+
+      // ---- the level: KNOB 5 sets it, any strike steps one stage of what is
+      // on screen (sixteen for the cell line, three for the helix, six each
+      // for the simulations), reversing at the ends
+      const k5 = io.knobs[4];
+      if (knobLvlPrev === null) knobLvlPrev = k5;
+      if (Math.abs(k5 - knobLvlPrev) > 1 / 256) {
+        knobLvlPrev = k5;
+        dir = k5 >= level ? 1 : -1;
+        target = k5;
       }
       if (io.strike > strikePrev + 0.3) {
-        if (target >= 4 - 1e-3) dir = -1;
+        if (target >= 1 - 1e-3) dir = -1;
         else if (target <= 1e-3) dir = 1;
-        target = clamp(Math.round(target) + dir, 0, 4);
+        stepLevel(dir);
       }
       strikePrev = io.strike;
       level = approach(level, target, 1.3, dt);
-      const devel = level / 4;
 
-      // ---- the organism: KNOB 6, centre egg, right slime mold, left mycelium
-      orgS = approach(orgS, (io.knobs[5] - 0.5) * 2, 0.15, dt);
-      const f = smooth01((Math.abs(orgS) - 0.1) / 0.8);
-      const wEgg = 1 - f;
-      const wSlime = orgS > 0 ? f : 0;
-      const wMyc = orgS < 0 ? f : 0;
-
-      // ---- gestures: sway morphs, press squeezes, the hand pans and dollies
-      jig = approach(jig, io.gestures.sway, 0.4, dt);
-      press = approach(press, io.gestures.press, 0.15, dt);
-      panX = approach(panX, (io.xy.x - 0.5) * 1.6, 0.3, dt);
+      // ---- gestures: sway morphs, press squeezes, the hand pans and dollies.
+      // An assigned morph / squeeze takes the larger of the two, so assigning
+      // one never kills the gesture.
+      const swayIn = paramMorph === null ? io.gestures.sway : Math.max(io.gestures.sway, paramMorph);
+      const pressIn = paramSqueeze === null ? io.gestures.press : Math.max(io.gestures.press, paramSqueeze);
+      jig = approach(jig, swayIn, 0.4, dt);
+      press = approach(press, pressIn, 0.15, dt);
+      panX = approach(panX, (io.xy.x - 0.5) * 1.6 * (1 - wHelix), 0.3, dt);
       panY = approach(panY, (io.xy.y - 0.5) * 0.9, 0.3, dt);
+      azim = approach(azim, (io.xy.x - 0.5) * 6.2831853, 0.25, dt);
       dist = approach(dist, 4.3 - io.xy.y * 1.9, 0.35, dt);
       bass = approach(bass, io.bands.bass, 0.12, dt);
       high = approach(high, io.bands.high, 0.1, dt);
@@ -819,23 +2726,125 @@ export function createScene(ctx) {
       pulse = Math.max(0, pulse - dt * 3.5);
       flow += dt * (1.6 + pulse * 4.0);
 
-      // ---- the organisms' generators
-      if (wEgg > 0.002) U.uCount.value = computeCells(level);
-      if (wSlime > 0.002) slimeStep(jig, press, smooth01(devel));
-      if (wMyc > 0.002) {
-        if (mycSway < 0 || Math.abs(jig - mycSway) > 0.004) {
-          growMycelium(0.58 + jig * 0.62, 0.22 + jig * 0.55);
-          mycSway = jig;
+      // ---- the cell line: which stages the level sits between, and how the
+      // two fields are weighed against each other
+      if (wCell > 0.002) {
+        const L = level * (STAGES - 1);
+        const s0 = clamp(Math.floor(L), 0, STAGES - 1);
+        const s1 = Math.min(STAGES - 1, s0 + 1);
+        const f = smooth01(clamp(L - s0, 0, 1));
+        const k0 = KIND[s0], k1 = KIND[s1];
+        let cellW = 1, protW = 0, fA = 0, fB = 0, fF = 0;
+        if (k0 === 0 && k1 === 0) { cellW = 1; protW = 0; }
+        else if (k0 === 1 && k1 === 1) { cellW = 0; protW = 1; fA = FORM[s0]; fB = FORM[s1]; fF = f; }
+        else {
+          // An aggregate-to-protist crossing: computeCells has ALREADY sent the
+          // cells travelling onto the organism's own surface, so the analytic
+          // body only comes up over the back half of the crossing. By then the
+          // two surfaces coincide and the handover reads as the cells fusing
+          // into one body — not as two lit specimens double-exposed.
+          fA = fB = FORM[k0 === 0 ? s1 : s0];
+          cellW = 1 - smooth01((k0 === 0 ? f - 0.5 : 0.5 - f) * 2);
+          protW = 1;
         }
-        const n = mycCount(devel);
-        mycGeo.instanceCount = n;
+        // the amoeba's pseudopods stream out and draw back on a slow noise.
+        // They are set BEFORE the cells are laid out, because the amoeba's cell
+        // cloud runs seats out along them — the lobes and the cells that pour
+        // into them have to agree within the frame.
+        if (protW > 0.002 && (fA === 0 || fB === 0)) {
+          for (let i = 0; i < 6; i++) {
+            // evenly spread directions, each lobe streaming out and drawing
+            // back on its own slow phase — cytoplasmic streaming, not rotation
+            const yv = 1 - 2 * (i + 0.5) / 6;
+            const rr = Math.sqrt(Math.max(0, 1 - yv * yv));
+            const th = i * 2.39996 + 0.7;
+            const ext = 0.42 + 0.66 * (0.5 + 0.5 * Math.sin(t * 0.31 + i * 1.9));
+            pseudo[i * 4] = Math.cos(th) * rr * ext;
+            pseudo[i * 4 + 1] = yv * ext * 0.92;
+            pseudo[i * 4 + 2] = Math.sin(th) * rr * ext * 0.8;
+            pseudo[i * 4 + 3] = (0.15 + 0.10 * hash1(i * 3.7)) * (1.35 - 0.5 * ext);
+          }
+        }
+        computeCells(L);
+        const zonaW = 1 - smooth01(clamp(L - 7, 0, 1));
+        const cav = (s0 === 7 || s0 === 13 ? 1 - f : 0) + (s1 === 7 || s1 === 13 ? f : 0);
+        const vlv = (s0 === 13 ? 1 - f : 0) + (s1 === 13 ? f : 0);
+        const het = (s0 === 14 ? 1 - f : 0) + (s1 === 14 ? f : 0);
+        // how far the sway jiggle carries on the analytic form; the cell
+        // aggregate is all membrane and always takes it in full
+        const soft = protW > 0.002 ? FORM_SOFT[fA] + (FORM_SOFT[fB] - FORM_SOFT[fA]) * fF : 1;
+        // Each march carries its OWN bound. Folding the form's bound into one
+        // shared number jumped the drawn zona 35 % wide the frame a protist
+        // stage came into range, while its weight was still zero. The cells are
+        // shaved off at the zona, so the aggregate's bound never reaches
+        // further than the cap however far a packed seat sits out.
+        const bc = Math.max(Math.min(cellBound, cellCap) * 1.04, ZONA * zonaW, 0.6);
+        const bf = Math.max(Math.max(FORM_BOUND[fA], FORM_BOUND[fB]) * FORM_SCALE * 1.04, 0.6);
+        let cilia = vlv * 0.008;
+        if (protW > 0.002) {
+          const pm = (fA === 1 ? 1 - fF : 0) + (fB === 1 ? fF : 0);
+          cilia = Math.max(cilia, pm * 0.018 * (1 - cellW));
+        }
+        U.uFringe.value = vlv * 0.9;
+        U.uFringeR.value = cellBound > 0.1 ? cellBound * 1.02 : 1.2;
+        U.uCellW.value = cellW;
+        U.uProtW.value = protW;
+        U.uFormA.value = fA;
+        U.uFormB.value = fB;
+        U.uFormF.value = fF;
+        U.uSoft.value = soft;
+        U.uZonaW.value = zonaW;
+        U.uBound.value = bc;
+        U.uBoundF.value = bf;
+        U.uNeck.value = cellNeck;
+        U.uCap.value = cellCap;
+        U.uCavity.value = cav;
+        // the blastocoel fills the wall's inner surface; Volvox's cells are
+        // individuals in a matrix, so its cavity runs almost out to them
+        U.uCavR.value = 0.74 + 0.19 * vlv;
+        U.uCilia.value = cilia;
+        U.uDaughN.value = vlv > 0.02 ? 4 : 0;
+        U.uHetero.value = het;
+        U.uGrain.value = cellGrain;
+      }
+
+      // ---- the slime mold and the mycelium
+      if (wSlime > 0.002) {
+        slimeStep(jig, press, smooth01(level));
+        U.uTintA.value = SP.tintA;
+        U.uTintB.value = SP.tintB;
+        U.uFoodN.value = SP.foodN;
+      }
+      if (wMyc > 0.002) {
+        if (mycDirty || Math.abs(jig - mycSway) > 0.004) {
+          growMycelium(jig, seedOff);
+          mycSway = jig;
+          mycDirty = false;
+        }
+        const n = mycCount(level);
+        myc.g.instanceCount = n;
         MU.uCount.value = n;
       }
       hyphae.visible = wMyc > 0.002;
 
+      // ---- the helix
+      if (wHelix > 0.002) {
+        const devH = level * (ORG_STAGES[ORG_HELIX] - 1);
+        if (hxDirty || Math.abs(devH - hxLevel) > 0.002 || Math.abs(jig - hxSway) > 0.002) {
+          buildHelix(devH, jig);
+          hxLevel = devH;
+          hxSway = jig;
+          hxDirty = false;
+        }
+      }
+      helix.visible = wHelix > 0.002;
+
       // ---- uniforms
       const pl = io.palette;
-      for (let i = 0; i < 5; i++) pal[i].value.copy(pl[i]);
+      for (let i = 0; i < 5; i++) {
+        pal[i].value.copy(pl[i]);
+        hxPal[i * 3] = pl[i].r; hxPal[i * 3 + 1] = pl[i].g; hxPal[i * 3 + 2] = pl[i].b;
+      }
       mpal[0].value.copy(pl[0]); mpal[1].value.copy(pl[1]); mpal[2].value.copy(pl[2]);
       U.uTime.value = t;
       U.uDist.value = dist;
@@ -845,10 +2854,9 @@ export function createScene(ctx) {
       U.uBass.value = bass;
       U.uHigh.value = high;
       U.uLevelA.value = lvl;
-      U.uLevel.value = level;
       U.uIntensity.value = io.intensity;
       U.uPan.value.set(panX, panY);
-      U.uOrg.value.set(wEgg, wSlime, wMyc);
+      U.uOrg.value.set(wMyc, wSlime, wCell, wHelix);
       U.uFlow.value = flow;
       MU.uPan.value.set(panX, panY);
       MU.uDist.value = dist;
@@ -859,17 +2867,51 @@ export function createScene(ctx) {
       MU.uBeat.value = pulse;
       MU.uHigh.value = high;
       MU.uTime.value = t;
+      HU.uPan.value.set(panX, panY);
+      HU.uDist.value = dist;
+      HU.uPress.value = press;
+      HU.uBass.value = bass;
+      HU.uWeight.value = wHelix;
+      HU.uAzim.value = azim;
+      HU.uIntensity.value = io.intensity;
+      HU.uBeat.value = pulse;
+      HU.uHigh.value = high;
+      HU.uTime.value = t;
+    },
+    // discrete events: pick an organism, step the development, re-seed
+    action(key) {
+      if (key === 'mycelium') orgTarget = ORG_MYC;
+      else if (key === 'slimeMold') orgTarget = ORG_SLIME;
+      else if (key === 'cellLine') orgTarget = ORG_CELL;
+      else if (key === 'doubleHelix') orgTarget = ORG_HELIX;
+      else if (key === 'developUp') { dir = 1; stepLevel(1); }
+      else if (key === 'developDown') { dir = -1; stepLevel(-1); }
+      else if (key === 'reseed') { reseedN++; applySpecies(); }
+    },
+    // continuous parameters; the raw knobs above stay the fallback, whichever
+    // moved last winning, and morph / squeeze ride alongside their gestures
+    setParam(key, value) {
+      if (key === 'development') { const v = clamp(value, 0, 1); dir = v >= level ? 1 : -1; target = v; }
+      else if (key === 'organism') orgTarget = clamp(Math.round(value), 0, 3);
+      else if (key === 'species') {
+        const s = clamp(Math.round(value), 0, 7);
+        if (s !== speciesIdx) { speciesIdx = s; applySpecies(); }
+      } else if (key === 'morph') paramMorph = clamp(value, 0, 1);
+      else if (key === 'squeeze') paramSqueeze = clamp(value, 0, 1);
     },
     resize(w, h) {
       U.uRes.value.set(w, h);
       MU.uRes.value.set(w, h);
+      HU.uRes.value.set(w, h);
     },
     dispose() {
       quad.geometry.dispose();
       mat.dispose();
       trailTex.dispose();
-      mycGeo.dispose();
+      myc.g.dispose();
       mycMat.dispose();
+      hx.g.dispose();
+      hxMat.dispose();
     },
   };
 }
