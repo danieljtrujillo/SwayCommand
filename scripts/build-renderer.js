@@ -17,7 +17,7 @@ async function main() {
     bundle: true,
     format: 'iife',
     platform: 'browser',
-    target: 'chrome120',
+    target: 'chrome140',
     outfile: path.join(dist, 'renderer.bundle.js'),
     minify: false,
     sourcemap: false,
