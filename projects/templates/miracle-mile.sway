@@ -7,21 +7,21 @@
   "modified_at": null,
   "project": {
     "meta": {
-      "id": "natures-tomb",
-      "name": "Nature's Tomb",
-      "description": "Three organisms under dark-field light. KNOB 6 picks the organism: centre the egg cell, right the slime mold, left the mycelium. KNOB 5 sets the development level — cell divisions, the colony's reach, the hyphal growth — and any pad steps it; sway morphs each organism, press squeezes, the hand pans and dollies. The rack stays off.",
+      "id": "miracle-mile",
+      "name": "Miracle Mile",
+      "description": "Four acts of the atom on KNOB 6: the collider, the split atom, the mushroom cloud (the 0.5 rest), the shockwave down the boulevard. Any pad fires the act's event; KNOB 5 is the yield; sway morphs the act, press squeezes, the hand drives the eye. The rack stays off.",
       "author": "",
-      "vibe": "cellular",
+      "vibe": "critical",
       "bpmHint": 0,
       "pairsWith": null,
       "template": true
     },
     "palette": [
-      "#f2c9a6",
-      "#5b3f9e",
-      "#bfefff",
-      "#ffb26b",
-      "#e88aa8"
+      "#ffe9b0",
+      "#ff6a1a",
+      "#2de1fc",
+      "#ff2d95",
+      "#6b7a99"
     ],
     "engine": {
       "quality": "med",
@@ -29,14 +29,14 @@
       "autoVJ": {
         "enabled": false,
         "pool": [
-          "naturestomb"
+          "miraclemile"
         ],
         "minHold": 60,
         "maxHold": 120,
         "fadeTime": 4
       },
       "start": {
-        "scene": "naturestomb"
+        "scene": "miraclemile"
       }
     },
     "fx": {

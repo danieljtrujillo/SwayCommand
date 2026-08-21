@@ -7,7 +7,7 @@ SwayCommand is an independent project. It is not affiliated with or endorsed by 
 ## Feature summary
 
 - A single-page cockpit: the stage renders from boot to quit while the scene bank, transport, timeline, assignment panel, and drawers work on top of it — no screen switching, no interrupted frames.
-- Sixteen procedural visual scenes, each driven by audio analysis and gesture input, rendered with three.js on WebGL2 — every shader GLSL3, no autonomous rotation anywhere.
+- Seventeen procedural visual scenes, each driven by audio analysis and gesture input, rendered with three.js on WebGL2 — every shader GLSL3, no autonomous rotation anywhere.
 - Projects as `.sway` files: one JSON document carrying palette, engine settings, effects snapshot, synth patch, linked media, kit, timeline, and every control assignment. Save, open, and recent files live in the project menu; ten bundled templates (three tuned to pair with Audima's official Ableton demo packs — Garage, DNB, Hip Hop) provide starting points.
 - A timeline with an audio lane (waveform clips scheduled sample-accurately on the audio clock) and a visual lane (scene clips with per-clip cut or fade entry), plus loop region, locators, and scrubbing.
 - An on-screen Sway deck — a line-art schematic of the hardware. Click any pad, knob, button, or gesture chip to assign it: pads fire samples, scene switches, or momentary effect punches; knobs drive any engine, rack, synth, or kit parameter with range and curve; buttons learn a hardware CC and toggle anything; the five gesture dimensions hold modulation routes. Touching a control on the hardware selects it on screen.

@@ -18,10 +18,11 @@ import * as valley from './valley.js';
 import * as lattice from './lattice.js';
 import * as willidream from './willidream.js';
 import * as naturestomb from './naturestomb.js';
+import * as miraclemile from './miraclemile.js';
 
 const modules = [
   beams, swarm, ribbons, voxels, warp, nebula, mandelbulb, cymatic,
-  spectra, vjshader, ferrofluid, chladni, valley, lattice, willidream, naturestomb,
+  spectra, vjshader, ferrofluid, chladni, valley, lattice, willidream, naturestomb, miraclemile,
 ];
 
 export const sceneList = modules.map((m) => m.meta);
