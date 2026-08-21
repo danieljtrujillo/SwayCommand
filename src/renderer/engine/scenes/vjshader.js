@@ -106,19 +106,28 @@
 //     Every preset's own parameters are unchanged by the reordering.
 //   * SwayCommand additions, all additive on top of untouched upstream math:
 //     u_hue is driven from io.palette[0]'s hue, the glow accumulator is tinted
-//     with a palette colour, io.xy offsets the camera orbit angles, gestures
-//     bias the active preset's primary/secondary parameter, io.knobs[3..6] take
-//     direct parameter control and io.knobs[7] is the wheel-drift audioDrive,
-//     and a preset/material change fires a short white transition flash.
+//     with a palette colour, io.xy offsets the camera orbit angles, press
+//     biases the active preset's primary parameter, SWAY is a preset-space
+//     morph — every structural parameter carries a per-preset morph vector
+//     (swA/swB in the tables below) so the hand glides the solid through
+//     distinct pattern families instead of nudging one slot — STRIKE
+//     (io.strike on a pad rising edge) kicks the primary parameter, jumps the
+//     wheel scrub (a seed jump along the flythrough) and flashes, pads 5-7
+//     step to the next preset the way the Quantum Lattice steps geometries,
+//     io.knobs[3..6] take direct parameter control and io.knobs[7] is the
+//     wheel-drift audioDrive, and a preset/material change fires a short
+//     white transition flash.
 //     Every one of those inputs contributes ZERO at its documented rest value
-//     (knobs 0.5, io.xy 0.5/0.5, gestures 0), so with nothing connected the
-//     scene sits on the upstream defaults exactly — verified: u_power 8.0000,
-//     u_glow 1.0000 after 30 s of idle update() calls.
+//     (knobs 0.5, io.xy 0.5/0.5, gestures 0, no strikes), so with nothing
+//     connected the scene sits on the upstream defaults exactly — verified:
+//     u_power 8.0000, u_glow 1.0000 after 30 s of idle update() calls.
 // =============================================================================
 //
 // Pads 0-4 pick the preset (Mandelbulb, Julia Bulb, Mandelbox, Kaleido IFS,
-// Yotta). Pads 8-15 pick one of the eight materials, which — exactly as
-// upstream — apply to the four fractals only; yotta ignores u_material.
+// Yotta); pads 5-7 step to the next preset. Pads 8-15 pick one of the eight
+// materials, which — exactly as upstream — apply to the four fractals only;
+// yotta ignores u_material. Every pad rising edge is also a STRIKE that
+// convulses the active preset's own structure (STRIKE_KICK below).
 // One draw call: five ShaderMaterials on one shared 2x2 quad geometry, with
 // only the active preset's mesh visible, so three.js compiles a preset's
 // program on its first selection and never branches between fractals at
@@ -138,13 +147,24 @@ const TC_PARAM = 0.08;   // 80 ms parameter easing
 // --- SwayCommand gesture smoothing, seconds (63 % settle time). The task calls for
 //     1.5-2.5 s: structural parameters must drift under the hand, never snap.
 const TAU_PRESS = 2.0;  // press -> active preset's PRIMARY parameter
-const TAU_SWAY = 2.5;   // sway  -> active preset's SECONDARY parameter
+const TAU_SWAY = 2.5;   // sway  -> preset-space morph position (swA/swB tables)
 const TAU_PAN = 1.5;    // io.xy -> camera orbit angle offsets
 const TAU_DRIVE = 0.4;  // knob 7 -> wheel-drift audioDrive (a trim, not a gesture)
 
 const FLASH_TAU = 0.22; // preset / material change flash decay, seconds
 const PAD_ARM = 0.25;   // a pad must land at least this hard to register
 const PAD_EDGE = 0.06;  // ...and rise at least this much above the last frame
+
+// STRIKE — a pad rising edge, magnitude io.strike (the engine's max pad
+// energy). A hit must morph the fractal's own structure, never just spin the
+// view: the strike envelope kicks the active preset's PRIMARY parameter, and
+// the wheel scrub jumps forward — for yotta a leap down the Menger corridor,
+// for the fractals a scrub of every T-driven term in the distance fields. The
+// 80 ms parameter easing then turns the kick into a fast structural
+// convulsion rather than a snap.
+const STRIKE_TAU = 0.30;  // strike envelope decay, seconds
+const STRIKE_KICK = 0.30; // primary-parameter kick, fraction of (max-min)
+const WHEEL_JUMP = 1400;  // wheel-scrub seed jump per full-velocity strike
 
 // How far the upstream glow tint is pulled toward the engine palette colour.
 // The upstream expression (0.5+0.5*cos(vec3(0,1,2)+T+u_high*4.0)) is kept
@@ -158,48 +178,67 @@ const A_NONE = 0, A_BASS = 1, A_MID = 2, A_HIGH = 3, A_VOL = 4;
 const MATERIALS = ['Neon', 'Chrome', 'Matte', 'Glass', 'Gold', 'Iridescent', 'Velvet', 'Plasma'];
 
 // --- per-preset parameter tables, verbatim from shaderPresets.ts -------------
-// { id, min, max, def, audio, amt } — `amt` is the audio depth as a fraction of
-// (max-min); upstream's default when a preset omits audioAmt is 0.3.
-// `primary` / `secondary` index the parameter that press / sway bias. Upstream
-// has no such concept, so the choice is documented here: it is the parameter
-// that visibly reshapes the solid, then the one that colours or twists it.
+// { id, min, max, def, audio, amt, swA, swB } — `amt` is the audio depth as a
+// fraction of (max-min); upstream's default when a preset omits audioAmt is
+// 0.3. `primary` indexes the parameter press and strike bias: the one that
+// visibly reshapes the solid. `swA` / `swB` are the preset-space morph vector
+// (fractions of the span): sway travels the parameter along
+//   swA * sin(pi * sway) + swB * sway
+// so the swA lobe peaks mid-travel and the swB ramp owns the far end — the
+// sweep visits one pattern family and lands on another, morphing the solid
+// BETWEEN families instead of spinning it. Upstream has no such concept; each
+// vector is chosen so every stop on the sweep stays inside the upstream
+// min/max after the shared clamp, and every vector is zero at sway = 0.
 const PRESETS = [
   {
-    id: 'mandelbulb', name: 'Mandelbulb', primary: 0, secondary: 1,
+    // sway sweeps u_power 8 -> ~4 (fat low-power lobes) -> 11 (spiky bulb)
+    id: 'mandelbulb', name: 'Mandelbulb', primary: 0,
     params: [
-      { id: 'u_power', min: 2, max: 12, def: 8, audio: A_BASS, amt: 0.22 },
-      { id: 'u_glow', min: 0, max: 3, def: 1, audio: A_NONE, amt: 0.3 },
+      { id: 'u_power', min: 2, max: 12, def: 8, audio: A_BASS, amt: 0.22, swA: -0.55, swB: 0.30 },
+      { id: 'u_glow', min: 0, max: 3, def: 1, audio: A_NONE, amt: 0.3, swA: 0.30, swB: 0 },
     ],
   },
   {
-    id: 'juliabulb', name: 'Julia Bulb', primary: 1, secondary: 2,
+    // sway arcs the Julia constant (0.45,0.3) -> (~-0.1,~0.9) -> (-0.65,0.3):
+    // a curve through Julia-set space, each stop a different set family. The
+    // cy lobe stops short of |c| > 1, where the power-8 set thins to dust.
+    id: 'juliabulb', name: 'Julia Bulb', primary: 1,
     params: [
-      { id: 'u_power', min: 2, max: 10, def: 8, audio: A_NONE, amt: 0.3 },
-      { id: 'u_cx', min: -1, max: 1, def: 0.45, audio: A_MID, amt: 0.15 },
-      { id: 'u_cy', min: -1, max: 1, def: 0.3, audio: A_HIGH, amt: 0.15 },
-      { id: 'u_glow', min: 0, max: 3, def: 1, audio: A_NONE, amt: 0.3 },
+      { id: 'u_power', min: 2, max: 10, def: 8, audio: A_NONE, amt: 0.3, swA: -0.30, swB: 0 },
+      { id: 'u_cx', min: -1, max: 1, def: 0.45, audio: A_MID, amt: 0.15, swA: 0, swB: -0.55 },
+      { id: 'u_cy', min: -1, max: 1, def: 0.3, audio: A_HIGH, amt: 0.15, swA: 0.30, swB: 0 },
+      { id: 'u_glow', min: 0, max: 3, def: 1, audio: A_NONE, amt: 0.3, swA: 0, swB: 0 },
     ],
   },
   {
-    id: 'mandelbox', name: 'Mandelbox', primary: 0, secondary: 1,
+    // sway sweeps u_scale 2.1 -> ~3.0 (mid) -> 2.82: the box tightens through
+    // progressively denser fold families. UP only: the box's bounding radius
+    // grows as (scale+1)/(scale-1), so a glide below ~1.6 inflates the solid
+    // past the camera at 7.0 and the frame collapses to bare glow (measured).
+    id: 'mandelbox', name: 'Mandelbox', primary: 0,
     params: [
-      { id: 'u_scale', min: -3, max: 3, def: 2.1, audio: A_NONE, amt: 0.3 },
-      { id: 'u_glow', min: 0, max: 3, def: 1, audio: A_VOL, amt: 0.4 },
+      { id: 'u_scale', min: -3, max: 3, def: 2.1, audio: A_NONE, amt: 0.3, swA: 0.10, swB: 0.12 },
+      { id: 'u_glow', min: 0, max: 3, def: 1, audio: A_VOL, amt: 0.4, swA: 0.40, swB: 0 },
     ],
   },
   {
-    id: 'kifs', name: 'Kaleido IFS', primary: 1, secondary: 0,
+    // the kaleidoscope proper: sway lifts the fold angle to ~0.63 mid-travel,
+    // then flips it through zero to -0.65 while the fold scale tightens —
+    // the wedge pattern re-tiles through visibly different symmetry families
+    id: 'kifs', name: 'Kaleido IFS', primary: 1,
     params: [
-      { id: 'u_kscale', min: 1.5, max: 2.6, def: 2.0, audio: A_NONE, amt: 0.3 },
-      { id: 'u_kang', min: -1.5, max: 1.5, def: 0.4, audio: A_MID, amt: 0.4 },
-      { id: 'u_glow', min: 0, max: 3, def: 1, audio: A_NONE, amt: 0.3 },
+      { id: 'u_kscale', min: 1.5, max: 2.6, def: 2.0, audio: A_NONE, amt: 0.3, swA: 0.18, swB: -0.30 },
+      { id: 'u_kang', min: -1.5, max: 1.5, def: 0.4, audio: A_MID, amt: 0.4, swA: 0.25, swB: -0.35 },
+      { id: 'u_glow', min: 0, max: 3, def: 1, audio: A_NONE, amt: 0.3, swA: 0, swB: 0 },
     ],
   },
   {
-    id: 'yotta', name: 'Yotta (Cloud Computing)', primary: 0, secondary: 1,
+    // sway rushes the flythrough to ~2.9x mid-travel (the zoom rhythm), eases
+    // back to 2x at the top, and drains the warmth toward the cold grade
+    id: 'yotta', name: 'Yotta (Cloud Computing)', primary: 0,
     params: [
-      { id: 'u_speed', min: 0, max: 4, def: 1, audio: A_NONE, amt: 0.3 },
-      { id: 'u_warmth', min: 0, max: 1, def: 1, audio: A_NONE, amt: 0.3 },
+      { id: 'u_speed', min: 0, max: 4, def: 1, audio: A_NONE, amt: 0.3, swA: 0.35, swB: 0.25 },
+      { id: 'u_warmth', min: 0, max: 1, def: 1, audio: A_NONE, amt: 0.3, swA: 0, swB: -0.85 },
     ],
   },
 ];
@@ -847,6 +886,8 @@ export function createScene(ctx) {
   let panX = 0, panY = 0;
   // Preset / material change flash.
   let flash = 0;
+  // Strike envelope: pad hits convulse the active preset's structure.
+  let strikeEnv = 0;
 
   // Eased parameter values, one array per preset (upstream keys its `cur` cache
   // by parameter id alone, so u_glow carries across presets; here each preset
@@ -873,18 +914,34 @@ export function createScene(ctx) {
     update(dt, t, io) {
       // ---- event decay, before this frame's edges can re-arm it
       flash *= Math.exp(-dt / FLASH_TAU);
+      strikeEnv *= Math.exp(-dt / STRIKE_TAU);
 
-      // ---- pads: 0-4 pick the preset, 8-15 pick the material. Rising edges
-      //      only, measured against the preallocated previous-pad array.
+      // ---- pads: 0-4 pick the preset, 5-7 step to the next one (the Quantum
+      //      Lattice convention), 8-15 pick the material. Rising edges only,
+      //      measured against the preallocated previous-pad array. EVERY edge
+      //      is also a STRIKE that morphs the preset's own generative state.
       let padPreset = -1;
       let padMaterial = -1;
+      let struck = false;
       for (let i = 0; i < PADS; i++) {
         const v = io.pads[i];
         if (v > PAD_ARM && v > prevPads[i] + PAD_EDGE) {
+          struck = true;
           if (i < PRESETS.length) padPreset = i;
           else if (i >= 8) padMaterial = i - 8;
+          else padPreset = (preset + 1) % PRESETS.length; // pads 5-7 step
         }
         prevPads[i] = v;
+      }
+      if (struck) {
+        // io.strike is the engine's max pad energy this frame — on the edge
+        // frame, the hit velocity. The envelope kicks the primary parameter
+        // (param loop below); the wheel jump scrubs every T-driven term of
+        // the distance fields — for yotta, a leap down the Menger corridor.
+        const s = clamp01(io.strike);
+        strikeEnv = Math.max(strikeEnv, s);
+        wheelOffset += WHEEL_JUMP * s;
+        flash = Math.max(flash, s * 0.5);
       }
       if (padPreset >= 0 && padPreset !== preset) {
         meshes[preset].visible = false;
@@ -922,7 +979,7 @@ export function createScene(ctx) {
 
       // ---- gestures, heavily smoothed: structure drifts, it never snaps
       pressSm = approach(pressSm, io.gestures.press, TAU_PRESS, dt);
-      swaySm = approach(swaySm, io.gestures.sway, TAU_SWAY, dt);
+      swaySm = approach(swaySm, clamp01(io.gestures.sway), TAU_SWAY, dt);
       panX = approach(panX, io.xy.x - 0.5, TAU_PAN, dt);
       panY = approach(panY, io.xy.y - 0.5, TAU_PAN, dt);
 
@@ -931,6 +988,10 @@ export function createScene(ctx) {
       //        target = clamp(base + (max-min)*amt*level, min, max)
       //      eased with an 80 ms time constant.
       const tcPar = 1 - Math.exp(-dt / TC_PARAM);
+      // Preset-space morph position: the swA lobe peaks mid-travel, the swB
+      // ramp owns the far end (table above), so the sweep visits one pattern
+      // family and lands on another.
+      const swayLobe = Math.sin(Math.PI * swaySm);
       const ps = PRESETS[preset];
       const params = ps.params;
       const cur = curValues[preset];
@@ -944,18 +1005,20 @@ export function createScene(ctx) {
         const span = pm.max - pm.min;
         // knobs 3..6 take direct control of parameter slots 0..3
         let base = i < 4 ? knobBase(io.knobs[3 + i], pm.min, pm.max, pm.def) : pm.def;
-        // Press biases the primary parameter, sway the secondary. BOTH are read
-        // unipolar, so both contribute exactly zero bias at rest: `press` and
-        // `sway` are documented as 0..1 with an INITIAL VALUE OF 0
+        // Press and strike bias the primary parameter; sway morphs EVERY
+        // parameter along its swA/swB vector — the preset-space morph, so the
+        // hand reshapes the distance field itself (power, Julia constant, box
+        // scale, fold angle) and never just spins the view. All three inputs
+        // are read unipolar, so all contribute exactly zero bias at rest:
+        // `press` and `sway` are documented as 0..1 with an INITIAL VALUE OF 0
         // (docs/MIDI.md, createControlState), not 0.5. Reading sway bipolar as
         // (sway-0.5)*2 — the convention the orbit-angle scenes use, where a
         // constant offset only rotates the view — would rest at -1 here and
-        // park the secondary parameter 30 % of its range BELOW the upstream
-        // default whenever no Sway hardware is connected (the Mandelbulb would
-        // ship with u_glow at 0.1 instead of 1.0), defeating knobBase()'s whole
-        // point of reproducing the upstream value at the knob default.
-        if (i === ps.primary) base += span * 0.35 * pressSm;
-        else if (i === ps.secondary) base += span * 0.30 * swaySm;
+        // park every morphed parameter well off its upstream default whenever
+        // no Sway hardware is connected, defeating knobBase()'s whole point of
+        // reproducing the upstream value at the knob default.
+        if (i === ps.primary) base += span * (0.35 * pressSm + STRIKE_KICK * strikeEnv);
+        base += span * (pm.swA * swayLobe + pm.swB * swaySm);
         let target = base + span * pm.amt * level;
         target = target < pm.min ? pm.min : target > pm.max ? pm.max : target;
         cur[i] += (target - cur[i]) * tcPar;

@@ -67,6 +67,18 @@
 //   8. Cold-start prefill of the history grid, tier-scaled mesh/texture sizes,
 //      a livelier default scroll rate, and mel tables precomputed once
 //      (identical arithmetic, just hoisted out of the per-frame loop).
+//   9. SWAY / STRIKE. Upstream has no gesture surface. Sway is a LAYOUT
+//      morph: it glides the analyzer between arrangements — the frequency
+//      axis re-warps (log <-> lin), the mirror re-folds (one pair -> a
+//      multi-fold comb) and the plane blooms into a radial burst — via three
+//      uniforms the height math mixes in (u_axisWarp / u_fold / u_radial;
+//      0 / 1 / 0 reproduce the upstream layout exactly). A STRIKE (io.strike
+//      on a pad rising edge) is a spectral slam: a full-band impulse enters
+//      the synthesized SOURCE spectrum, so it rides upstream's own mel / EMA /
+//      energy machinery through the terrain, the wall ring and the flight
+//      height field before scrolling away with the history, and the layout
+//      SEED jumps — the arrangement sway morphs toward steps to the next
+//      LAYOUT_SEEDS entry, the way the Quantum Lattice steps geometries.
 // ===========================================================================
 //
 // The mechanism: a 256x256 scrolling spectrogram history lives in a RedFormat
@@ -75,8 +87,10 @@
 // left/right about the centre line, time running away from the camera. Two
 // curved walls carry the same spectrum as a distant backdrop, and a 1200-point
 // additive particle field floats above it. Pads pick the theme (0-6) and the
-// camera mode (8-12), io.xy steers whichever camera is live, press compresses
-// the relief, sway shears the scroll, the beat pulses the particles, and
+// camera mode (8-12), and every strike slams a full-band impulse through the
+// display while the layout seed jumps; io.xy steers whichever camera is live,
+// press compresses the relief, sway morphs the layout itself — axis warp,
+// fold count, radial bloom, shear — the beat pulses the particles, and
 // knobs 3-7 give scroll speed, height, particle amount, wall curvature and
 // spectrum smoothing. Follows docs/SCENE_CONTRACT.md; reference style: warp.js.
 
@@ -118,6 +132,28 @@ const WALL_FLOOR = 0.08;
 // Stands in for the UnrealBloomPass upstream runs at strength 0.9 — the wall
 // and particle layers are authored dim on the assumption that bloom lifts them.
 const BLOOM_GAIN = 2.2;
+
+// --- SwayCommand layout morph / strike ---------------------------------------
+// Sway glides the analyzer between arrangements instead of merely shearing
+// it. The morph is staged along the sway travel — the frequency axis re-warps
+// first, then the field re-folds, then the plane blooms radial — so the
+// restructure reads as one continuous gesture; every channel rests at exactly
+// the upstream layout when sway is 0.
+const TAU_SWAY = 1.5;   // sway smoothing, seconds — the layout glides, never snaps
+const TAU_LAYOUT = 0.6; // per-channel glide toward the seeded arrangement
+const SLAM_TAU = 0.30;  // strike impulse decay, seconds
+
+// The arrangements a strike seeds — sway morphs the resting layout toward the
+// active entry, and a strike steps the index (the Quantum Lattice convention).
+// fold: extra triangle folds of the frequency axis beyond the upstream
+// mirrored pair; warp: log/lin re-map depth (negative crushes toward linear);
+// radial: plane -> radial burst; skew: shear direction and weight.
+const LAYOUT_SEEDS = [
+  { fold: 1.6, warp: 0.9, radial: 1.0, skew: 1.0 },    // mirrored pair -> radial burst
+  { fold: 3.2, warp: 0.4, radial: 0.7, skew: -1.0 },   // dense comb, half bloom
+  { fold: 0.0, warp: 1.0, radial: 1.0, skew: 0.6 },    // pure log stretch -> full burst
+  { fold: 2.2, warp: -0.6, radial: 0.35, skew: -0.5 }, // lin-crushed folded fan
+];
 
 // The seven upstream themes, hex for hex (SPECTRA_THEMES). `grid` and `bg` are
 // carried for completeness: upstream binds gridColor to a uniform no shader
@@ -293,8 +329,12 @@ export function createScene(ctx) {
    * centres in MEL space (weights precomputed above), upstream's ripple is
    * kept verbatim on top, and a deterministic per-bin shimmer — one sine per
    * bin, fixed seeded rate and phase, driven by the scene clock — breaks the
-   * remaining flatness into spectrogram-like grain. The result is written in
-   * place into the preallocated `synthBins`; nothing is allocated.
+   * remaining flatness into spectrogram-like grain. A strike's slam impulse
+   * is added FULL-BAND on top, so the hit enters every consumer of the
+   * spectrum at once — terrain, wall ring, energy tracker, flight height
+   * field — and then scrolls away with the history as a rippling ridge. The
+   * result is written in place into the preallocated `synthBins`; nothing is
+   * allocated.
    *
    * Everything downstream of this function — the mel resampling, the EMA, the
    * energy tracker, both textures, every shader — is upstream's, unchanged.
@@ -311,6 +351,9 @@ export function createScene(ctx) {
       v *= binRipple[i];
       v *= 0.72 + 0.28 * (0.5 + 0.5 * Math.sin(tSec * binRate[i] + binPhase[i]));
       v = floor * binRipple[i] + v * (1 - floor);
+      // SwayCommand: the spectral slam — a full-band strike impulse, textured
+      // by the upstream ripple so the ridge still reads as spectrum.
+      v += slam * 0.9 * (0.7 + 0.3 * binRipple[i]);
       v *= 255;
       synthBins[i] = v > 255 ? 255 : v < 0 ? 0 : v | 0;
     }
@@ -478,6 +521,9 @@ export function createScene(ctx) {
     u_energyImpact: { value: ENERGY_IMPACT },
     u_useColormap: { value: 1.0 },
     u_skew: { value: 0.0 },      // SwayCommand: sway shears the scroll
+    u_fold: { value: 1.0 },      // SwayCommand: frequency-axis folds (1 = upstream mirror)
+    u_axisWarp: { value: 0.0 },  // SwayCommand: log<->lin frequency re-map depth
+    u_radial: { value: 0.0 },    // SwayCommand: plane -> radial burst morph
     u_palMix: { value: 0.5 },    // SwayCommand: palette emissive weight
     u_palPhase: { value: 0.0 },
     u_intensity: { value: 1.0 },
@@ -500,16 +546,28 @@ export function createScene(ctx) {
       uniform float u_heightMulti;
       uniform float u_energyImpact;
       uniform float u_skew;
+      uniform float u_fold;
+      uniform float u_axisWarp;
+      uniform float u_radial;
       varying float v_height;
       varying float v_amp;
       varying vec2 v_uv;
+      // SwayCommand layout morph. Upstream reads abs(uv.x - 0.5) * 2.0 — one
+      // mirrored pair. u_fold re-folds the axis as a triangle wave (1.0 is
+      // upstream exactly; higher values comb the field into repeated mirrors)
+      // and u_axisWarp bends the mapping log <-> lin (exponent < 1 stretches
+      // the lows outward, > 1 crushes them). Both rest on the upstream layout.
+      float freqAt(float x) {
+        float f = abs(fract(x * u_fold) - 0.5) * 2.0;
+        return pow(f, 1.0 - u_axisWarp * 0.55);
+      }
       void main() {
         v_uv = uv;
         // u_skew is the SwayCommand addition: a shear of the history axis across
         // the frequency axis, so sway drags the scroll diagonally. Everything
         // else is upstream's terrain vertex shader unchanged.
         float sampleY = fract((u_offset / ${HISTORY_SIZE}.0) + uv.y + u_skew * (uv.x - 0.5));
-        float freqUv = abs(uv.x - 0.5) * 2.0;
+        float freqUv = freqAt(uv.x);
         float rawHeight = texture2D(u_texture, vec2(freqUv, sampleY)).r;
         v_amp = rawHeight;
         float boosted = smoothstep(u_noiseGate, 1.0, rawHeight);
@@ -520,6 +578,14 @@ export function createScene(ctx) {
         v_height = boosted * u_heightMulti * centerSmooth * edge;
         vec3 newPosition = position;
         newPosition.z += v_height * (5.0 + (u_energy * u_energyImpact) * 5.0);
+        // SwayCommand radial burst: the same relief re-arranged as a disc —
+        // frequency becomes the angle, history the radius, so the spectrum
+        // reads as concentric rings bursting outward from the centre.
+        // u_radial glides the plane between the two arrangements; the x-edge
+        // alpha fade in the fragment shader hides the angular seam.
+        float ang = (uv.x - 0.5) * 6.2831853;
+        float rad = mix(4.0, 25.0, uv.y);
+        newPosition.xy = mix(newPosition.xy, vec2(sin(ang), cos(ang)) * rad, u_radial);
         gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
       }
     `,
@@ -531,6 +597,8 @@ export function createScene(ctx) {
       uniform float u_energy;
       uniform float u_time;
       uniform float u_skew;
+      uniform float u_fold;
+      uniform float u_axisWarp;
       uniform float u_palMix;
       uniform float u_palPhase;
       uniform float u_intensity;
@@ -564,12 +632,18 @@ export function createScene(ctx) {
         c = mix(c, u_colorPeak, smoothstep(0.66, 1.0, t));
         return c;
       }
+      // SwayCommand: the same fold/warp of the frequency axis as the vertex
+      // shader, so the derived normals track the morphed layout exactly.
+      float freqAt(float x) {
+        float f = abs(fract(x * u_fold) - 0.5) * 2.0;
+        return pow(f, 1.0 - u_axisWarp * 0.55);
+      }
       // Reconstruct the geometric height at an arbitrary uv (mirrors the vertex
       // displacement) so a surface normal can be derived in-shader: bump/normal
       // relief lit from the spectrogram itself, no external normal map.
       float terrainH(vec2 uvc) {
         float sY = fract((u_offset / ${HISTORY_SIZE}.0) + uvc.y + u_skew * (uvc.x - 0.5));
-        float fU = abs(uvc.x - 0.5) * 2.0;
+        float fU = freqAt(uvc.x);
         float rh = texture2D(u_texture, vec2(fU, sY)).r;
         float b = smoothstep(u_noiseGate, 1.0, rh);
         float cs = smoothstep(0.0, 0.02, fU) * 0.1 + 0.9;
@@ -907,7 +981,12 @@ export function createScene(ctx) {
     const offsetProgress = currentRow / HISTORY_SIZE;
     const rawY = offsetProgress + vClamp + skew * (uClamp - 0.5);
     const sampleY = rawY - Math.floor(rawY);
-    const freqUv = Math.abs(uClamp - 0.5) * 2.0;
+    // SwayCommand: mirror the layout morph's fold/warp of the frequency axis
+    // (the radial term is left out — flight keeps a conservative planar read,
+    // in the same spirit as the height-scale mismatch noted above).
+    const foldX = uClamp * (1 + foldCur);
+    const fTri = Math.abs(foldX - Math.floor(foldX) - 0.5) * 2.0;
+    const freqUv = Math.pow(fTri, 1.0 - warpCur * 0.55);
     let spectrumIdx = Math.floor(freqUv * (SPECTRUM_SIZE - 1));
     if (spectrumIdx < 0) spectrumIdx = 0;
     else if (spectrumIdx > SPECTRUM_SIZE - 1) spectrumIdx = SPECTRUM_SIZE - 1;
@@ -947,11 +1026,27 @@ export function createScene(ctx) {
   let skew = 0;
   let palPhase = 0;
 
+  // SwayCommand layout morph / strike state: the smoothed sway position, the
+  // glided layout channels, the strike-seeded arrangement index and the slam
+  // impulse. All rest at zero — the upstream layout exactly.
+  let swaySm = 0;
+  let foldCur = 0;    // extra folds beyond the upstream mirrored pair
+  let warpCur = 0;    // log<->lin re-map depth
+  let radialCur = 0;  // plane -> radial burst
+  let layoutSeed = 0; // which LAYOUT_SEEDS entry sway morphs toward
+  let slam = 0;       // full-band strike impulse
+
   // preallocated scratch (upstream allocated an Euler and a Vector3 per frame)
   const eul = new THREE.Euler(0, 0, 0, 'YXZ');
   const fwd = new THREE.Vector3();
 
   const lerp = (a, b, t) => a + (b - a) * (t < 0 ? 0 : t > 1 ? 1 : t);
+  // scalar smoothstep — stages the layout channels along the sway travel
+  const sstep = (a, b, x) => {
+    const r = (x - a) / (b - a);
+    const c = r < 0 ? 0 : r > 1 ? 1 : r;
+    return c * c * (3 - 2 * c);
+  };
 
   function applyCamera(tSec, dt, io, heightMulti) {
     const e = energy * ENERGY_IMPACT;
@@ -1046,12 +1141,21 @@ export function createScene(ctx) {
       clock += dt; // own clock, so a cached scene never jumps on re-entry
       const tSec = clock;
 
+      // strike impulse decays first, so this frame's edges can re-arm it
+      slam *= Math.exp(-dt / SLAM_TAU);
+
       // --- PADS ------------------------------------------------------------
       // 0-6  theme          7   toggle auto-rotate
-      // 8-12 camera mode    13  next theme   14  next camera mode   15 unused
+      // 8-12 camera mode    13  next theme   14  next camera mode   15 free
+      // EVERY rising edge is also a STRIKE — the spectral slam: io.strike
+      // (the engine's max pad energy) becomes a full-band impulse in the
+      // source spectrum, and the layout seed jumps so sway morphs toward the
+      // next arrangement. Pads keep their picks on top; 15 is a pure slam.
+      let struck = false;
       for (let i = 0; i < PADS; i++) {
         const v = io.pads[i];
         if (v > 0.1 && v > prevPads[i] + 0.05) {
+          struck = true;
           if (i < THEMES.length) {
             themeIndex = i;
             applyTheme();
@@ -1067,6 +1171,10 @@ export function createScene(ctx) {
           }
         }
         prevPads[i] = v;
+      }
+      if (struck) {
+        slam = Math.max(slam, io.strike > 1 ? 1 : io.strike < 0 ? 0 : io.strike);
+        layoutSeed = (layoutSeed + 1) % LAYOUT_SEEDS.length;
       }
 
       // --- KNOBS 3-7 -------------------------------------------------------
@@ -1110,10 +1218,24 @@ export function createScene(ctx) {
       dataTexture.needsUpdate = true;
       writeWallColumn();
 
+      // --- SWAY -> LAYOUT MORPH --------------------------------------------
+      // Sway glides the analyzer between arrangements — never a camera trick:
+      // the frequency axis re-warps first, then re-folds into a comb, then
+      // the plane blooms into the radial burst, all toward the strike-seeded
+      // arrangement. Sway is unipolar with rest 0 (docs/MIDI.md), so every
+      // channel contributes zero at rest and the layout IS upstream's; the
+      // smoothing keeps a jumpy CC from tearing the mesh.
+      const swRaw = io.gestures.sway < 0 ? 0 : io.gestures.sway > 1 ? 1 : io.gestures.sway;
+      swaySm += (swRaw - swaySm) * (1 - Math.exp(-dt / TAU_SWAY));
+      const sd = LAYOUT_SEEDS[layoutSeed];
+      const kl = 1 - Math.exp(-dt / TAU_LAYOUT);
+      foldCur += (sd.fold * sstep(0.10, 0.65, swaySm) - foldCur) * kl;
+      warpCur += (sd.warp * sstep(0.05, 0.80, swaySm) - warpCur) * kl;
+      radialCur += (sd.radial * sstep(0.45, 0.95, swaySm) - radialCur) * kl;
+      // the shear keeps its old feel but now rests at exactly zero
+      skew += (sd.skew * 0.30 * sstep(0.05, 0.90, swaySm) - skew) * kl;
+
       // --- UNIFORMS --------------------------------------------------------
-      // sway shears the scroll; smoothed so a jumpy CC does not tear the mesh
-      const ks = 1 - Math.exp(-dt * 3.0);
-      skew += ((io.gestures.sway - 0.5) * 0.30 - skew) * ks;
       palPhase += dt * 0.035;
       if (palPhase > 1) palPhase -= 1;
 
@@ -1126,6 +1248,9 @@ export function createScene(ctx) {
       terrainUniforms.u_heightMulti.value = heightMulti;
       terrainUniforms.u_energyImpact.value = ENERGY_IMPACT;
       terrainUniforms.u_skew.value = skew;
+      terrainUniforms.u_fold.value = 1 + foldCur;
+      terrainUniforms.u_axisWarp.value = warpCur;
+      terrainUniforms.u_radial.value = radialCur;
       terrainUniforms.u_palPhase.value = palPhase;
       // SwayCommand: upstream renders on its own dark ground with a bloom pass the
       // engine does not provide, so the terrain needs headroom to read here.
@@ -1140,7 +1265,8 @@ export function createScene(ctx) {
       particleUniforms.u_time.value = tSec;
       particleUniforms.u_energy.value +=
         (energy * ENERGY_IMPACT - particleUniforms.u_energy.value) * 0.15;
-      particleUniforms.u_beat.value = io.beat;
+      // SwayCommand: a slam flares the particle field the way a beat does
+      particleUniforms.u_beat.value = io.beat > slam ? io.beat : slam;
       particleUniforms.u_intensity.value = io.intensity * (0.55 + pAmount * 0.65);
       particles.position.y = energy * ENERGY_IMPACT * 8.0;
       particleGeo.setDrawRange(0, Math.max(1, Math.round(PARTICLE_COUNT * pAmount)));
