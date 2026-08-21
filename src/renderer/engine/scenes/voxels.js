@@ -170,8 +170,9 @@ export function createScene(ctx) {
       voxels.instanceMatrix.needsUpdate = true;
       voxels.instanceColor.needsUpdate = true;
 
-      // slow orbit; sway leans it, hand height sets elevation
-      const orbit = t * 0.06 + (io.gestures.sway - 0.5) * 1.0;
+      // fixed viewpoint — nothing auto-rotates (user rule); sway leans it,
+      // hand height sets elevation
+      const orbit = (io.gestures.sway - 0.5) * 1.0;
       camera.position.x = Math.sin(orbit) * 44;
       camera.position.z = Math.cos(orbit) * 44;
       camera.position.y = 10 + io.xy.y * 22 + io.beat * 0.8;

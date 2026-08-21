@@ -4,6 +4,8 @@
 // Scene instances are cached for glitch-free switching.
 
 import * as THREE from 'three';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { creators, sceneList } from './scenes/index.js';
 import { createColorMaster } from './colormaster.js';
 import { createFxRack } from './fxrack.js';
@@ -29,14 +31,31 @@ export function createEngine({ canvas, quality = 'med' }) {
   let width = canvas.clientWidth || 1280;
   let height = canvas.clientHeight || 720;
 
-  const rtOpts = { depthBuffer: true, stencilBuffer: false };
+  // Half-float targets keep the scenes' additive HDR (values past 1.0) alive
+  // for the bloom pass, exactly like theDAW's EffectComposer buffers.
+  const rtOpts = { depthBuffer: true, stencilBuffer: false, type: THREE.HalfFloatType };
   let rtA = new THREE.WebGLRenderTarget(width, height, rtOpts);
   let rtB = new THREE.WebGLRenderTarget(width, height, rtOpts);
 
-  // The crossfade composite lands here when the FX rack is active, so the rack
-  // has a texture to work from. Straight to the screen when the rack is idle.
-  let rtComp = new THREE.WebGLRenderTarget(width, height, { depthBuffer: false, stencilBuffer: false });
+  // The crossfade composite lands here when bloom or the FX rack needs a
+  // texture to work from. Straight to the screen when both are idle.
+  let rtComp = new THREE.WebGLRenderTarget(width, height, { depthBuffer: false, stencilBuffer: false, type: THREE.HalfFloatType });
   const fxRack = createFxRack(THREE, renderer, width, height);
+
+  // Shared reflection environment for the chrome scenes — the no-asset
+  // stand-in for theDAW's EXR: a PMREM-filtered RoomEnvironment, generated
+  // once and handed to scenes through ctx.environment.
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  pmrem.dispose();
+
+  // Per-scene bloom (theDAW's UnrealBloomPass). Scenes request it through
+  // meta.bloom { strength, radius, threshold } or a live instance.bloom that
+  // update() mutates; the engine crossfades strength with the scene mix.
+  const bloomPass = new UnrealBloomPass(new THREE.Vector2(width, height), 0, 0.4, 0.6);
+  const copyMat = new THREE.MeshBasicMaterial({ map: rtComp.texture, depthTest: false, depthWrite: false });
+  const copyScene = new THREE.Scene();
+  copyScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), copyMat));
 
   // Fullscreen composite pass
   const compScene = new THREE.Scene();
@@ -49,23 +68,25 @@ export function createEngine({ canvas, quality = 'med' }) {
       uMaster: { value: 1 },
       uFlash: { value: 0 },
     },
+    glslVersion: THREE.GLSL3,
     vertexShader: /* glsl */ `
-      varying vec2 vUv;
+      out vec2 vUv;
       void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
     fragmentShader: /* glsl */ `
       uniform sampler2D tA, tB;
       uniform float uMix, uMaster, uFlash;
-      varying vec2 vUv;
+      in vec2 vUv;
+      out vec4 fragColor;
       void main() {
         float a = cos(uMix * 1.5707963) ;
         float b = sin(uMix * 1.5707963);
-        vec3 col = texture2D(tA, vUv).rgb * a * a + texture2D(tB, vUv).rgb * b * b;
+        vec3 col = texture(tA, vUv).rgb * a * a + texture(tB, vUv).rgb * b * b;
         // gentle S-curve + master fader + beat flash headroom
         col = col * (1.0 + uFlash * 0.25);
         col = col / (1.0 + 0.35 * col);
         // subtle vignette keeps edges calm on projectors
         float vig = smoothstep(1.35, 0.45, length(vUv - 0.5) * 1.6);
-        gl_FragColor = vec4(col * uMaster * vig, 1.0);
+        fragColor = vec4(col * uMaster * vig, 1.0);
       }`,
     depthTest: false,
     depthWrite: false,
@@ -75,7 +96,7 @@ export function createEngine({ canvas, quality = 'med' }) {
   // --- scene management --------------------------------------------------------
 
   const instances = new Map(); // id -> created scene
-  const ctx = { THREE, renderer, width, height, quality: q };
+  const ctx = { THREE, renderer, width, height, quality: q, environment };
 
   function instance(id) {
     if (!instances.has(id)) {
@@ -92,7 +113,16 @@ export function createEngine({ canvas, quality = 'med' }) {
   let fading = false;
   let fadeTime = 4;
 
+  function cutTo(id) {
+    if (!creators[id]) return;
+    slotA = id;
+    slotB = null;
+    mix = 0;
+    fading = false;
+  }
+
   function crossfadeTo(id, seconds) {
+    if (seconds <= 0.12) return cutTo(id);
     if (id === slotA && !fading) return;
     if (fading) {
       // settle the current fade instantly, then start the new one
@@ -102,6 +132,18 @@ export function createEngine({ canvas, quality = 'med' }) {
     slotB = id;
     fading = true;
     fadeTime = Math.max(0.1, seconds);
+  }
+
+  // Cold scene instancing builds geometry and compiles shaders mid-frame, so
+  // a project load queues its scenes here and the loop warms one per frame.
+  const warmQueue = [];
+  let warmResolvers = [];
+  function prewarm(ids = autoVJ.pool) {
+    for (const id of ids) {
+      if (creators[id] && !instances.has(id) && !warmQueue.includes(id)) warmQueue.push(id);
+    }
+    if (!warmQueue.length) return Promise.resolve();
+    return new Promise((resolve) => warmResolvers.push(resolve));
   }
 
   // --- Auto-VJ (VfxController pattern) ------------------------------------------
@@ -137,11 +179,17 @@ export function createEngine({ canvas, quality = 'med' }) {
     knobs: new Array(8).fill(0.5),
     pads: new Array(16).fill(0),
     lastPad: -1,
+    strike: 0, // max pad energy this frame — the strike dimension scenes morph on
     palette: colorMaster.palette,
     intensity: 1,
   };
 
   const stats = { fps: 0, frames: 0, acc: 0 };
+
+  // Engine-level performance parameters. These used to be hardwired to knobs
+  // 0/1/2 inside the frame loop; the assignment router writes them now, and
+  // io.knobs keeps mirroring the raw hardware for scenes that read it.
+  const params = { hue: 0, intensity: 0.5 };
 
   // The rack costs several fullscreen passes, so it stays out of the pipeline
   // until something actually enables it.
@@ -153,6 +201,7 @@ export function createEngine({ canvas, quality = 'med' }) {
   let last = 0;
   let audioEngine = null;
   let control = null;
+  let frameHook = null; // fn(dt, t, io) — router/transport slot, same-frame
 
   function frame(now) {
     if (!running) return;
@@ -186,17 +235,34 @@ export function createEngine({ canvas, quality = 'med' }) {
       io.gestures.press = control.gestures.press;
       io.gestures.sway = control.gestures.sway;
       for (let i = 0; i < 8; i++) io.knobs[i] = control.knobs[i];
+      let strike = 0;
       for (let i = 0; i < 16; i++) {
         io.pads[i] = Math.max(io.pads[i] * Math.exp(-dt * 5), control.pads[i]);
         control.pads[i] = 0; // consume the hit; engine owns the decay
+        if (io.pads[i] > strike) strike = io.pads[i];
       }
+      io.strike = strike;
       io.lastPad = control.lastPad;
     }
 
-    // engine-reserved knobs: 0 hue shift, 1 fade-time scale, 2 master intensity
-    colorMaster.update(dt, io.knobs[0] === 0.5 ? 0 : io.knobs[0]);
-    autoVJ.fadeTime = 1 + io.knobs[1] * 7;
-    io.intensity = 0.25 + io.knobs[2] * 0.75 + io.gestures.pulse * 0.35;
+    if (frameHook) frameHook(dt, t, io);
+
+    colorMaster.update(dt, params.hue);
+    io.intensity = 0.25 + params.intensity * 0.75 + io.gestures.pulse * 0.35;
+
+    if (warmQueue.length) {
+      const id = warmQueue.shift();
+      try {
+        const inst = instance(id);
+        renderer.compile(inst.scene, inst.camera);
+      } catch (err) {
+        console.warn(`[engine] prewarm ${id} failed:`, err.message);
+      }
+      if (!warmQueue.length) {
+        for (const resolve of warmResolvers) resolve();
+        warmResolvers = [];
+      }
+    }
 
     autoVJTick(dt);
 
@@ -230,16 +296,44 @@ export function createEngine({ canvas, quality = 'med' }) {
     compMat.uniforms.uMix.value = fading ? mix : 0;
     compMat.uniforms.uMaster.value = 1;
     compMat.uniforms.uFlash.value = io.beat;
-    if (fxEnabled) {
+
+    // Per-scene bloom, crossfaded with the scene mix. A live instance.bloom
+    // (mutated in update()) wins over the static meta.bloom.
+    const bloomA = bloomOf(slotA);
+    const bloomB = fading ? bloomOf(slotB) : null;
+    const wB = fading ? mix : 0;
+    const strength = (bloomA ? bloomA.strength : 0) * (1 - wB) + (bloomB ? bloomB.strength : 0) * wB;
+    const lead = wB > 0.5 ? bloomB || bloomA : bloomA || bloomB;
+    const bloomOn = strength > 0.01 && lead;
+
+    if (fxEnabled || bloomOn) {
       renderer.setRenderTarget(rtComp);
       renderer.clear();
       renderer.render(compScene, compCam);
+      if (bloomOn) {
+        bloomPass.strength = strength;
+        bloomPass.radius = lead.radius ?? 0.4;
+        bloomPass.threshold = lead.threshold ?? 0.6;
+        bloomPass.render(renderer, null, rtComp, dt, false); // adds bloom into rtComp
+      }
       renderer.setRenderTarget(null);
-      fxRack.render(rtComp.texture, null, dt, io);
+      if (fxEnabled) {
+        fxRack.render(rtComp.texture, null, dt, io);
+      } else {
+        renderer.render(copyScene, compCam);
+      }
     } else {
       renderer.setRenderTarget(null);
       renderer.render(compScene, compCam);
     }
+  }
+
+  function bloomOf(id) {
+    if (!id) return null;
+    const inst = instances.get(id);
+    if (inst && inst.bloom) return inst.bloom;
+    const m = sceneList.find((s) => s.id === id);
+    return (m && m.bloom) || null;
   }
 
   function resize() {
@@ -251,10 +345,17 @@ export function createEngine({ canvas, quality = 'med' }) {
     rtA.setSize(width * pr, height * pr);
     rtB.setSize(width * pr, height * pr);
     rtComp.setSize(width * pr, height * pr);
+    bloomPass.setSize(width, height);
     fxRack.resize(width * pr, height * pr);
     instances.forEach((s) => s.resize(width, height));
   }
   window.addEventListener('resize', resize);
+  // The stage lives in a grid cell now, so its box changes without a window
+  // resize (drawer, solo view, breakpoints). The window listener stays as a
+  // no-op backstop; this is the one that actually fires.
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(() => resize()).observe(canvas);
+  }
 
   return {
     sceneList,
@@ -262,6 +363,7 @@ export function createEngine({ canvas, quality = 'med' }) {
     io,
     colorMaster,
     autoVJ,
+    params,
 
     // --- effects rack (ported from the VJ-9000 decks) ---
     fx: fxRack,
@@ -302,8 +404,36 @@ export function createEngine({ canvas, quality = 'med' }) {
       crossfadeTo(first, 0.8);
     },
 
+    // .sway-format sibling of loadProject: takes a validated project object
+    // and replays the fx snapshot through the rack so the file is never
+    // trusted with raw parameter values.
+    applyProject(project) {
+      colorMaster.setPalette(project.palette, 2);
+      const eng = project.engine || {};
+      const av = eng.autoVJ || {};
+      autoVJ.pool = (av.pool || []).filter((id) => creators[id]);
+      autoVJ.enabled = !!av.enabled;
+      autoVJ.minHold = av.minHold ?? 18;
+      autoVJ.maxHold = av.maxHold ?? 40;
+      autoVJ.fadeTime = av.fadeTime ?? 4;
+      autoVJ.holdLeft = autoVJ.minHold;
+      fxEnabled = !!eng.fxEnabled;
+      fxRack.reset();
+      for (const [key, value] of Object.entries((project.fx && project.fx.params) || {})) {
+        fxRack.setParam(key, value);
+      }
+      const first = (eng.start && eng.start.scene) || autoVJ.pool[0];
+      if (first) cutTo(creators[first] ? first : autoVJ.pool[0]);
+      prewarm();
+    },
+
     setScene(id, seconds = 2.5) {
       if (creators[id]) crossfadeTo(id, seconds);
+    },
+    cutTo,
+    prewarm,
+    setFrameHook(fn) {
+      frameHook = typeof fn === 'function' ? fn : null;
     },
     nextScene(seconds = 2.5) {
       const others = autoVJ.pool.filter((id) => id !== slotA);

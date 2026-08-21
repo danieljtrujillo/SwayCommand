@@ -1,5 +1,5 @@
 // VJ Shader — the five GANTASMO VJ-9000 fragment-shader presets plus its
-// eight-material picker, ported into one AKSWAYJ scene.
+// eight-material picker, ported into one SwayCommand scene.
 //
 // ============================ PROVENANCE / LICENSING =========================
 // Ported from GANTASMO VJ-9000 (the author's own project), files:
@@ -17,29 +17,39 @@
 // in the shader body below.
 //
 // CHANGES MADE IN THIS PORT (full list; see the report notes inline):
-//   * GLSL3 -> GLSL1. Route taken: convert to GLSL1, the three.js r180 default
-//     for ShaderMaterial (NOT glslVersion: GLSL3). `#version 300 es` and the
-//     `out vec4 O` declaration are dropped, `O = ...` becomes gl_FragColor,
-//     `precision` is left to the three.js prefix, and every upstream `in`/`out`
-//     stage variable becomes a `varying`.
+//   * GLSL3, as upstream. Every material sets glslVersion: THREE.GLSL3, so the
+//     shaders are GLSL ES 3.00 end to end: `in`/`out` stage variables and a
+//     declared `out vec4 fragColor` (upstream's `out vec4 O`; `O = ...` is
+//     `fragColor = ...`). `#version 300 es` and `precision` are left to the
+//     three.js prefix. An earlier pass of this port had rewritten the syntax
+//     down to GLSL1 (varyings, gl_FragColor, tanh polyfills, a cpAt(int)
+//     selector); that is undone. The NaN guards, the determinism fixes and
+//     the loop-invariant hoist that pass added are version-independent and
+//     stay — each is listed below with why.
 //   * gl_FragCoord / `resolution` are replaced by the interpolated `vUv` of a
 //     2x2 clip-space quad plus a precomputed `uAspectScale`. This is exactly
 //     equivalent — (FC - 0.5*R)/min(R.x,R.y) == (vUv-0.5) * vec2(max(A,1),
 //     max(1/A,1)) and FC/R == vUv — and it makes the frame independent of the
 //     engine's device-pixel-ratio scaling of the render target.
-//   * yotta's `vec3 cp[14]` global array + initCam() become a `cpAt(int)`
-//     if/else selector (GLSL1 has no array constructors and mandates only
-//     constant-index-expression array access). The 14 control points, the
-//     `a = 2*0.96, b = 2*a` constants and the Catmull-Rom evaluation are
-//     unchanged.
-//   * yotta's `for(; i++<maxd;)` march (non-constant bound, no init clause —
-//     illegal under GLSL ES 1.00 Appendix A) becomes a constant-bound `for`
-//     with the identical `if (i++ >= maxd) break;` test, so the step count and
-//     the final value of `i` are unchanged.
-//   * yotta's `#define ZERO (time*.0)` unroll-blocker becomes a literal `0.`
-//     (a non-constant loop initialiser is illegal in GLSL ES 1.00). Same math.
-//   * GLSL1 has no tanh(): polyfilled as tanh1()/tanh3() with the argument
-//     clamped to +/-10 so exp() cannot overflow to inf/inf = NaN.
+//   * yotta's `vec3 cp[14]` global array + initCam() are one `const vec3
+//     cp[14] = vec3[14](...)` array constructor. GLSL ES 3.00 has array
+//     constructors and dynamic array indexing, so the table is built at
+//     compile time instead of once per fragment and camPath() indexes it
+//     exactly as upstream. The 14 control points, the `a = 2*0.96, b = 2*a`
+//     constants and the Catmull-Rom evaluation are unchanged.
+//   * yotta's `for(; i++<maxd;)` march runs inside a constant-bound `for` with
+//     the identical `if (i++ >= maxd) break;` test. Kept from the GLSL1 pass:
+//     GLSL ES 3.00 accepts the upstream form, but the literal bound hands the
+//     compiler a known trip count, and the step count and the final value of
+//     `i` are unchanged either way.
+//   * yotta's `#define ZERO (time*.0)` loop initialiser stays a literal `0.`.
+//     Kept from the GLSL1 pass: the macro is an unroll hint to the compiler,
+//     not maths (time*0 is 0), and the Menger fold count is a per-tier literal
+//     here anyway. Same math.
+//   * tanh() is the native GLSL ES 3.00 builtin again, as upstream. The GLSL1
+//     pass's tanh1()/tanh3() exp() polyfills (argument clamped to +/-10) are
+//     removed: both call sites feed tanh() values inside [0, ~1.1] — ao*ao and
+//     a smoothstep()'d colour cubed — so there is nothing to overflow.
 //   * Upstream undefined behaviour made deterministic: yotta's `bool near;`,
 //     `float dd, i, edge;` are now explicitly zero/false-initialised (drivers
 //     zero-init in practice, so this reproduces the observed upstream look),
@@ -79,7 +89,7 @@
 //     `med` therefore holds 60 fps at 1080p on the reference part at DPR 1,
 //     with yotta right on the line at ~59 fps. Three honest caveats:
 //       - The reference part is a Radeon RX Vega M GL (~1.8 TFLOP). The weakest
-//         integrated GPU AKSWAYJ targets, an Intel HD 630 (~0.4 TFLOP), is
+//         integrated GPU SwayCommand targets, an Intel HD 630 (~0.4 TFLOP), is
 //         roughly a quarter of that, so `med` lands near 15-20 fps at 1080p
 //         there and even `low` does not reach 60. This scene does NOT meet
 //         contract hard rule 6 on HD 630-class graphics, and no setting of the
@@ -104,21 +114,42 @@
 //     eight-material picker occupy pads 0-3 and the one that ignores it sits on
 //     pad 4. Consequence: the scene opens on the Mandelbulb, not on yotta.
 //     Every preset's own parameters are unchanged by the reordering.
-//   * AKSWAYJ additions, all additive on top of untouched upstream math:
+//   * NO AUTONOMOUS ROTATION (project rule: nothing auto-rotates in any
+//     scene). The raymarch template's camera orbit advanced by itself —
+//     azimuth T*0.2, elevation sin(T*0.15)*0.4. Both terms are removed; the
+//     orbit angles are now io.xy alone (azimuth uPan.x*3.0, elevation
+//     uPan.y*0.9), so the view holds still until the hand moves it. T still
+//     drives everything non-rotational it drove upstream: the surface colour
+//     cycling, the glow tint cycle, the Julia constant's c.z oscillation and
+//     yotta's forward travel along the Catmull-Rom path (which turns with the
+//     corridor but never rolls — dir() keeps world up). The wheelOffset drift
+//     that advances T is therefore a scrub of those terms, not a turn.
+//   * SwayCommand additions, all additive on top of untouched upstream math:
 //     u_hue is driven from io.palette[0]'s hue, the glow accumulator is tinted
-//     with a palette colour, io.xy offsets the camera orbit angles, gestures
-//     bias the active preset's primary/secondary parameter, io.knobs[3..6] take
-//     direct parameter control and io.knobs[7] is the wheel-drift audioDrive,
-//     and a preset/material change fires a short white transition flash.
+//     with a palette colour, io.xy sets the camera orbit angles, press
+//     biases the active preset's primary parameter, SWAY is a preset-space
+//     morph — every structural parameter carries a per-preset morph vector
+//     (swA/swB in the tables below) so the hand glides the solid through
+//     distinct pattern families instead of nudging one slot — STRIKE
+//     (io.strike on a pad rising edge) kicks the primary parameter, jumps the
+//     wheel scrub (a seed jump along the flythrough) and flashes, pads 5-7
+//     step to the next preset the way the Quantum Lattice steps geometries,
+//     io.knobs[3..6] take direct parameter control and io.knobs[7] is the
+//     wheel-drift audioDrive, and a preset/material change fires a short
+//     white transition flash.
 //     Every one of those inputs contributes ZERO at its documented rest value
-//     (knobs 0.5, io.xy 0.5/0.5, gestures 0), so with nothing connected the
-//     scene sits on the upstream defaults exactly — verified: u_power 8.0000,
-//     u_glow 1.0000 after 30 s of idle update() calls.
+//     (knobs 0.5, io.xy 0.5/0.5, gestures 0, no strikes), so with nothing
+//     connected the scene sits on the upstream parameter defaults exactly —
+//     verified: u_power 8.0000, u_glow 1.0000 after 30 s of idle update()
+//     calls. (The camera, per the bullet above, rests at azimuth 0 /
+//     elevation 0 instead of drifting.)
 // =============================================================================
 //
 // Pads 0-4 pick the preset (Mandelbulb, Julia Bulb, Mandelbox, Kaleido IFS,
-// Yotta). Pads 8-15 pick one of the eight materials, which — exactly as
-// upstream — apply to the four fractals only; yotta ignores u_material.
+// Yotta); pads 5-7 step to the next preset. Pads 8-15 pick one of the eight
+// materials, which — exactly as upstream — apply to the four fractals only;
+// yotta ignores u_material. Every pad rising edge is also a STRIKE that
+// convulses the active preset's own structure (STRIKE_KICK below).
 // One draw call: five ShaderMaterials on one shared 2x2 quad geometry, with
 // only the active preset's mesh visible, so three.js compiles a preset's
 // program on its first selection and never branches between fractals at
@@ -135,16 +166,27 @@ const TC_ATTACK = 0.025; // 25 ms envelope attack
 const TC_RELEASE = 0.18; // 180 ms envelope release
 const TC_PARAM = 0.08;   // 80 ms parameter easing
 
-// --- AKSWAYJ gesture smoothing, seconds (63 % settle time). The task calls for
+// --- SwayCommand gesture smoothing, seconds (63 % settle time). The task calls for
 //     1.5-2.5 s: structural parameters must drift under the hand, never snap.
 const TAU_PRESS = 2.0;  // press -> active preset's PRIMARY parameter
-const TAU_SWAY = 2.5;   // sway  -> active preset's SECONDARY parameter
-const TAU_PAN = 1.5;    // io.xy -> camera orbit angle offsets
+const TAU_SWAY = 2.5;   // sway  -> preset-space morph position (swA/swB tables)
+const TAU_PAN = 1.5;    // io.xy -> camera orbit angles (the only thing that turns the view)
 const TAU_DRIVE = 0.4;  // knob 7 -> wheel-drift audioDrive (a trim, not a gesture)
 
 const FLASH_TAU = 0.22; // preset / material change flash decay, seconds
 const PAD_ARM = 0.25;   // a pad must land at least this hard to register
 const PAD_EDGE = 0.06;  // ...and rise at least this much above the last frame
+
+// STRIKE — a pad rising edge, magnitude io.strike (the engine's max pad
+// energy). A hit must morph the fractal's own structure, never just spin the
+// view: the strike envelope kicks the active preset's PRIMARY parameter, and
+// the wheel scrub jumps forward — for yotta a leap down the Menger corridor,
+// for the fractals a scrub of every T-driven term in the distance fields. The
+// 80 ms parameter easing then turns the kick into a fast structural
+// convulsion rather than a snap.
+const STRIKE_TAU = 0.30;  // strike envelope decay, seconds
+const STRIKE_KICK = 0.30; // primary-parameter kick, fraction of (max-min)
+const WHEEL_JUMP = 1400;  // wheel-scrub seed jump per full-velocity strike
 
 // How far the upstream glow tint is pulled toward the engine palette colour.
 // The upstream expression (0.5+0.5*cos(vec3(0,1,2)+T+u_high*4.0)) is kept
@@ -158,48 +200,67 @@ const A_NONE = 0, A_BASS = 1, A_MID = 2, A_HIGH = 3, A_VOL = 4;
 const MATERIALS = ['Neon', 'Chrome', 'Matte', 'Glass', 'Gold', 'Iridescent', 'Velvet', 'Plasma'];
 
 // --- per-preset parameter tables, verbatim from shaderPresets.ts -------------
-// { id, min, max, def, audio, amt } — `amt` is the audio depth as a fraction of
-// (max-min); upstream's default when a preset omits audioAmt is 0.3.
-// `primary` / `secondary` index the parameter that press / sway bias. Upstream
-// has no such concept, so the choice is documented here: it is the parameter
-// that visibly reshapes the solid, then the one that colours or twists it.
+// { id, min, max, def, audio, amt, swA, swB } — `amt` is the audio depth as a
+// fraction of (max-min); upstream's default when a preset omits audioAmt is
+// 0.3. `primary` indexes the parameter press and strike bias: the one that
+// visibly reshapes the solid. `swA` / `swB` are the preset-space morph vector
+// (fractions of the span): sway travels the parameter along
+//   swA * sin(pi * sway) + swB * sway
+// so the swA lobe peaks mid-travel and the swB ramp owns the far end — the
+// sweep visits one pattern family and lands on another, morphing the solid
+// BETWEEN families instead of spinning it. Upstream has no such concept; each
+// vector is chosen so every stop on the sweep stays inside the upstream
+// min/max after the shared clamp, and every vector is zero at sway = 0.
 const PRESETS = [
   {
-    id: 'mandelbulb', name: 'Mandelbulb', primary: 0, secondary: 1,
+    // sway sweeps u_power 8 -> ~4 (fat low-power lobes) -> 11 (spiky bulb)
+    id: 'mandelbulb', name: 'Mandelbulb', primary: 0,
     params: [
-      { id: 'u_power', min: 2, max: 12, def: 8, audio: A_BASS, amt: 0.22 },
-      { id: 'u_glow', min: 0, max: 3, def: 1, audio: A_NONE, amt: 0.3 },
+      { id: 'u_power', min: 2, max: 12, def: 8, audio: A_BASS, amt: 0.22, swA: -0.55, swB: 0.30 },
+      { id: 'u_glow', min: 0, max: 3, def: 1, audio: A_NONE, amt: 0.3, swA: 0.30, swB: 0 },
     ],
   },
   {
-    id: 'juliabulb', name: 'Julia Bulb', primary: 1, secondary: 2,
+    // sway arcs the Julia constant (0.45,0.3) -> (~-0.1,~0.9) -> (-0.65,0.3):
+    // a curve through Julia-set space, each stop a different set family. The
+    // cy lobe stops short of |c| > 1, where the power-8 set thins to dust.
+    id: 'juliabulb', name: 'Julia Bulb', primary: 1,
     params: [
-      { id: 'u_power', min: 2, max: 10, def: 8, audio: A_NONE, amt: 0.3 },
-      { id: 'u_cx', min: -1, max: 1, def: 0.45, audio: A_MID, amt: 0.15 },
-      { id: 'u_cy', min: -1, max: 1, def: 0.3, audio: A_HIGH, amt: 0.15 },
-      { id: 'u_glow', min: 0, max: 3, def: 1, audio: A_NONE, amt: 0.3 },
+      { id: 'u_power', min: 2, max: 10, def: 8, audio: A_NONE, amt: 0.3, swA: -0.30, swB: 0 },
+      { id: 'u_cx', min: -1, max: 1, def: 0.45, audio: A_MID, amt: 0.15, swA: 0, swB: -0.55 },
+      { id: 'u_cy', min: -1, max: 1, def: 0.3, audio: A_HIGH, amt: 0.15, swA: 0.30, swB: 0 },
+      { id: 'u_glow', min: 0, max: 3, def: 1, audio: A_NONE, amt: 0.3, swA: 0, swB: 0 },
     ],
   },
   {
-    id: 'mandelbox', name: 'Mandelbox', primary: 0, secondary: 1,
+    // sway sweeps u_scale 2.1 -> ~3.0 (mid) -> 2.82: the box tightens through
+    // progressively denser fold families. UP only: the box's bounding radius
+    // grows as (scale+1)/(scale-1), so a glide below ~1.6 inflates the solid
+    // past the camera at 7.0 and the frame collapses to bare glow (measured).
+    id: 'mandelbox', name: 'Mandelbox', primary: 0,
     params: [
-      { id: 'u_scale', min: -3, max: 3, def: 2.1, audio: A_NONE, amt: 0.3 },
-      { id: 'u_glow', min: 0, max: 3, def: 1, audio: A_VOL, amt: 0.4 },
+      { id: 'u_scale', min: -3, max: 3, def: 2.1, audio: A_NONE, amt: 0.3, swA: 0.10, swB: 0.12 },
+      { id: 'u_glow', min: 0, max: 3, def: 1, audio: A_VOL, amt: 0.4, swA: 0.40, swB: 0 },
     ],
   },
   {
-    id: 'kifs', name: 'Kaleido IFS', primary: 1, secondary: 0,
+    // the kaleidoscope proper: sway lifts the fold angle to ~0.63 mid-travel,
+    // then flips it through zero to -0.65 while the fold scale tightens —
+    // the wedge pattern re-tiles through visibly different symmetry families
+    id: 'kifs', name: 'Kaleido IFS', primary: 1,
     params: [
-      { id: 'u_kscale', min: 1.5, max: 2.6, def: 2.0, audio: A_NONE, amt: 0.3 },
-      { id: 'u_kang', min: -1.5, max: 1.5, def: 0.4, audio: A_MID, amt: 0.4 },
-      { id: 'u_glow', min: 0, max: 3, def: 1, audio: A_NONE, amt: 0.3 },
+      { id: 'u_kscale', min: 1.5, max: 2.6, def: 2.0, audio: A_NONE, amt: 0.3, swA: 0.18, swB: -0.30 },
+      { id: 'u_kang', min: -1.5, max: 1.5, def: 0.4, audio: A_MID, amt: 0.4, swA: 0.25, swB: -0.35 },
+      { id: 'u_glow', min: 0, max: 3, def: 1, audio: A_NONE, amt: 0.3, swA: 0, swB: 0 },
     ],
   },
   {
-    id: 'yotta', name: 'Yotta (Cloud Computing)', primary: 0, secondary: 1,
+    // sway rushes the flythrough to ~2.9x mid-travel (the zoom rhythm), eases
+    // back to 2x at the top, and drains the warmth toward the cold grade
+    id: 'yotta', name: 'Yotta (Cloud Computing)', primary: 0,
     params: [
-      { id: 'u_speed', min: 0, max: 4, def: 1, audio: A_NONE, amt: 0.3 },
-      { id: 'u_warmth', min: 0, max: 1, def: 1, audio: A_NONE, amt: 0.3 },
+      { id: 'u_speed', min: 0, max: 4, def: 1, audio: A_NONE, amt: 0.3, swA: 0.35, swB: 0.25 },
+      { id: 'u_warmth', min: 0, max: 1, def: 1, audio: A_NONE, amt: 0.3, swA: 0, swB: -0.85 },
     ],
   },
 ];
@@ -220,35 +281,38 @@ const ENV_GLSL =
 // One vertex shader for all five presets: emit the 2x2 plane straight to clip
 // space and carry the 0..1 uv, which stands in for gl_FragCoord/resolution.
 const VERT = /* glsl */ `
-  varying vec2 vUv;
+  out vec2 vUv;
   void main() {
     vUv = uv;
     gl_Position = vec4(position.xy, 0.0, 1.0); // fullscreen, no matrices
   }`;
 
 /**
- * The shared distance-field raymarch harness from shaderPresets.ts, ported to
- * GLSL1. The camera orbit, march, normal, eight-material shading, glow, hue,
- * gamma and vignette are reproduced expression for expression; only the
- * declarations above main() and the guards marked GUARD differ.
+ * The shared distance-field raymarch harness from shaderPresets.ts, GLSL ES
+ * 3.00 as upstream. The camera orbit, march, normal, eight-material shading,
+ * glow, hue, gamma and vignette are reproduced expression for expression; only
+ * the declarations above main(), the guards marked GUARD and the two
+ * orbit-angle lines differ — the orbit's self-advancing T terms are removed
+ * (header CHANGES list), so the view turns only under io.xy.
  */
 function raymarchSource(o) {
   return /* glsl */ `
-varying vec2 vUv;
+in vec2 vUv;
 uniform float time;
 uniform vec2  wheel;
 uniform vec2  uAspectScale; // (max(A,1), max(1/A,1)); stands in for resolution
-uniform vec2  uPan;         // AKSWAYJ: io.xy, centred, smoothed
+uniform vec2  uPan;         // SwayCommand: io.xy, centred, smoothed
 uniform float u_bass;
 uniform float u_mid;
 uniform float u_high;
 uniform float u_volume;
 uniform float u_hue;
 uniform float u_material;
-uniform vec3  uGlowTint;    // AKSWAYJ: palette tint for the glow accumulator
-uniform float uFlash;       // AKSWAYJ: preset / material change flash
-uniform float uIntensity;   // AKSWAYJ: io.intensity
+uniform vec3  uGlowTint;    // SwayCommand: palette tint for the glow accumulator
+uniform float uFlash;       // SwayCommand: preset / material change flash
+uniform float uIntensity;   // SwayCommand: io.intensity
 ${o.uniforms}
+out vec4 fragColor;         // upstream: out vec4 O
 #define T (time + wheel.y/1e3)
 mat2 rot(float a){ float c=cos(a), s=sin(a); return mat2(c,-s,s,c); }
 ${HUE_GLSL}
@@ -270,9 +334,9 @@ void main(){
   vec2 uv=(vUv-0.5)*uAspectScale;
   vec3 ro=vec3(0.,0.,${o.camDist.toFixed(2)});
   vec3 rd=normalize(vec3(uv,-1.3));
-  float a=T*0.2+uPan.x*3.0;          // AKSWAYJ: io.xy.x offsets the azimuth
+  float a=uPan.x*3.0;   // SwayCommand: io.xy.x sets the azimuth (upstream T*0.2 self-drift removed)
   ro.xz*=rot(a); rd.xz*=rot(a);
-  float b=sin(T*0.15)*0.4+uPan.y*0.9; // AKSWAYJ: io.xy.y offsets the elevation
+  float b=uPan.y*0.9;   // SwayCommand: io.xy.y sets the elevation (upstream sin(T*0.15)*0.4 removed)
   ro.yz*=rot(b); rd.yz*=rot(b);
   float t=0., g=0.;
   vec3 p=ro;
@@ -320,14 +384,14 @@ void main(){
       col=neon*(0.5+0.4*dif)+neon*fres*2.2;
     }
   }
-  // Upstream glow tint kept intact; AKSWAYJ multiplies it by the palette tint.
+  // Upstream glow tint kept intact; SwayCommand multiplies it by the palette tint.
   col+=g*(${o.glow})*(0.5+0.5*cos(vec3(0,1,2)+T+u_high*4.0))*mix(vec3(1.0),uGlowTint,${GLOW_PAL});
   col=pow(clamp(col,0.,1.),vec3(0.75));
   vec2 q=vUv;
   col*=0.4+0.6*pow(max(16.0*q.x*q.y*(1.0-q.x)*(1.0-q.y),0.0),0.2); // GUARD: pow base
   col=hueShift(col,u_hue);
-  col=mix(col,vec3(1.0),clamp(uFlash,0.,1.)*0.35); // AKSWAYJ transition flash
-  gl_FragColor=vec4(col*uIntensity,1.0);
+  col=mix(col,vec3(1.0),clamp(uFlash,0.,1.)*0.35); // SwayCommand transition flash
+  fragColor=vec4(col*uIntensity,1.0);
 }`;
 }
 
@@ -439,7 +503,7 @@ function yottaSource(near, far, mengerIter) {
 * MIT -- attribution carried through from VJ-9000's shaderPresets.ts, which
 * records this preset's origin as "Source: Matthias Hurrle (@atzedent), MIT."
 */
-varying vec2 vUv;
+in vec2 vUv;
 uniform float time;
 uniform vec2  wheel;
 uniform vec2  uAspectScale;
@@ -450,6 +514,7 @@ uniform float u_hue;
 uniform vec3  uGlowTint;
 uniform float uFlash;
 uniform float uIntensity;
+out vec4 fragColor;   // upstream: out vec4 O
 #define T (time+wheel.y/1e3)
 #define S smoothstep
 #define EDGESIZE 42e-4
@@ -459,30 +524,29 @@ const vec3 LP = vec3(-2,8,-2);   // upstream #define LP, hoisted to a const
 // is NaN and a single NaN fragment blanks the frame.
 vec3 nsafe(vec3 v){ float l=length(v); return l>1e-9 ? v/l : vec3(0.,0.,1.); }
 #define N nsafe
-// GLSL1 has no tanh(); clamp keeps exp() finite so (e-1)/(e+1) cannot be NaN.
-float tanh1(float x){ x=clamp(x,-10.,10.); float e=exp(2.*x); return (e-1.)/(e+1.); }
-vec3  tanh3(vec3 v){ return vec3(tanh1(v.x),tanh1(v.y),tanh1(v.z)); }
 ${HUE_GLSL}
-// The 14 camera control points, verbatim (a = 2*.96, b = 2*a); GLSL1 has no
-// array constructors, so an if/else selector replaces cp[14] + initCam().
+// The 14 camera control points, verbatim (a = 2*.96, b = 2*a). Upstream fills
+// a global vec3 cp[14] from initCam() once per fragment; GLSL ES 3.00 has
+// array constructors, so the same table is one const array built at compile
+// time and indexed directly (dynamic indexing is legal in ES 3.00).
 const float CPA = 2.*.96;
 const float CPB = 2.*CPA;
-vec3 cpAt(int i){
-  if(i==0)  return vec3(0.);
-  if(i==1)  return vec3(0.,0.,CPB);
-  if(i==2)  return vec3(CPA,0.,CPB);
-  if(i==3)  return vec3(CPA,0.,CPA);
-  if(i==4)  return vec3(CPA,-CPA*1.2,CPA);
-  if(i==5)  return vec3(-CPA,-CPA,CPA);
-  if(i==6)  return vec3(-CPA,0.,CPA);
-  if(i==7)  return vec3(-CPA,0.,0.);
-  if(i==8)  return vec3(0.);
-  if(i==9)  return vec3(0.,0.,-CPB);
-  if(i==10) return vec3(0.,CPA,-CPB);
-  if(i==11) return vec3(-CPA,CPA,-CPB);
-  if(i==12) return vec3(-CPA,0.,-CPB);
-  return vec3(-CPA,0.,0.); // i == 13
-}
+const vec3 cp[14] = vec3[14](
+	vec3(0.),
+	vec3(0.,0.,CPB),
+	vec3(CPA,0.,CPB),
+	vec3(CPA,0.,CPA),
+	vec3(CPA,-CPA*1.2,CPA),
+	vec3(-CPA,-CPA,CPA),
+	vec3(-CPA,0.,CPA),
+	vec3(-CPA,0.,0.),
+	vec3(0.),
+	vec3(0.,0.,-CPB),
+	vec3(0.,CPA,-CPB),
+	vec3(-CPA,CPA,-CPB),
+	vec3(-CPA,0.,-CPB),
+	vec3(-CPA,0.,0.)
+);
 vec3 catmull(vec3 a, vec3 b, vec3 c, vec3 d, float t){
 	return (((-a+b*3.-c*3.+d)*t*t*t + (a*2.- b*5.+c*4.-d)*t*t + (-a+c)*t + b*2.)*.5);
 }
@@ -491,12 +555,12 @@ vec3 camPath(float t){
 	const float k=float(n);
 	t=fract(t/k)*k;
 	float sn=floor(t), st=t-sn;
-	if (sn==.0) return catmull(cpAt(n-1), cpAt(0), cpAt(1), cpAt(2), st);
+	if (sn==.0) return catmull(cp[n-1], cp[0], cp[1], cp[2], st);
 	for (int i=1; i<n-2; i++) {
-		if (sn==float(i)) return catmull(cpAt(i-1), cpAt(i), cpAt(i+1), cpAt(i+2), st);
+		if (sn==float(i)) return catmull(cp[i-1], cp[i], cp[i+1], cp[i+2], st);
 	}
-	if (sn==k-2.) return catmull(cpAt(n-3), cpAt(n-2), cpAt(n-1), cpAt(0), st);
-	if (sn==k-1.) return catmull(cpAt(n-2), cpAt(n-1), cpAt(0), cpAt(1), st);
+	if (sn==k-2.) return catmull(cp[n-3], cp[n-2], cp[n-1], cp[0], st);
+	if (sn==k-1.) return catmull(cp[n-2], cp[n-1], cp[0], cp[1], st);
 	return vec3(0.);
 }
 float rnd(vec3 p) {
@@ -521,7 +585,7 @@ float map(vec3 p) {
 	float e=length(vec2(fract(p.z)-.5,p.y-1.))-.1;
 	p.xz=mod(p.xz+1.,2.)-1.;
 	float d=box(p,1.), f=1.;
-	for(float i=0.; i<${mengerIter}.; i++) {   // upstream ZERO unroll-blocker -> 0.
+	for(float i=0.; i<${mengerIter}.; i++) {   // upstream ZERO initialiser -> literal 0. (unroll hint, not maths)
 		vec3 a=mod(p*f,2.)-1., r=abs(1.-3.*abs(a));
 		f*=2.25;
 		float
@@ -542,11 +606,12 @@ vec3 norm(vec3 p) {
 	);
 }
 // Upstream: bool march(inout vec3 p, vec3 rd, out float dd, out float edge,
-// out float i) with a 'for (; i++<maxd;)' march. GLSL1 needs a constant loop
-// bound and an init clause, and reading an 'out' parameter is undefined -- so
-// dd/edge/i are 'inout', zero-initialised at the call site, and the identical
-// 'i++ >= maxd' test lives inside a constant-bound loop. Step count and the
-// final value of i are unchanged.
+// out float i) with a 'for (; i++<maxd;)' march. Reading an 'out' parameter
+// before writing it is undefined in every GLSL version, so dd/edge/i are
+// 'inout', zero-initialised at the call site; and the identical 'i++ >= maxd'
+// test lives inside a constant-bound loop -- GLSL ES 3.00 would take the
+// upstream form, the literal bound just hands the compiler a known trip
+// count. Step count and the final value of i are unchanged.
 bool march(inout vec3 p, vec3 rd, inout float dd, inout float edge, inout float i) {
 	bool near=false;
 	float maxd=abs(p.y)>1.?${near}.:${far}.;
@@ -607,7 +672,7 @@ vec3 render(vec2 uv) {
 		} else col+=dif*ao;
 		col+=clamp(dot(-rd,l),.0,1.)*ao*atten;
 		col*=vec3(1,.65,.5)+.3*amb*ao*atten;
-		col*=tanh1(ao*ao);
+		col*=tanh(ao*ao);
 		float fog=1.-clamp(dd/200.,.0,1.), eo=getao(p,n,EDGESIZE);
 		if(eo<.9) edge=max(edge,max(1.,fog));
 		eo=getao(p,n,-EDGESIZE);
@@ -626,13 +691,13 @@ vec3 render(vec2 uv) {
 		col=S(-.5,2.,col);
 	}
 	float k=max(.3,1.-distance(LP,ro));
-	// AKSWAYJ: the one bloom term yotta has is tinted with the engine palette,
+	// SwayCommand: the one bloom term yotta has is tinted with the engine palette,
 	// mirroring what the glow accumulator gets in the four fractal presets.
 	col+=hue(k*k*1.57+1.5)*k*.6*mix(vec3(1.),uGlowTint,${GLOW_PAL});
 	col=mix(col,vec3(1,.95,.9),S(.0,15.,distance(p,ro)));
 	col+=S(-1.,2.,clamp(i/300.,.0,1.))*k*vec3(1,.65,.5);
 	col=S(-.2,.8,col*1.2);
-	col=tanh3(col*col*col);
+	col=tanh(col*col*col);
 	col=sqrt(max(col,.0));                        // GUARD: sqrt of negative
 	vec2 c=vUv;                                   // upstream: FC/R
 	c*=1.-c.yx;
@@ -643,12 +708,12 @@ vec3 render(vec2 uv) {
 	return col*mix(vec3(.95,.97,1.),vec3(1,.85,.65),u_warmth);
 }
 void main() {
-	// Upstream: uv=(FC-.5*R)/MN. uPan is the AKSWAYJ io.xy look-around.
+	// Upstream: uv=(FC-.5*R)/MN. uPan is the SwayCommand io.xy look-around.
 	vec2 uv=(vUv-0.5)*uAspectScale+uPan*0.35;
 	vec3 col=render(uv);
 	col=hueShift(col,u_hue);
-	col=mix(col,vec3(1.0),clamp(uFlash,0.,1.)*0.35); // AKSWAYJ transition flash
-	gl_FragColor=vec4(col*uIntensity,1.);
+	col=mix(col,vec3(1.0),clamp(uFlash,0.,1.)*0.35); // SwayCommand transition flash
+	fragColor=vec4(col*uIntensity,1.);
 }`;
 }
 
@@ -680,10 +745,10 @@ export function createScene(ctx) {
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
   // --- quality ladder. Every loop bound is a literal in the generated source,
-  //     so GLSL1 sees an unrollable constant count.
+  //     so the shader compiler sees an unrollable constant count.
   //
   //     Upstream targets discrete GPUs at 1280x720 with one shared 140-step
-  //     march for all four fractals and the full DE iteration counts. AKSWAYJ
+  //     march for all four fractals and the full DE iteration counts. SwayCommand
   //     targets 1080p on integrated graphics, and the engine renders into a
   //     target of canvas * devicePixelRatio (capped 1.75), doubled during a
   //     crossfade.
@@ -818,6 +883,7 @@ export function createScene(ctx) {
   const meshes = [];
   for (let i = 0; i < sources.length; i++) {
     const m = new THREE.ShaderMaterial({
+      glslVersion: THREE.GLSL3,
       depthTest: false,
       depthWrite: false,
       uniforms: uniformSets[i],
@@ -847,6 +913,8 @@ export function createScene(ctx) {
   let panX = 0, panY = 0;
   // Preset / material change flash.
   let flash = 0;
+  // Strike envelope: pad hits convulse the active preset's structure.
+  let strikeEnv = 0;
 
   // Eased parameter values, one array per preset (upstream keys its `cur` cache
   // by parameter id alone, so u_glow carries across presets; here each preset
@@ -873,18 +941,34 @@ export function createScene(ctx) {
     update(dt, t, io) {
       // ---- event decay, before this frame's edges can re-arm it
       flash *= Math.exp(-dt / FLASH_TAU);
+      strikeEnv *= Math.exp(-dt / STRIKE_TAU);
 
-      // ---- pads: 0-4 pick the preset, 8-15 pick the material. Rising edges
-      //      only, measured against the preallocated previous-pad array.
+      // ---- pads: 0-4 pick the preset, 5-7 step to the next one (the Quantum
+      //      Lattice convention), 8-15 pick the material. Rising edges only,
+      //      measured against the preallocated previous-pad array. EVERY edge
+      //      is also a STRIKE that morphs the preset's own generative state.
       let padPreset = -1;
       let padMaterial = -1;
+      let struck = false;
       for (let i = 0; i < PADS; i++) {
         const v = io.pads[i];
         if (v > PAD_ARM && v > prevPads[i] + PAD_EDGE) {
+          struck = true;
           if (i < PRESETS.length) padPreset = i;
           else if (i >= 8) padMaterial = i - 8;
+          else padPreset = (preset + 1) % PRESETS.length; // pads 5-7 step
         }
         prevPads[i] = v;
+      }
+      if (struck) {
+        // io.strike is the engine's max pad energy this frame — on the edge
+        // frame, the hit velocity. The envelope kicks the primary parameter
+        // (param loop below); the wheel jump scrubs every T-driven term of
+        // the distance fields — for yotta, a leap down the Menger corridor.
+        const s = clamp01(io.strike);
+        strikeEnv = Math.max(strikeEnv, s);
+        wheelOffset += WHEEL_JUMP * s;
+        flash = Math.max(flash, s * 0.5);
       }
       if (padPreset >= 0 && padPreset !== preset) {
         meshes[preset].visible = false;
@@ -906,7 +990,7 @@ export function createScene(ctx) {
       const rb = clamp01(io.bands.bass);
       const rm = clamp01(io.bands.mid);
       const rh = clamp01(io.bands.high);
-      const rv = clamp01(io.level); // AKSWAYJ io.level is upstream `volume`
+      const rv = clamp01(io.level); // SwayCommand io.level is upstream `volume`
       smBass += (rb - smBass) * (rb > smBass ? tcUp : tcDn);
       smMid += (rm - smMid) * (rm > smMid ? tcUp : tcDn);
       smHigh += (rh - smHigh) * (rh > smHigh ? tcUp : tcDn);
@@ -922,15 +1006,19 @@ export function createScene(ctx) {
 
       // ---- gestures, heavily smoothed: structure drifts, it never snaps
       pressSm = approach(pressSm, io.gestures.press, TAU_PRESS, dt);
-      swaySm = approach(swaySm, io.gestures.sway, TAU_SWAY, dt);
+      swaySm = approach(swaySm, clamp01(io.gestures.sway), TAU_SWAY, dt);
       panX = approach(panX, io.xy.x - 0.5, TAU_PAN, dt);
       panY = approach(panY, io.xy.y - 0.5, TAU_PAN, dt);
 
-      // ---- editable params: the upstream easing law, with the AKSWAYJ knob
+      // ---- editable params: the upstream easing law, with the SwayCommand knob
       //      and gesture biases folded into `base` before the same clamp.
       //        target = clamp(base + (max-min)*amt*level, min, max)
       //      eased with an 80 ms time constant.
       const tcPar = 1 - Math.exp(-dt / TC_PARAM);
+      // Preset-space morph position: the swA lobe peaks mid-travel, the swB
+      // ramp owns the far end (table above), so the sweep visits one pattern
+      // family and lands on another.
+      const swayLobe = Math.sin(Math.PI * swaySm);
       const ps = PRESETS[preset];
       const params = ps.params;
       const cur = curValues[preset];
@@ -944,18 +1032,20 @@ export function createScene(ctx) {
         const span = pm.max - pm.min;
         // knobs 3..6 take direct control of parameter slots 0..3
         let base = i < 4 ? knobBase(io.knobs[3 + i], pm.min, pm.max, pm.def) : pm.def;
-        // Press biases the primary parameter, sway the secondary. BOTH are read
-        // unipolar, so both contribute exactly zero bias at rest: `press` and
-        // `sway` are documented as 0..1 with an INITIAL VALUE OF 0
+        // Press and strike bias the primary parameter; sway morphs EVERY
+        // parameter along its swA/swB vector — the preset-space morph, so the
+        // hand reshapes the distance field itself (power, Julia constant, box
+        // scale, fold angle) and never just spins the view. All three inputs
+        // are read unipolar, so all contribute exactly zero bias at rest:
+        // `press` and `sway` are documented as 0..1 with an INITIAL VALUE OF 0
         // (docs/MIDI.md, createControlState), not 0.5. Reading sway bipolar as
         // (sway-0.5)*2 — the convention the orbit-angle scenes use, where a
         // constant offset only rotates the view — would rest at -1 here and
-        // park the secondary parameter 30 % of its range BELOW the upstream
-        // default whenever no Sway hardware is connected (the Mandelbulb would
-        // ship with u_glow at 0.1 instead of 1.0), defeating knobBase()'s whole
-        // point of reproducing the upstream value at the knob default.
-        if (i === ps.primary) base += span * 0.35 * pressSm;
-        else if (i === ps.secondary) base += span * 0.30 * swaySm;
+        // park every morphed parameter well off its upstream default whenever
+        // no Sway hardware is connected, defeating knobBase()'s whole point of
+        // reproducing the upstream value at the knob default.
+        if (i === ps.primary) base += span * (0.35 * pressSm + STRIKE_KICK * strikeEnv);
+        base += span * (pm.swA * swayLobe + pm.swB * swaySm);
         let target = base + span * pm.amt * level;
         target = target < pm.min ? pm.min : target > pm.max ? pm.max : target;
         cur[i] += (target - cur[i]) * tcPar;

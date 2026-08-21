@@ -1,19 +1,25 @@
 // Nebula — a fullscreen fbm gas cloud turned psychedelic.
 // The original three-layer domain-warp foundation is intact (value-noise fbm
 // layers warping each other into gas folds on one quad), but the field is now
-// mirror-folded into a slowly spinning kaleidoscope, contoured into hard neon
-// filaments, and coloured by a full five-stop palette ramp whose hue travels
-// with density — so the gas reads iridescent and layered instead of a dim teal
-// smudge. Bass stacks concentric shells, mid drives the warp, treble strobes a
+// mirror-folded into a fixed-axis kaleidoscope (the fold breathes open and
+// shut; the mirrors never spin), contoured into hard neon filaments, and
+// coloured by a full five-stop palette ramp whose hue travels with density —
+// so the gas reads iridescent and layered instead of a dim teal smudge. Bass
+// stacks concentric shells, mid drives the warp, treble strobes a
 // scintillation layer, beats punch the domain, and each of the sixteen pads
 // fires its own expanding shockwave from a pad-indexed screen position.
+// Sway is the turbulence morph: one smoothed value re-weights the fbm octave
+// gain, rotates the flow field from gradient push to curl, and folds ridged
+// cell walls into the density, so the gas glides from laminar drift to
+// churning storm cells — the field re-forms, nothing shears or leans. A
+// strike (pad rising edge) is ignition: a burst core blooms at the centre
+// and shoves a density wave outward through the field itself.
 // One quad, one draw call. Follows docs/SCENE_CONTRACT.md; style: beams.js,
 // fullscreen-quad + palette-array plumbing after warp.js.
 
 export const meta = { id: 'nebula', name: 'Nebula', mood: 'psychedelic' };
 
 const PADS = 16;
-const TAU = Math.PI * 2;
 const FLOOR = 0.70; // minimum peak channel a palette stop is lifted to
 
 export function createScene(ctx) {
@@ -32,7 +38,9 @@ export function createScene(ctx) {
   const PULSE_N = LOW ? 4 : (HIGH ? 8 : 6);
 
   // fbm octaves and the near layer scale with the tier; every count reaching
-  // the shader is a #define so GLSL1 sees literal, unrollable loop bounds.
+  // the shader is a #define so the GLSL3 compiler sees literal loop bounds it
+  // can unroll (dynamic bounds are legal in ES 3.00, constants still compile
+  // to the tightest code).
   // OCT_MAIN is paid twice per pixel (layers 2 and 3), so it is the single
   // most expensive knob here — med stays at 3 to hold 60 fps at 1080p on an
   // integrated GPU, and the amplitude normalisation below keeps the 0..1
@@ -58,6 +66,7 @@ export function createScene(ctx) {
 
   const geo = new THREE.PlaneGeometry(2, 2);
   const mat = new THREE.ShaderMaterial({
+    glslVersion: THREE.GLSL3,
     depthWrite: false,
     depthTest: false,
     defines,
@@ -66,7 +75,6 @@ export function createScene(ctx) {
       uAspect: { value: ctx.width / ctx.height },
       uPan: { value: new THREE.Vector2(0, 0) },   // hand parallax
       uHue: { value: 0 },     // integrated hue travel (time + level)
-      uRot: { value: 0 },     // kaleidoscope mirror spin, integrated
       uFold: { value: 0.4 },  // 0 = free gas, 1 = hard mandala
       uLevel: { value: 0 },
       uBass: { value: 0 },    // smoothed CPU-side, see update()
@@ -74,7 +82,9 @@ export function createScene(ctx) {
       uHigh: { value: 0 },
       uBeat: { value: 0 },
       uKick: { value: 0 },    // fast beat envelope, drives the domain lurch
-      uSway: { value: 0.5 },
+      uTurb: { value: 0 },    // sway -> turbulence morph, smoothed CPU-side
+      uIgnite: { value: 0 },  // strike ignition energy
+      uIgniteR: { value: 0 }, // ignition density-wave front radius
       uPress: { value: 0 },
       uBloom: { value: 0 },   // io.gestures.pulse
       uIntensity: { value: 1 },
@@ -82,19 +92,21 @@ export function createScene(ctx) {
       uPulse: { value: pulses },
     },
     vertexShader: /* glsl */ `
-      varying vec2 vUv;
+      out vec2 vUv;
       void main() {
         vUv = uv;
         gl_Position = vec4(position.xy, 0.0, 1.0); // fullscreen, no matrices
       }`,
     fragmentShader: /* glsl */ `
-      uniform float uTime, uAspect, uHue, uRot, uFold;
+      uniform float uTime, uAspect, uHue, uFold;
       uniform vec2  uPan;
       uniform float uLevel, uBass, uMid, uHigh, uBeat, uKick;
-      uniform float uSway, uPress, uBloom, uIntensity;
+      uniform float uTurb, uIgnite, uIgniteR;
+      uniform float uPress, uBloom, uIntensity;
       uniform vec3  uColors[5];
       uniform vec4  uPulse[PULSE_N];
-      varying vec2 vUv;
+      in vec2 vUv;
+      out vec4 fragColor;
 
       const float SEGMENTS = 6.0;                        // mirrored wedges
       const mat2 ROT2 = mat2(0.80, 0.60, -0.60, 0.80);   // decorrelate octaves
@@ -116,16 +128,21 @@ export function createScene(ctx) {
         return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
       }
       // both fbms divide by the accumulated amplitude, so the 0..1 range —
-      // and therefore every threshold below — is identical on every tier
+      // and therefore every threshold below — is identical on every tier.
+      // The octave gain is sway's morph target: low gain sinks the energy
+      // into the first octave (smooth laminar billows), high gain hands it
+      // to the fine octaves (broken, churning detail) — the spectrum of the
+      // gas itself glides, and the normalisation keeps exposure constant.
       float fbmW(vec2 p) {          // cheap fbm feeding the warp vector
         float v = 0.0;
         float amp = 0.5;
         float nrm = 0.0;
+        float g = mix(0.40, 0.68, uTurb); // sway re-weights the octaves
         for (int i = 0; i < OCT_WARP; i++) {
           v += amp * vnoise(p);
           nrm += amp;
           p = ROT2 * p * 2.03 + vec2(7.3, 3.1);
-          amp *= 0.5;
+          amp *= g;
         }
         return v / nrm;
       }
@@ -133,11 +150,12 @@ export function createScene(ctx) {
         float v = 0.0;
         float amp = 0.5;
         float nrm = 0.0;
+        float g = mix(0.40, 0.68, uTurb); // sway re-weights the octaves
         for (int i = 0; i < OCT_MAIN; i++) {
           v += amp * vnoise(p);
           nrm += amp;
           p = ROT2 * p * 2.03 + vec2(7.3, 3.1);
-          amp *= 0.5;
+          amp *= g;
         }
         return v / nrm;
       }
@@ -151,17 +169,18 @@ export function createScene(ctx) {
         return mix(c, uColors[0], clamp(t - 4.0, 0.0, 1.0));
       }
 
-      // mirror-fold the domain into SEGMENTS wedges. amt blends the folded
-      // coordinate against the free one, so the field breathes between loose
-      // gas and a hard mandala without the angle ever jumping.
-      vec2 kaleido(vec2 v, float rot, float amt) {
+      // mirror-fold the domain into SEGMENTS wedges about a fixed axis — the
+      // mirrors never turn. amt blends the folded coordinate against the free
+      // one, so the field breathes between loose gas and a hard mandala
+      // without the angle ever jumping.
+      vec2 kaleido(vec2 v, float amt) {
         float r = length(v);
-        // atan(0,0) is undefined in GLSL1 and returns NaN on some drivers, so
-        // the exact centre pixel gets its x nudged to 1.0 (r is 0 there, and
-        // the mix below multiplies the angle out anyway)
-        float a = atan(v.y, v.x + step(r, 1e-6)) - rot;
+        // atan(0,0) is undefined in GLSL (ES 3.00 included) and returns NaN
+        // on some drivers, so the exact centre pixel gets its x nudged to 1.0
+        // (r is 0 there, and the mix below multiplies the angle out anyway)
+        float a = atan(v.y, v.x + step(r, 1e-6));
         float seg = 6.2831853 / SEGMENTS;
-        a = abs(mod(a, seg) - seg * 0.5) + rot;
+        a = abs(mod(a, seg) - seg * 0.5);
         return mix(v, vec2(cos(a), sin(a)) * r, amt);
       }
 
@@ -187,15 +206,22 @@ export function createScene(ctx) {
         phue /= max(pshock, 1e-4);
         pshock = min(pshock, 2.5);
 
-        // --- domain: swayed, beat-lurched, then mirror-folded
+        // --- strike ignition: a burst core at the centre and a density
+        //     front travelling outward. The front is added to dens below —
+        //     real gas being shoved through the field, not an overlay ring.
+        float rc = length(uvc);
+        float igCore = uIgnite * exp(-rc * rc * 9.0);
+        float ige = (rc - uIgniteR) * 4.5;
+        float igWave = uIgnite * exp(-ige * ige);
+
+        // --- domain: beat-lurched, then mirror-folded
         vec2 p = uvc * 3.0;
-        p.x += p.y * (uSway - 0.5) * 1.8;   // sway shears the whole field
         p *= 1.0 - uKick * 0.11;            // beat punches the gas toward us
-        p = kaleido(p, uRot, uFold);
+        p = kaleido(p, uFold);
 
         // perspective-ish lens: detail crowds toward the center, which also
         // brightens it later — the cheap read on infinite depth
-        float depth = clamp(1.0 / (0.30 + length(uvc) * 1.5), 0.65, 2.40);
+        float depth = clamp(1.0 / (0.30 + rc * 1.5), 0.65, 2.40);
 
         // layer 1 (far): slowest parallax; bass widens its scale, and it is
         // the source of the warp vector rather than a visible layer
@@ -204,16 +230,24 @@ export function createScene(ctx) {
         vec2 q = vec2(fbmW(p1), fbmW(p1 + vec2(5.2, 1.3)));
 
         // warp strength: mid band owns it, the beat kick slams it, an
-        // arriving shockwave bulges the gas it passes through
-        float ws = 1.5 + uMid * 3.6 + uKick * 3.0 + pshock * 1.2;
+        // arriving shockwave bulges the gas it passes through, and sway
+        // deepens the churn on top of re-shaping it below
+        float ws = 1.5 + uMid * 3.6 + uKick * 3.0 + pshock * 1.2 + uTurb * 2.6;
         vec2 wv = q - 0.5;
-        wv.x += wv.y * (uSway - 0.5) * 2.2; // sway skews the warp itself
+        // sway rotates the flow field toward its own curl: at rest the warp
+        // pushes along the noise gradient (laminar sheets sliding past each
+        // other), at full sway it runs perpendicular to it, which rolls the
+        // gas into rotating storm cells instead of leaning the frame
+        wv = mix(wv, vec2(-wv.y, wv.x), uTurb * 0.85);
 
         // layer 2 (mid): domain-warped by layer 1. press pulls its scale down
         // toward layer 1's, condensing the stack into one dense sheet.
         vec2 p2 = p * mix(1.55, 1.05, uPress) + uPan * 0.70
                 + vec2(-uTime * 0.027, uTime * 0.019);
         float f2 = fbmM(p2 + wv * ws);
+        // ridged fold, glided in by sway: creased cell walls appear inside
+        // the billows, so churn reads as storm fronts, not just more noise
+        f2 = mix(f2, 1.0 - abs(f2 * 2.0 - 1.0), uTurb * 0.55);
 
         // layer 3 (near): warped by layer 2 and lensed by depth (med/high)
         float f3 = f2;
@@ -224,13 +258,17 @@ export function createScene(ctx) {
         #endif
 
         float dens = (f2 + f3) * 0.5;
+        // the ignition front is literal density: the wave piles gas up as it
+        // passes, and the shells/contours keyed off dens ripple with it
+        dens += igWave * 0.16;
 
         // --- contrast: the window is placed so the bulk of the fbm bell sits
         //     inside it (bright, layered gas) while its tails fall outside
         //     (true black voids). press narrows it further (condense), beat
-        //     and shockwaves drop the floor so the gas visibly blooms open.
+        //     and shockwaves drop the floor so the gas visibly blooms open;
+        //     the ignition core burns its own hole in the floor.
         float lo = 0.33 - uLevel * 0.08 - uKick * 0.13 - uPress * 0.11
-                 - pshock * 0.10;
+                 - pshock * 0.10 - igCore * 0.12;
         float hi = max(lo + 0.06, 0.78 - uPress * 0.26 - uKick * 0.06);
         float g = smoothstep(lo, hi, dens);
         g = g * g * (3.0 - 2.0 * g); // second S-curve: deepens the voids and
@@ -281,11 +319,16 @@ export function createScene(ctx) {
         col += pal(fract(phue + uHue) * 5.0) * pshock
              * (0.75 + 1.20 * g) * (1.0 + uBloom * 0.80);
 
+        // --- ignition light: the burst core goes white-hot, the travelling
+        //     front glows in the color of the gas it is compressing
+        col += mix(gasCol, vec3(1.0), 0.60) * igCore * 2.3;
+        col += gasCol * igWave * (0.55 + 0.90 * g);
+
         // center-forward gradient sells the depth. No tone rolloff and no
         // vignette here — the compositor owns limiting and vignetting.
         col *= 0.76 + depth * 0.30;
 
-        gl_FragColor = vec4(col * uIntensity, 1.0);
+        fragColor = vec4(col * uIntensity, 1.0);
       }`,
   });
   const quad = new THREE.Mesh(geo, mat);
@@ -301,9 +344,11 @@ export function createScene(ctx) {
   let midSm = 0;
   let kick = 0;     // fast beat envelope for the domain lurch
   let hue = 0;      // integrated palette travel
-  let rot = 0;      // kaleidoscope spin
   let fold = 0.4;   // smoothed mirror-fold amount
   let slot = 0;     // shockwave ring write cursor
+  let turb = 0;     // smoothed sway -> turbulence morph
+  let ignite = 0;   // strike ignition energy, exponential decay
+  let igniteR = 0;  // ignition density-wave front radius
 
   return {
     scene,
@@ -318,9 +363,9 @@ export function createScene(ctx) {
       // beat kick: instant attack, ~0.5 s tail; the visible lurch on the beat
       kick = Math.max(kick * Math.pow(0.002, dt), io.beat);
 
-      // hue travel and mirror spin, wrapped so long sets never lose precision
+      // hue travel, wrapped so long sets never lose precision (the mirror
+      // axis is fixed: nothing here spins)
       hue = (hue + dt * (0.035 + io.level * 0.30)) % 1;
-      rot = (rot + dt * (0.05 + midSm * 0.28)) % TAU;
 
       // mandala breathing: a slow autonomous LFO, opened up by loudness and
       // biased by knob 4 (0.5 = neutral; knobs 0-2 stay engine-reserved)
@@ -328,6 +373,12 @@ export function createScene(ctx) {
         0.26 + 0.30 * (0.5 + 0.5 * Math.sin(t * 0.061))
         + 0.26 * io.level + (io.knobs[4] - 0.5) * 0.5));
       fold += (foldTarget - fold) * (1 - Math.exp(-dt * 2.5));
+
+      // sway is the turbulence morph: one smoothed value re-weights the fbm
+      // octaves, rotates the flow field toward its curl and folds ridged
+      // cell walls into the density — laminar drift at rest, churning storm
+      // cells at full sway. The field re-forms; nothing shears or leans.
+      turb += (io.gestures.sway - turb) * (1 - Math.exp(-dt * 2.2));
 
       // hand pans the noise domain with parallax across the three layers
       const k = 1 - Math.exp(-dt * 4.0);
@@ -346,10 +397,12 @@ export function createScene(ctx) {
         e = pulses[o + 2] > 2.0 ? 0 : e * decay;     // retire once off-screen
         pulses[o + 3] = e;
       }
+      let struck = false;
       for (let i = 0; i < PADS; i++) {
         const v = io.pads[i];
         // engine decays io.pads exponentially, so a jump upward is a fresh hit
         if (v > prevPads[i] + 0.05 && v > 0.06) {
+          struck = true;
           const o = slot * 4;
           // 4x4 grid over the frame, in the shader's centered aspect space
           pulses[o] = (((i & 3) + 0.5) * 0.25 - 0.5) * aspect;
@@ -361,9 +414,19 @@ export function createScene(ctx) {
         prevPads[i] = v;
       }
 
+      // --- strike ignition: the burst energy decays fast while the density
+      //     front keeps travelling; a fresh strike restarts the front from
+      //     the core. io.strike carries the winning pad's energy this frame.
+      ignite *= Math.pow(0.03, dt);
+      if (ignite < 0.001) ignite = 0;
+      igniteR += dt * (0.85 + midSm * 0.5);
+      if (struck) {
+        ignite = Math.max(ignite, 0.55 + io.strike * 0.75);
+        igniteR = 0;
+      }
+
       u.uTime.value = t;
       u.uHue.value = hue;
-      u.uRot.value = rot;
       u.uFold.value = fold;
       u.uLevel.value = io.level;
       u.uBass.value = bassSm;
@@ -371,7 +434,9 @@ export function createScene(ctx) {
       u.uHigh.value = io.bands.high;
       u.uBeat.value = io.beat;
       u.uKick.value = kick;
-      u.uSway.value = io.gestures.sway;
+      u.uTurb.value = turb;
+      u.uIgnite.value = ignite;
+      u.uIgniteR.value = igniteR;
       u.uPress.value = io.gestures.press;
       u.uBloom.value = io.gestures.pulse;
       u.uIntensity.value = io.intensity;

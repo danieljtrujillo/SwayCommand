@@ -4,7 +4,7 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('akswayj', {
+contextBridge.exposeInMainWorld('swaycommand', {
   info: () => ipcRenderer.invoke('app:info'),
 
   doctor: {
@@ -17,8 +17,14 @@ contextBridge.exposeInMainWorld('akswayj', {
     },
   },
 
-  projects: {
-    list: () => ipcRenderer.invoke('projects:list'),
+  project: {
+    openDialog: () => ipcRenderer.invoke('project:openDialog'),
+    saveDialog: (name) => ipcRenderer.invoke('project:saveDialog', name),
+    read: (filePath) => ipcRenderer.invoke('project:read', filePath),
+    write: (filePath, doc) => ipcRenderer.invoke('project:write', filePath, doc),
+    recent: () => ipcRenderer.invoke('project:recent'),
+    templates: () => ipcRenderer.invoke('project:templates'),
+    readTemplate: (id) => ipcRenderer.invoke('project:readTemplate', id),
   },
 
   docs: {
@@ -29,6 +35,7 @@ contextBridge.exposeInMainWorld('akswayj', {
   files: {
     pickAudio: () => ipcRenderer.invoke('files:pickAudio'),
     readAudio: (filePath) => ipcRenderer.invoke('files:readAudio', filePath),
+    statAudio: (filePath) => ipcRenderer.invoke('files:statAudio', filePath),
   },
 
   platform: {

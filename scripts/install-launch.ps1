@@ -1,11 +1,11 @@
-# install-launch.ps1 - AKSWAYJ from-source bootstrap (Windows)
+# install-launch.ps1 - SwayCommand from-source bootstrap (Windows)
 #
 # Checks for Node.js >= 18 (installs it via winget when possible), installs
 # npm dependencies when needed, then launches the app with 'npm run start'.
 #
 # Compatible with Windows PowerShell 5.1. Does not require admin (the winget
 # Node.js installer may show a User Account Control prompt of its own).
-# Normally launched by "Install & Launch AKSWAYJ.bat" in the repo root.
+# Normally launched by "Install & Launch SwayCommand.bat" in the repo root.
 
 $ErrorActionPreference = 'Stop'
 $MinNodeMajor = 18
@@ -48,7 +48,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $repoRoot
 
 Write-Host ''
-Write-Host 'AKSWAYJ - Install & Launch' -ForegroundColor Cyan
+Write-Host 'SwayCommand - Install & Launch' -ForegroundColor Cyan
 Write-Host "Folder: $repoRoot"
 Write-Host ''
 
@@ -79,7 +79,7 @@ if ($null -ne $major -and $major -ge $MinNodeMajor) {
             Write-Ok "Node.js v$major installed and detected."
         } else {
             Write-Fail 'Node.js was installed but is not detected in this window yet.'
-            Write-Host "Close this window, then double-click 'Install & Launch AKSWAYJ.bat' again."
+            Write-Host "Close this window, then double-click 'Install & Launch SwayCommand.bat' again."
             exit 1
         }
     } else {
@@ -87,7 +87,7 @@ if ($null -ne $major -and $major -ge $MinNodeMajor) {
         Write-Host ''
         Write-Host "  1. Download the Node.js LTS installer:  $NodeDownloadUrl"
         Write-Host '  2. Run the installer (the default options are fine).'
-        Write-Host "  3. Double-click 'Install & Launch AKSWAYJ.bat' again."
+        Write-Host "  3. Double-click 'Install & Launch SwayCommand.bat' again."
         Write-Host ''
         Open-NodeDownloadPage
         exit 1
@@ -136,10 +136,10 @@ if ($needInstall) {
 }
 
 # --- Step (c): launch ---
-Write-Ok 'Starting AKSWAYJ (npm run start)...'
+Write-Ok 'Starting SwayCommand (npm run start)...'
 & npm run start
 if ($LASTEXITCODE -ne 0) {
-    Write-Fail "AKSWAYJ exited with an error (exit code $LASTEXITCODE)."
+    Write-Fail "SwayCommand exited with an error (exit code $LASTEXITCODE)."
     exit 1
 }
 exit 0

@@ -1,0 +1,253 @@
+{
+  "format": "sway",
+  "format_version": 1,
+  "app_version": "",
+  "audio_mode": "linked",
+  "created_at": null,
+  "modified_at": null,
+  "project": {
+    "meta": {
+      "id": "hyperspace",
+      "name": "Hyperspace",
+      "description": "Deep space at the throat of a wormhole. Fall toward the aperture, bank with a hand, and strike a pad to punch the jump — charge, launch, cruise, settle. Star-streaked, chrome-cold, built for the drop.",
+      "author": "",
+      "vibe": "transluminal",
+      "bpmHint": 0,
+      "pairsWith": null,
+      "template": true
+    },
+    "palette": [
+      "#ffffff",
+      "#9bf6ff",
+      "#4361ee",
+      "#7209b7",
+      "#f72585"
+    ],
+    "engine": {
+      "quality": "med",
+      "fxEnabled": false,
+      "autoVJ": {
+        "enabled": true,
+        "pool": [
+          "warp",
+          "vjshader",
+          "mandelbulb",
+          "lattice",
+          "valley",
+          "spectra",
+          "swarm"
+        ],
+        "minHold": 22,
+        "maxHold": 46,
+        "fadeTime": 3
+      },
+      "start": {
+        "scene": "warp"
+      }
+    },
+    "fx": {
+      "params": {}
+    },
+    "synth": {
+      "enabled": true,
+      "preset": "Init",
+      "patch": null
+    },
+    "media": [],
+    "sampler": {
+      "kit": {
+        "version": 1,
+        "pads": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      "knobs": {
+        "master": 0.5,
+        "cutoff": 0.5,
+        "rate": 0.5,
+        "send": 0.5
+      }
+    },
+    "timeline": {
+      "loop": {
+        "enabled": false,
+        "start": 0,
+        "end": 0
+      },
+      "locators": [],
+      "tracks": [
+        {
+          "id": "audio-1",
+          "type": "audio",
+          "name": "Audio",
+          "gain": 1,
+          "muted": false,
+          "clips": []
+        },
+        {
+          "id": "visual-1",
+          "type": "visual",
+          "name": "Scenes",
+          "clips": []
+        }
+      ]
+    },
+    "assignments": {
+      "version": 1,
+      "noteRouting": {
+        "synth": "unassigned"
+      },
+      "pads": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        {
+          "type": "scene",
+          "scene": "warp",
+          "transition": {
+            "type": "cut",
+            "duration": 0
+          }
+        },
+        {
+          "type": "scene",
+          "scene": "vjshader",
+          "transition": {
+            "type": "cut",
+            "duration": 0
+          }
+        },
+        {
+          "type": "scene",
+          "scene": "mandelbulb",
+          "transition": {
+            "type": "cut",
+            "duration": 0
+          }
+        },
+        {
+          "type": "scene",
+          "scene": "lattice",
+          "transition": {
+            "type": "cut",
+            "duration": 0
+          }
+        },
+        {
+          "type": "scene",
+          "scene": "valley",
+          "transition": {
+            "type": "cut",
+            "duration": 0
+          }
+        },
+        {
+          "type": "scene",
+          "scene": "spectra",
+          "transition": {
+            "type": "cut",
+            "duration": 0
+          }
+        },
+        {
+          "type": "scene",
+          "scene": "swarm",
+          "transition": {
+            "type": "cut",
+            "duration": 0
+          }
+        },
+        null
+      ],
+      "knobs": [
+        {
+          "target": "engine:hue",
+          "min": 0,
+          "max": 1,
+          "curve": "detent"
+        },
+        {
+          "target": "engine:fadeTime",
+          "min": 1,
+          "max": 8,
+          "curve": "linear"
+        },
+        null,
+        null,
+        null,
+        null,
+        null,
+        {
+          "target": "sampler:master",
+          "min": 0,
+          "max": 1,
+          "curve": "linear"
+        }
+      ],
+      "buttons": [
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        }
+      ],
+      "gestures": []
+    },
+    "midiOverrides": {}
+  }
+}

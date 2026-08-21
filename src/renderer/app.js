@@ -1,56 +1,114 @@
-// AKSWAYJ renderer shell — three screens:
-//   boot     the Doctor: system checks + one-click fixes
-//   projects official project picker
-//   perform  the show: engine canvas + HUD
-// Design goal: a user who double-clicked the installer reaches "playing"
-// with exactly one more click (or zero, via ?autoplay=).
+// SwayCommand cockpit — one always-live page. The stage renders in the
+// center from boot to quit; the timeline, the Sway deck, the rails, the
+// drawer, and every overlay work on top of it without ever stopping the
+// render loop. Projects are .sway files; the legacy screens are gone.
 
 import { createEngine } from './engine/engine.js';
 import { createAudioEngine } from './engine/audio.js';
 import { createMidi } from './midi/midi.js';
-import { renderMarkdown, slugify } from './markdown.js';
+import { renderMarkdown } from './markdown.js';
 import { createSampler } from './audio/sampler.js';
 import { createSynth, PRESET_NAMES, TABLE_NAMES, MOD_SOURCES, MOD_DESTS } from './audio/synth.js';
-import { RANGES as fxRanges } from './engine/fxrack.js';
+import { RANGES as fxRanges, DECKS as fxDecks } from './engine/fxrack.js';
+import { createTransport } from './audio/transport.js';
+import { createProjectStore } from './project/projectstore.js';
+import { createRouter } from './control/router.js';
+import { initFrames } from './ui/frame.js';
+import { openPopover, closePopover, popoverOpen, wirePopover } from './ui/popover.js';
+import { createWave } from './ui/wave.js';
+import { createSurface } from './ui/surface.js';
+import { createAssign } from './ui/assign.js';
+import { createDrawer } from './ui/drawer.js';
+import { createTimeline } from './ui/timeline.js';
+import { createLayout } from './ui/layout.js';
 
 const $ = (sel) => document.querySelector(sel);
 
 const state = {
-  screen: 'boot',
   docs: [],
   currentDoc: null,
-  docsReturnScreen: 'boot',
-  studioReturnScreen: 'boot',
   sampler: null,
   synth: null,
   synthEnabled: true,
-  projects: [],
-  project: null,
   checks: [],
   midi: null,
   audio: null,
   engine: null,
-  helpVisible: false,
+  transport: null,
+  router: null,
+  projectStore: null,
   monitorVisible: false,
+  entered: false, // door opened
 };
 
-// ---------------------------------------------------------------- screens
+const ui = {
+  surface: null,
+  assign: null,
+  drawer: null,
+  timeline: null,
+  wave: null,
+  layout: null,
+};
 
-function show(screen) {
-  state.screen = screen;
-  for (const s of ['boot', 'projects', 'studio', 'docs', 'perform']) {
-    $(`#screen-${s}`).classList.toggle('active', s === screen);
-  }
-  if (screen === 'perform') state.engine.resize();
+const studio = {
+  sources: [],
+  selectedSample: null,
+  systemAudio: { supported: false, detail: '' },
+};
+
+// ---------------------------------------------------------------- overlays
+
+const MODALS = ['docs', 'help', 'system'];
+
+function openModal(id) {
+  $(`#modal-${id}`).hidden = false;
 }
 
-// ---------------------------------------------------------------- boot / doctor
+function closeModal(id) {
+  $(`#modal-${id}`).hidden = true;
+}
+
+function modalOpen(id) {
+  return !$(`#modal-${id}`).hidden;
+}
+
+function topModal() {
+  // system sits above the others in z, so it pops first
+  for (const id of ['system', 'help', 'docs']) {
+    if (modalOpen(id)) return id;
+  }
+  return null;
+}
+
+// Esc peels one layer: popover, then drawer, then the topmost modal, then
+// timeline selection, then the deck selection. "Back" does not exist.
+function escapePop() {
+  if (popoverOpen()) return closePopover();
+  if (ui.drawer.isOpen()) return ui.drawer.close();
+  const modal = topModal();
+  if (modal) {
+    if (modal === 'system' && !state.entered) return; // first run gates on ENTER
+    return closeModal(modal);
+  }
+  if (ui.timeline.hasSelection()) return ui.timeline.clearSelection();
+  if (ui.assign.current()) return selectControl(null);
+}
+
+let noticeTimer = null;
+function notice(html, ms = 5000) {
+  const el = $('#notice');
+  el.innerHTML = html;
+  el.classList.add('visible');
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => el.classList.remove('visible'), ms);
+}
+
+// ---------------------------------------------------------------- doctor
 
 const STATUS_ICON = { ok: '●', warn: '▲', fail: '✕', info: '○' };
 
 function renderChecks() {
-  const list = $('#check-list');
-  list.innerHTML = state.checks
+  $('#check-list').innerHTML = state.checks
     .map(
       (c) => `
     <li class="check ${c.status}">
@@ -68,8 +126,6 @@ function renderChecks() {
 
 async function rendererChecks() {
   const checks = [];
-
-  // WebGL2
   try {
     const probe = document.createElement('canvas');
     const gl = probe.getContext('webgl2');
@@ -83,7 +139,6 @@ async function rendererChecks() {
     checks.push({ id: 'gpu', label: 'Graphics (WebGL2)', status: 'fail', detail: e.message });
   }
 
-  // MIDI
   if (state.midi.available) {
     const c = state.midi.control;
     checks.push({
@@ -93,14 +148,13 @@ async function rendererChecks() {
       detail: c.isSway
         ? `Sway online: “${c.portName}” — factory map armed.`
         : c.connected
-          ? `No Sway yet, but listening on: ${c.portName}. Incoming CC and note messages are matched against the Sway factory map; bindings can be overridden in settings.json.`
+          ? `No Sway yet, but listening on: ${c.portName}. Incoming CC and note messages are matched against the Sway factory map.`
           : 'No MIDI devices right now. Hot-plug any time — mouse & keyboard are fully mapped meanwhile.',
     });
   } else {
     checks.push({ id: 'midi', label: 'MIDI', status: 'warn', detail: 'WebMIDI unavailable — mouse & keyboard control still work.' });
   }
 
-  // Audio inputs
   try {
     const inputs = await state.audio.listInputs();
     checks.push({
@@ -120,7 +174,7 @@ async function rendererChecks() {
 
 async function runDoctor() {
   $('#boot-status').textContent = 'Checking your system…';
-  const [main, local] = await Promise.all([window.akswayj.doctor.run(), rendererChecks()]);
+  const [main, local] = await Promise.all([window.swaycommand.doctor.run(), rendererChecks()]);
   state.checks = [...main, ...local];
   renderChecks();
 
@@ -131,21 +185,23 @@ async function runDoctor() {
       : 'ok';
   $('#boot-status').textContent =
     worst === 'ok'
-      ? 'All clear. Pick a project and play.'
+      ? 'All clear.'
       : worst === 'warn'
         ? 'Playable now — a couple of notes above.'
         : 'Something needs attention above — you can still continue.';
   const enter = $('#btn-enter');
   enter.disabled = false;
   enter.focus();
-  if (worst === 'ok' && !state._autoAdvanced) {
+  if (worst === 'ok' && !state._autoAdvanced && !state.entered) {
     state._autoAdvanced = true;
-    setTimeout(() => state.screen === 'boot' && show('projects'), 1400);
+    setTimeout(() => {
+      if (!state.entered && modalOpen('system')) enterCockpit();
+    }, 1400);
   }
 }
 
 function wireDoctor() {
-  window.akswayj.doctor.onFixProgress(({ fixId, phase, pct }) => {
+  window.swaycommand.doctor.onFixProgress(({ fixId, phase, pct }) => {
     const check = state.checks.find((c) => c.fix && c.fix.id === fixId);
     if (!check) return;
     const el = $(`#progress-${check.id}`);
@@ -157,7 +213,7 @@ function wireDoctor() {
     if (!btn) return;
     btn.disabled = true;
     btn.textContent = 'Working…';
-    const result = await window.akswayj.doctor.fix(btn.dataset.fix);
+    const result = await window.swaycommand.doctor.fix(btn.dataset.fix);
     const check = state.checks.find((c) => c.id === btn.dataset.check);
     if (check) {
       check.detail = result.detail;
@@ -165,143 +221,31 @@ function wireDoctor() {
       if (result.ok) check.fix = null;
     }
     renderChecks();
-    if (result.ok) runDoctor(); // re-verify the whole picture
+    if (result.ok) runDoctor();
   });
 
-  $('#btn-enter').addEventListener('click', () => show('projects'));
+  $('#btn-enter').addEventListener('click', enterCockpit);
   $('#btn-recheck').addEventListener('click', runDoctor);
-}
-
-// ---------------------------------------------------------------- projects
-
-function renderProjects() {
-  $('#project-grid').innerHTML = state.projects
-    .map(
-      (p) => `
-    <article class="card" data-project="${p.id}" tabindex="0">
-      <div class="card-swatches">${p.palette.map(() => '<i></i>').join('')}</div>
-      <h3>${p.name}</h3>
-      <div class="card-meta">
-        <span class="pill">${p.vibe}</span>
-        ${p.bpmHint ? `<span class="pill">${p.bpmHint} BPM</span>` : ''}
-        ${p.pairsWith ? `<span class="pill pill-pair" title="${p.pairsWith}">pairs with Audima demo</span>` : ''}
-      </div>
-      <p>${p.description}</p>
-      <div class="card-go">PLAY&nbsp;→</div>
-    </article>`
-    )
-    .join('');
-
-  // Swatch colors via CSSOM — the page CSP (rightly) blocks markup-inline styles.
-  for (const card of document.querySelectorAll('#project-grid .card')) {
-    const p = state.projects.find((x) => x.id === card.dataset.project);
-    card.querySelectorAll('.card-swatches i').forEach((el, i) => {
-      el.style.background = p.palette[i % p.palette.length];
-    });
-  }
-}
-
-function wireProjects() {
-  const grid = $('#project-grid');
-  const open = (el) => {
-    const p = state.projects.find((x) => x.id === el.dataset.project);
-    if (p) startPerformance(p);
-  };
-  grid.addEventListener('click', (e) => {
-    const card = e.target.closest('[data-project]');
-    if (card) open(card);
-  });
-  grid.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      const card = e.target.closest('[data-project]');
-      if (card) open(card);
-    }
+  $('#btn-system').addEventListener('click', () => {
+    closeModal('help');
+    openModal('system');
+    runDoctor();
   });
 }
 
-// ---------------------------------------------------------------- studio
-// Audio source selection and the pad kit builder. Both live here because they
-// are two halves of one job: deciding what the application listens to, and
-// what it plays back.
-
-const studio = {
-  sources: [],
-  selectedSample: null,
-  selectedPad: 0,
-  systemAudio: { supported: false, detail: '' },
-};
-
-async function openStudio() {
-  if (state.screen !== 'studio') state.studioReturnScreen = state.screen;
-  show('studio');
-  if (!studio.systemAudio.detail) {
-    studio.systemAudio = await window.akswayj.platform.systemAudio();
-    $('#system-audio-note').textContent = studio.systemAudio.detail;
-  }
-  await refreshSources();
-  renderSamples();
-  renderPads();
-  renderSynthPanel();
-  renderFxPanel();
+// The blast door opens once the system checks are dismissed; the stage was
+// already rendering behind it.
+function enterCockpit() {
+  closeModal('system');
+  if (state.entered) return;
+  state.entered = true;
+  const door = $('#door');
+  door.classList.add('open');
+  setTimeout(() => door.classList.add('gone'), 1000);
+  notice('<b>H</b> — controls');
 }
 
-function returnFromStudio() {
-  const target = state.studioReturnScreen || 'boot';
-  show(target);
-  if (target === 'perform') state.engine.start();
-}
-
-async function refreshSources() {
-  let inputs = [];
-  try {
-    inputs = await state.audio.listInputs();
-  } catch {
-    inputs = [];
-  }
-  studio.sources = inputs;
-
-  const rows = [];
-  rows.push(
-    `<li><button data-src="system" ${studio.systemAudio.supported ? '' : 'disabled'}>System audio (loopback)<span>${
-      studio.systemAudio.supported ? 'Everything playing on this computer' : 'Windows only on this platform'
-    }</span></button></li>`
-  );
-  for (const d of inputs) {
-    rows.push(`<li><button data-src="input" data-id="${d.id}">${d.label}<span>Input device</span></button></li>`);
-  }
-  rows.push('<li><button data-src="internal">Internal groove<span>Silent 120 BPM analysis signal</span></button></li>');
-  $('#source-list').innerHTML = rows.join('');
-  markCurrentSource();
-}
-
-function markCurrentSource() {
-  const a = state.audio.state;
-  for (const btn of document.querySelectorAll('#source-list button')) {
-    const kind = btn.dataset.src;
-    const isCurrent =
-      (kind === 'system' && a.source === 'system') ||
-      (kind === 'internal' && a.source === 'internal') ||
-      (kind === 'input' && a.source === 'input' && a.deviceId === btn.dataset.id);
-    btn.classList.toggle('current', isCurrent);
-  }
-  $('#studio-source').textContent = a.deviceLabel || a.source || '—';
-}
-
-async function selectSource(kind, id) {
-  try {
-    if (kind === 'system') await state.audio.useSystemAudio();
-    else if (kind === 'input') await state.audio.useInput(id);
-    else {
-      state.audio.releaseInput();
-      state.audio.startInternal();
-    }
-  } catch (err) {
-    $('#system-audio-note').textContent = `Could not switch source: ${err.message}`;
-  }
-  markCurrentSource();
-}
-
-// --- kit builder -------------------------------------------------------------
+// ---------------------------------------------------------------- samples / kit
 
 function renderSamples() {
   const list = state.sampler ? state.sampler.listSamples() : [];
@@ -309,52 +253,17 @@ function renderSamples() {
     ? list
         .map(
           (s) =>
-            `<button data-sample="${s.id}"${s.id === studio.selectedSample ? ' class="current"' : ''}>${s.name}<em>${s.duration.toFixed(2)} s · ${s.channels}ch</em></button>`
+            `<li><button draggable="true" data-sample="${s.id.replace(/"/g, '&quot;')}"${s.id === studio.selectedSample ? ' class="current"' : ''}>${s.name}<em>${s.duration.toFixed(2)} s · ${s.channels}ch</em></button></li>`
         )
         .join('')
-    : '<li style="color:var(--info);font-size:12px">No samples loaded.</li>';
-}
-
-function renderPads() {
-  const kit = state.sampler ? state.sampler.getKit() : { pads: [] };
-  const samples = state.sampler ? state.sampler.listSamples() : [];
-  const nameOf = (id) => {
-    const s = samples.find((x) => x.id === id);
-    return s ? s.name : '';
-  };
-  const cells = [];
-  for (let i = 0; i < 16; i++) {
-    const pad = kit.pads && kit.pads[i];
-    const filled = pad && pad.id;
-    cells.push(
-      `<div class="pad${filled ? ' filled' : ''}${i === studio.selectedPad ? ' selected' : ''}" data-pad="${i}" id="pad-${i}">
-        <b>${i + 1}</b><span>${filled ? nameOf(pad.id) : ''}</span>
-      </div>`
-    );
-  }
-  $('#pad-grid').innerHTML = cells.join('');
-  $('#pad-selected').textContent = `· pad ${studio.selectedPad + 1}`;
-
-  const pad = kit.pads && kit.pads[studio.selectedPad];
-  $('#pad-mode').value = (pad && pad.mode) || 'oneshot';
-  $('#pad-gain').value = pad && typeof pad.gain === 'number' ? pad.gain : 1;
-  $('#pad-choke').value = pad && pad.chokeGroup !== null && pad.chokeGroup !== undefined ? pad.chokeGroup : '';
-}
-
-function padOptions() {
-  const choke = $('#pad-choke').value;
-  return {
-    mode: $('#pad-mode').value,
-    gain: Number($('#pad-gain').value),
-    chokeGroup: choke === '' ? null : Number(choke),
-  };
+    : '<li class="none">No samples loaded.</li>';
 }
 
 async function addSamples() {
   const note = $('#kit-note');
   let picked;
   try {
-    picked = await window.akswayj.files.pickAudio();
+    picked = await window.swaycommand.files.pickAudio();
   } catch (err) {
     note.textContent = `File dialog failed: ${err.message}`;
     return;
@@ -366,11 +275,7 @@ async function addSamples() {
   for (const file of picked) {
     note.textContent = `Loading ${file.name}…`;
     try {
-      const bytes = await window.akswayj.files.readAudio(file.path);
-      // The IPC layer delivers a Uint8Array view; decodeAudioData needs its
-      // own ArrayBuffer, and the view may not span the whole buffer.
-      const copy = bytes.slice().buffer;
-      await state.sampler.loadSample(file.path, copy, { name: file.name });
+      await state.projectStore.addMedia(file);
       loaded++;
     } catch (err) {
       failures.push(`${file.name}: ${err.message}`);
@@ -380,49 +285,51 @@ async function addSamples() {
     ? `Loaded ${loaded}. Failed: ${failures.join('; ')}`
     : `Loaded ${loaded} sample${loaded === 1 ? '' : 's'}.`;
   renderSamples();
-  renderPads();
 }
 
-function flashPad(index) {
-  const el = document.getElementById(`pad-${index}`);
-  if (!el) return;
-  el.classList.add('hit');
-  setTimeout(() => el.classList.remove('hit'), 110);
-}
-
-async function saveKit() {
-  const kit = state.sampler.getKit();
-  const samples = state.sampler.listSamples().map((s) => ({ id: s.id, name: s.name }));
-  await window.akswayj.settings.set({ kit: { ...kit, samples } });
-  $('#kit-note').textContent = 'Kit saved. It reloads automatically at startup.';
-}
-
-// Re-reads every sample file the saved kit references, then restores the pads.
+// Re-reads every sample file a legacy saved kit references, then restores the
+// pads and mirrors them into pad assignments.
 async function restoreKit(saved) {
   if (!saved || !saved.samples || !saved.samples.length) return;
   const missing = [];
   for (const s of saved.samples) {
     try {
-      const bytes = await window.akswayj.files.readAudio(s.id);
+      const bytes = await window.swaycommand.files.readAudio(s.id);
       await state.sampler.loadSample(s.id, bytes.slice().buffer, { name: s.name });
     } catch {
       missing.push(s.name);
     }
   }
   state.sampler.setKit(saved);
-  if (missing.length) {
-    console.warn('[kit] missing sample files:', missing.join(', '));
-  }
+  const pads = state.router.getAssignments().pads;
+  (saved.pads || []).forEach((pad, i) => {
+    if (pad && pad.id && !pads[i]) pads[i] = { type: 'sample', pad: i };
+  });
+  refreshDeck();
+  if (missing.length) console.warn('[kit] missing sample files:', missing.join(', '));
 }
 
-// --- synth -------------------------------------------------------------------
-// Controls are generated from the synth's own control manifest, which is in
-// theDAW's VisualControl shape, so the same manifest can drive theDAW's mapper.
+function wireKit() {
+  $('#btn-add-samples').addEventListener('click', addSamples);
+  $('#sample-list').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-sample]');
+    if (!btn) return;
+    studio.selectedSample = btn.dataset.sample;
+    renderSamples();
+    notice('Click a pad on the deck to place the sample');
+  });
+  $('#sample-list').addEventListener('dragstart', (e) => {
+    const btn = e.target.closest('[data-sample]');
+    if (!btn) return;
+    e.dataTransfer.setData('application/x-sway-media', btn.dataset.sample);
+    e.dataTransfer.effectAllowed = 'copy';
+  });
+}
 
-// Only the groups worth surfacing live; the manifest carries more.
+// ---------------------------------------------------------------- synth panel
+
 const SYNTH_GROUPS = ['OSC1', 'OSC2', 'FILTER1', 'ENV1', 'LFO', 'FX', 'GLOBAL'];
 
-// Two octaves from C3, in the standard tracker layout.
 const KEY_ROW = [
   ['a', 48], ['w', 49], ['s', 50], ['e', 51], ['d', 52], ['f', 53], ['t', 54],
   ['g', 55], ['y', 56], ['h', 57], ['u', 58], ['j', 59],
@@ -441,7 +348,6 @@ function renderSynthPanel() {
   const html = [];
   for (const group of SYNTH_GROUPS) {
     const rows = [];
-    // Wavetable choice is a list, not a range, so it is added by hand.
     if (group === 'OSC1' || group === 'OSC2') {
       const osc = group.toLowerCase();
       const cur = synth.getParam(`${osc}.table`);
@@ -468,7 +374,6 @@ function renderSynthPanel() {
   }
   $('#synth-decks').innerHTML = html.join('');
 
-  // on-screen keyboard
   $('#synth-keys').innerHTML = KEY_ROW.map(([key, note]) => {
     const sharp = [1, 3, 6, 8, 10].includes(note % 12);
     return `<button class="skey${sharp ? ' sharp' : ''}" data-note="${note}"><b>${key}</b></button>`;
@@ -496,11 +401,13 @@ function renderModMatrix() {
 function wireSynth() {
   $('#synth-enable').addEventListener('change', (e) => {
     state.synthEnabled = e.target.checked;
-    if (!state.synthEnabled) state.synth.allNotesOff();
+    state.router.synthEnabled = e.target.checked;
+    state.projectStore.markDirty();
   });
 
   $('#synth-preset').addEventListener('change', (e) => {
     state.synth.loadPreset(e.target.value);
+    state.projectStore.markDirty();
     renderSynthPanel();
   });
 
@@ -511,6 +418,7 @@ function wireSynth() {
     const value =
       el.type === 'checkbox' ? el.checked : el.tagName === 'SELECT' ? el.value : Number(el.value);
     state.synth.setParam(key, value);
+    state.projectStore.markDirty();
     const readout = document.querySelector(`[data-synthval="${key}"]`);
     if (readout) readout.textContent = Number(value).toFixed(3);
   });
@@ -523,6 +431,7 @@ function wireSynth() {
     if (!rows[i]) return;
     rows[i][el.dataset.field] = el.dataset.field === 'amount' ? Number(el.value) : el.value;
     state.synth.setMatrix(rows);
+    state.projectStore.markDirty();
     renderModMatrix();
   });
   $('#mod-rows').addEventListener('click', (e) => {
@@ -531,16 +440,17 @@ function wireSynth() {
     const rows = state.synth.getMatrix();
     rows.splice(Number(del.dataset.modDel), 1);
     state.synth.setMatrix(rows);
+    state.projectStore.markDirty();
     renderModMatrix();
   });
   $('#btn-mod-add').addEventListener('click', () => {
     const rows = state.synth.getMatrix();
     rows.push({ source: 'lfo1', dest: 'filter1.cutoff', amount: 0.3 });
     state.synth.setMatrix(rows);
+    state.projectStore.markDirty();
     renderModMatrix();
   });
 
-  // on-screen keyboard: pointer plays, release stops
   const keys = $('#synth-keys');
   keys.addEventListener('pointerdown', (e) => {
     const b = e.target.closest('[data-note]');
@@ -559,10 +469,10 @@ function wireSynth() {
   window.addEventListener('blur', releaseAll);
 }
 
-// The computer keyboard plays the synth only while the Studio is open, so it
-// never fights the perform-screen shortcuts.
-function studioKeyDown(e) {
-  if (state.screen !== 'studio' || e.repeat) return false;
+// The computer keyboard plays the synth only while the synth drawer is open,
+// so it never fights the cockpit shortcuts.
+function synthKeyDown(e) {
+  if (!ui.drawer.isOpen('synth') || e.repeat) return false;
   if (/^(input|select|textarea)$/i.test(e.target.tagName)) return false;
   const entry = KEY_ROW.find(([k]) => k === e.key.toLowerCase());
   if (!entry) return false;
@@ -574,7 +484,7 @@ function studioKeyDown(e) {
   return true;
 }
 
-function studioKeyUp(e) {
+function synthKeyUp(e) {
   const entry = KEY_ROW.find(([k]) => k === e.key.toLowerCase());
   if (!entry || !heldKeys.has(entry[1])) return;
   heldKeys.delete(entry[1]);
@@ -583,23 +493,13 @@ function studioKeyUp(e) {
   if (btn) btn.classList.remove('down');
 }
 
-// --- effects rack ------------------------------------------------------------
-// Controls are generated from the rack's own RANGES table, so the panel cannot
-// drift out of step with what setParam actually accepts.
-
-const FX_DECKS = [
-  { name: 'Geometrics', keys: ['mirrorX', 'mirrorY', 'kaleidoscope', 'softEdges', 'tiling', 'radialSpokes', 'feedback', 'zoomPunch'] },
-  { name: 'Corruption', keys: ['glitch', 'rgbGhost', 'rgbSplit', 'chromaAb', 'chromaAbRadial', 'waveWarp', 'pixelate', 'backskip'] },
-  { name: 'Chromatics', keys: ['hue', 'saturation', 'contrast', 'brightness', 'invert', 'edgeDetect', 'sepia', 'grayscale', 'blur', 'scanlines', 'crt', 'vignette'] },
-  { name: 'Timecode', keys: ['echoTrails', 'strobe', 'posterizeTime', 'slitScan', 'timeDisplace'] },
-  { name: 'ASCII', keys: ['ascii', 'asciiCols', 'asciiMono', 'asciiPalette'] },
-];
+// ---------------------------------------------------------------- effects rack
 
 function renderFxPanel() {
   const rack = state.engine.fx;
   const ranges = fxRanges;
   const html = [];
-  for (const deck of FX_DECKS) {
+  for (const deck of fxDecks) {
     const rows = [];
     for (const key of deck.keys) {
       const spec = ranges[key];
@@ -628,9 +528,11 @@ function renderFxPanel() {
 function wireFx() {
   $('#fx-enable').addEventListener('change', (e) => {
     state.engine.fxEnabled = e.target.checked;
+    state.projectStore.markDirty();
   });
   $('#btn-fx-reset').addEventListener('click', () => {
     state.engine.resetFx();
+    state.projectStore.markDirty();
     renderFxPanel();
   });
   $('#fx-decks').addEventListener('input', (e) => {
@@ -639,77 +541,22 @@ function wireFx() {
     const key = el.dataset.fx;
     const value = el.type === 'checkbox' ? el.checked : el.type === 'color' ? el.value : Number(el.value);
     state.engine.setFxParam(key, value);
+    state.projectStore.markDirty();
     const readout = document.querySelector(`[data-fxval="${key}"]`);
     if (readout) readout.textContent = Number(value).toFixed(2);
   });
 }
 
-function wireStudio() {
-  for (const btn of document.querySelectorAll('[data-open-studio]')) {
-    btn.addEventListener('click', () => openStudio());
-  }
-  $('#btn-studio-close').addEventListener('click', returnFromStudio);
-
-  $('#source-list').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-src]');
-    if (btn && !btn.disabled) selectSource(btn.dataset.src, btn.dataset.id);
-  });
-  $('#btn-refresh-sources').addEventListener('click', refreshSources);
-
-  $('#btn-add-samples').addEventListener('click', addSamples);
-  $('#btn-save-kit').addEventListener('click', saveKit);
-  $('#btn-clear-pad').addEventListener('click', () => {
-    state.sampler.clearPad(studio.selectedPad);
-    renderPads();
-  });
-
-  $('#sample-list').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-sample]');
-    if (!btn) return;
-    studio.selectedSample = btn.dataset.sample;
-    renderSamples();
-  });
-
-  // Clicking a pad assigns the selected sample, or auditions an assigned pad.
-  $('#pad-grid').addEventListener('click', (e) => {
-    const cell = e.target.closest('[data-pad]');
-    if (!cell) return;
-    const index = Number(cell.dataset.pad);
-    studio.selectedPad = index;
-    const kit = state.sampler.getKit();
-    const assigned = kit.pads && kit.pads[index] && kit.pads[index].id;
-    if (studio.selectedSample && studio.selectedSample !== assigned) {
-      state.sampler.assignPad(index, studio.selectedSample, padOptions());
-    } else if (assigned) {
-      state.sampler.trigger(index, 0.9);
-      flashPad(index);
-    }
-    renderPads();
-  });
-
-  for (const id of ['#pad-mode', '#pad-gain', '#pad-choke']) {
-    $(id).addEventListener('change', () => {
-      const kit = state.sampler.getKit();
-      const pad = kit.pads && kit.pads[studio.selectedPad];
-      if (pad && pad.id) state.sampler.assignPad(studio.selectedPad, pad.id, padOptions());
-    });
-  }
-}
-
 // ---------------------------------------------------------------- documentation
 
-// The viewer reads the Markdown that ships with the application, so the
-// documentation is available offline and always matches the installed build.
-
 async function openDocs(docId) {
-  if (state.screen !== 'docs') state.docsReturnScreen = state.screen;
   if (!state.docs.length) {
-    state.docs = await window.akswayj.docs.list();
+    state.docs = await window.swaycommand.docs.list();
     $('#docs-list').innerHTML = state.docs
       .map((d) => `<li><button data-doc="${d.id}">${d.title}</button></li>`)
       .join('');
   }
-  show('docs');
+  openModal('docs');
   await loadDoc(docId || state.currentDoc || (state.docs[0] && state.docs[0].id));
 }
 
@@ -718,7 +565,7 @@ async function loadDoc(docId, anchor) {
   const body = $('#docs-body');
   let source;
   try {
-    source = await window.akswayj.docs.read(docId);
+    source = await window.swaycommand.docs.read(docId);
   } catch (err) {
     body.innerHTML = `<h1>Unavailable</h1><p>${docId} could not be read: ${err.message}</p>`;
     return;
@@ -759,8 +606,6 @@ function showExternalNote(text) {
   externalNoteTimer = setTimeout(() => el.remove(), 6000);
 }
 
-// Documentation links fall into three classes: another bundled document,
-// an anchor within the current one, or an external URL for the system browser.
 async function followDocLink(href) {
   if (href.startsWith('#')) {
     scrollToAnchor(href.slice(1));
@@ -768,7 +613,7 @@ async function followDocLink(href) {
   }
   if (/^https?:/i.test(href)) {
     try {
-      await window.akswayj.openExternal(href);
+      await window.swaycommand.openExternal(href);
     } catch {
       showExternalNote(`Link not on the allowlist — open manually: ${href}`);
     }
@@ -778,7 +623,6 @@ async function followDocLink(href) {
   const [rel, anchor] = href.split('#');
   const from = state.currentDoc || 'README.md';
   const baseDir = from.includes('/') ? from.slice(0, from.lastIndexOf('/')) : '';
-  // Resolve the relative target against the current document's directory.
   const segments = (baseDir ? baseDir.split('/') : []).concat(rel.split('/'));
   const resolved = [];
   for (const seg of segments) {
@@ -796,19 +640,9 @@ async function followDocLink(href) {
   }
 }
 
-// Opening the docs from a performance stops the render loop, so returning
-// restarts it rather than leaving a frozen stage.
-function returnFromDocs() {
-  const target = state.docsReturnScreen;
-  show(target);
-  if (target === 'perform') state.engine.start();
-}
-
 function wireDocs() {
-  for (const btn of document.querySelectorAll('[data-open-docs]')) {
-    btn.addEventListener('click', () => openDocs());
-  }
-  $('#btn-docs-close').addEventListener('click', returnFromDocs);
+  $('#btn-docs').addEventListener('click', () => (modalOpen('docs') ? closeModal('docs') : openDocs()));
+  $('#btn-docs-close').addEventListener('click', () => closeModal('docs'));
 
   $('#docs-list').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-doc]');
@@ -826,61 +660,308 @@ function wireDocs() {
   });
 }
 
-// ---------------------------------------------------------------- perform
+// ---------------------------------------------------------------- topbar
 
-function startPerformance(project) {
-  state.project = project;
-  state.engine.loadProject(project);
-  $('#hud-project').textContent = project.name;
-  show('perform');
-  state.engine.start();
-  bumpHelpBar();
+function fmtClock(t) {
+  const m = Math.floor(t / 60);
+  const s = t - m * 60;
+  return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s.toFixed(1)}`;
 }
 
-function updateHud() {
-  if (state.screen === 'studio') {
-    // The analyser is shared, so the meter reflects whatever source is live.
-    state.audio.update(1 / 60);
-    $('#studio-meter').style.width = `${Math.round(state.audio.state.level * 100)}%`;
-    const v = state.synth.activeVoices;
-    const voicePill = $('#synth-voices');
-    voicePill.textContent = `${v} voice${v === 1 ? '' : 's'}`;
-    voicePill.classList.toggle('pill-on', v > 0);
-  }
-  if (state.screen === 'perform') {
-    const eng = state.engine;
-    $('#hud-scene').textContent = eng.currentScene ? eng.currentScene.name : '';
-    $('#hud-auto').textContent = eng.autoVJ.enabled ? 'AUTO-VJ' : 'MANUAL';
-    $('#hud-auto').classList.toggle('pill-on', eng.autoVJ.enabled);
-    $('#hud-fps').textContent = `${eng.stats.fps} fps`;
+function updateProjectButton() {
+  const btn = $('#project-btn');
+  btn.textContent = state.projectStore.state.name;
+  btn.classList.toggle('dirty', state.projectStore.state.dirty);
+}
 
-    const c = state.midi.control;
-    const midiPill = $('#hud-midi');
-    midiPill.textContent = c.isSway ? 'SWAY' : c.connected ? 'MIDI' : 'MOUSE/KEYS';
-    midiPill.classList.toggle('pill-on', c.isSway || c.connected);
-
-    const a = state.audio.state;
-    $('#hud-audio').textContent = a.source === 'input' ? 'LIVE AUDIO' : a.source === 'internal' ? 'INT. GROOVE' : 'NO AUDIO';
-
-    if (state.monitorVisible) {
-      $('#midi-monitor').textContent = state.midi.monitor.join('\n') || '(waiting for MIDI…)';
+async function openProjectMenu() {
+  const store = state.projectStore;
+  const [recent, templates] = await Promise.all([
+    window.swaycommand.project.recent().catch(() => []),
+    window.swaycommand.project.templates().catch(() => []),
+  ]);
+  const rows = [
+    '<button class="pop-item" data-choice="new">New</button>',
+    '<button class="pop-item" data-choice="open">Open…</button>',
+    '<button class="pop-item" data-choice="save">Save</button>',
+    '<button class="pop-item" data-choice="saveas">Save as…</button>',
+  ];
+  const recents = recent.filter((r) => r.path !== store.state.path);
+  if (recents.length) {
+    rows.push('<div class="pop-label">RECENT</div>');
+    for (const r of recents.slice(0, 6)) {
+      rows.push(`<button class="pop-item" data-choice="recent" data-path="${r.path.replace(/"/g, '&quot;')}">${r.name}<span>${r.path}</span></button>`);
     }
   }
-  requestAnimationFrame(updateHud);
+  if (templates.length) {
+    rows.push('<div class="pop-label">TEMPLATES</div>');
+    for (const t of templates) {
+      rows.push(`<button class="pop-item" data-choice="template" data-id="${t.id}">${t.name}<span>${t.vibe}</span></button>`);
+    }
+  }
+  openPopover($('#project-btn'), rows.join(''), async (choice, data) => {
+    const guard = () => !store.state.dirty || window.confirm('Discard unsaved changes?');
+    try {
+      if (choice === 'new' && guard()) await store.openTemplate('first-flight');
+      else if (choice === 'open' && guard()) await store.openFromDialog();
+      else if (choice === 'save') await store.save();
+      else if (choice === 'saveas') await store.saveAs();
+      else if (choice === 'recent' && guard()) await store.openPath(data.path);
+      else if (choice === 'template' && guard()) await store.openTemplate(data.id);
+    } catch (err) {
+      notice(`Project: ${err.message}`, 7000);
+    }
+    postProjectLoad();
+  });
 }
 
-let helpBarTimer = null;
-function bumpHelpBar() {
-  const bar = $('#help-bar');
-  bar.classList.add('visible');
-  clearTimeout(helpBarTimer);
-  helpBarTimer = setTimeout(() => bar.classList.remove('visible'), 6000);
+function wireTopbar() {
+  $('#project-btn').addEventListener('click', openProjectMenu);
+  $('#t-play').addEventListener('click', () => {
+    state.transport.state.playing ? state.transport.pause() : state.transport.play();
+  });
+  $('#t-stop').addEventListener('click', () => state.transport.stop());
+  $('#t-loop').addEventListener('click', () => {
+    const loop = state.transport.state.loop;
+    state.transport.setLoop(loop.start, loop.end, !loop.enabled);
+    ui.timeline.render();
+  });
+  $('#deckbar').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-drawer]');
+    if (btn) ui.drawer.toggle(btn.dataset.drawer);
+  });
+  $('#btn-help').addEventListener('click', () => (modalOpen('help') ? closeModal('help') : openModal('help')));
 }
 
-function wirePerform() {
+// ---------------------------------------------------------------- input box
+
+async function openSourceMenu() {
+  let inputs = [];
+  try {
+    inputs = await state.audio.listInputs();
+  } catch {
+    inputs = [];
+  }
+  studio.sources = inputs;
+  const a = state.audio.state;
+  const rows = [
+    `<button class="pop-item${a.source === 'system' ? ' current' : ''}" data-choice="system" ${studio.systemAudio.supported ? '' : 'disabled'}>System audio<span>${
+      studio.systemAudio.supported ? 'Everything playing on this computer' : studio.systemAudio.detail || 'Windows only'
+    }</span></button>`,
+  ];
+  for (const d of inputs) {
+    rows.push(
+      `<button class="pop-item${a.source === 'input' && a.deviceId === d.id ? ' current' : ''}" data-choice="input" data-id="${d.id}">${d.label}<span>Input device</span></button>`
+    );
+  }
+  rows.push(`<button class="pop-item${a.source === 'internal' ? ' current' : ''}" data-choice="internal">Internal groove<span>Silent 120 BPM analysis signal</span></button>`);
+  openPopover($('#input-src'), rows.join(''), async (choice, data) => {
+    try {
+      if (choice === 'system') await state.audio.useSystemAudio();
+      else if (choice === 'input') await state.audio.useInput(data.id);
+      else {
+        state.audio.releaseInput();
+        state.audio.startInternal();
+      }
+    } catch (err) {
+      notice(`Source: ${err.message}`, 6000);
+    }
+    updateSourceLabel();
+  });
+}
+
+function updateSourceLabel() {
+  const a = state.audio.state;
+  $('#input-src').textContent = a.deviceLabel || (a.source === 'internal' ? 'Internal groove' : a.source) || '—';
+}
+
+// ---------------------------------------------------------------- scenes / auto
+
+function renderSceneBank() {
+  const pool = state.engine.autoVJ.pool;
+  $('#scene-bank').innerHTML = state.engine.sceneList
+    .map((s) => {
+      const poolIdx = pool.indexOf(s.id);
+      const digit = poolIdx >= 0 && poolIdx < 9 ? poolIdx + 1 : '';
+      return `<li><button draggable="true" data-scene="${s.id}" class="${poolIdx >= 0 ? 'pooled' : ''}"><b>${digit}</b>${s.name}</button></li>`;
+    })
+    .join('');
+}
+
+function updateAutoBox() {
+  const av = state.engine.autoVJ;
+  $('#auto-toggle').classList.toggle('on', av.enabled);
+  if (document.activeElement !== $('#auto-min')) $('#auto-min').value = Math.round(av.minHold);
+  if (document.activeElement !== $('#auto-max')) $('#auto-max').value = Math.round(av.maxHold);
+  if (document.activeElement !== $('#auto-fade')) $('#auto-fade').value = av.fadeTime;
+}
+
+function wireScenes() {
+  $('#scene-bank').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-scene]');
+    if (!btn) return;
+    state.engine.autoVJ.enabled = false;
+    state.engine.setScene(btn.dataset.scene);
+    updateAutoBox();
+  });
+  $('#scene-bank').addEventListener('dragstart', (e) => {
+    const btn = e.target.closest('[data-scene]');
+    if (!btn) return;
+    e.dataTransfer.setData('application/x-sway-scene', btn.dataset.scene);
+    e.dataTransfer.effectAllowed = 'copy';
+  });
+  $('#auto-toggle').addEventListener('click', () => {
+    state.engine.autoVJ.enabled = !state.engine.autoVJ.enabled;
+    updateAutoBox();
+  });
+  $('#auto-min').addEventListener('change', (e) => {
+    state.engine.autoVJ.minHold = Math.max(1, Number(e.target.value) || 18);
+    state.projectStore.markDirty();
+  });
+  $('#auto-max').addEventListener('change', (e) => {
+    state.engine.autoVJ.maxHold = Math.max(state.engine.autoVJ.minHold, Number(e.target.value) || 40);
+    state.projectStore.markDirty();
+  });
+  $('#auto-fade').addEventListener('change', (e) => {
+    state.engine.autoVJ.fadeTime = Math.max(0, Number(e.target.value) || 4);
+    state.projectStore.markDirty();
+  });
+}
+
+// ---------------------------------------------------------------- deck / selection
+
+function selectControl(target) {
+  ui.assign.select(target);
+  ui.surface.select(target);
+}
+
+// Pad labels + button lit states, refreshed on assignment/kit changes.
+function refreshDeck() {
+  const asg = state.router.getAssignments();
+  const samples = state.sampler.listSamples();
+  const kit = state.sampler.getKit();
+  const labels = [];
+  for (let i = 0; i < 16; i++) {
+    const a = asg.pads[i];
+    if (!a) {
+      labels.push('');
+    } else if (a.type === 'sample') {
+      const pad = kit.pads && kit.pads[a.pad ?? i];
+      const s = pad && samples.find((x) => x.id === pad.id);
+      labels.push(s ? s.name.replace(/\.[a-z0-9]+$/i, '') : '');
+    } else if (a.type === 'scene') {
+      const meta = state.engine.sceneList.find((s) => s.id === a.scene);
+      labels.push(meta ? meta.name : a.scene);
+    } else {
+      labels.push(a.param);
+    }
+  }
+  ui.surface.refresh(labels, buttonLitStates());
+}
+
+function buttonLitStates() {
+  const asg = state.router.getAssignments();
+  return asg.buttons.map((b) => {
+    if (!b || !b.action) return false;
+    const t = b.action.target;
+    if (t === 'engine:fxEnabled') return state.engine.fxEnabled;
+    if (t === 'engine:autoVJ') return state.engine.autoVJ.enabled;
+    if (t === 'synth:enabled') return state.router.synthEnabled;
+    if (t === 'transport:playPause') return state.transport.state.playing;
+    if (t.startsWith('fx:')) return !!state.engine.fx.params[t.slice(3)];
+    return false;
+  });
+}
+
+function onDeckSelect(target) {
+  // With a sample armed from the kit drawer, clicking a pad places it.
+  if (studio.selectedSample && target.startsWith('pad:') && ui.drawer.isOpen('kit')) {
+    const i = Number(target.slice(4));
+    state.sampler.assignPad(i, studio.selectedSample, { mode: 'oneshot', gain: 1 });
+    const asg = state.router.getAssignments();
+    asg.pads[i] = { type: 'sample', pad: i };
+    state.projectStore.markDirty();
+    refreshDeck();
+  }
+  selectControl(target);
+}
+
+// ---------------------------------------------------------------- keyboard
+
+const PAD_KEYS = ['z', 'x', 'c', 'v', 'b', 'n', 'm', ','];
+
+function wireKeyboard() {
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      escapePop();
+      return;
+    }
+    if (/^(input|select|textarea)$/i.test(e.target.tagName)) return;
+    if (synthKeyDown(e)) return;
+    const k = e.key.toLowerCase();
+
+    const sceneIdx = Number(k) - 1;
+    const pool = state.engine.autoVJ.pool;
+    if (k >= '1' && k <= '9' && sceneIdx < pool.length) {
+      state.engine.autoVJ.enabled = false;
+      state.engine.setScene(pool[sceneIdx]);
+      updateAutoBox();
+    } else if (k === ' ') {
+      e.preventDefault();
+      state.engine.nextScene();
+    } else if (k === 'a') {
+      state.engine.autoVJ.enabled = !state.engine.autoVJ.enabled;
+      updateAutoBox();
+    } else if (k === 'f') {
+      document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+    } else if (k === 'h') {
+      modalOpen('help') ? closeModal('help') : openModal('help');
+    } else if (k === 'k') {
+      // The MIDI monitor is on K because M is a pad key.
+      state.monitorVisible = !state.monitorVisible;
+      $('#midi-monitor').classList.toggle('visible', state.monitorVisible);
+    } else if (k === 'd') {
+      modalOpen('docs') ? closeModal('docs') : openDocs();
+    } else if (k === 's') {
+      ui.drawer.toggle('synth');
+    } else if (k === 'r') {
+      ui.drawer.toggle('rack');
+    } else if (k === 'e') {
+      ui.drawer.toggle('kit');
+    } else if (k === 'p') {
+      state.transport.state.playing ? state.transport.pause() : state.transport.play();
+    } else if (k === 'l') {
+      const loop = state.transport.state.loop;
+      state.transport.setLoop(loop.start, loop.end, !loop.enabled);
+      ui.timeline.render();
+    } else if (k === 'o') {
+      $('#cockpit').classList.toggle('solo');
+    } else if (k === 'delete' || k === 'backspace') {
+      if (ui.timeline.deleteSelected()) e.preventDefault();
+    } else if (k === 'arrowleft' || k === 'arrowright') {
+      if (ui.timeline.nudgeSelected(k === 'arrowleft' ? -0.5 : 0.5)) e.preventDefault();
+    } else {
+      const pad = PAD_KEYS.indexOf(k);
+      if (pad >= 0 && !e.repeat) {
+        state.midi.control.pads[pad] = 0.9;
+        state.midi.control.lastPad = pad;
+        state.router.handleMidiEvent({ kind: 'pad', idx: pad, vel: 0.9 });
+      }
+    }
+  });
+
+  // Gate-mode pads need the key release; the router no-ops for other modes.
+  window.addEventListener('keyup', (e) => {
+    synthKeyUp(e);
+    const pad = PAD_KEYS.indexOf(e.key.toLowerCase());
+    if (pad >= 0) state.router.handleMidiEvent({ kind: 'noteoff', idx: pad });
+  });
+}
+
+// ---------------------------------------------------------------- stage input
+
+function wireStageInput() {
   const canvas = $('#stage');
-
-  // Mouse = hand position whenever the Sway isn't driving; buttons/wheel map gestures.
   canvas.addEventListener('pointermove', (e) => {
     if (state.midi.control.isSway) return;
     const r = canvas.getBoundingClientRect();
@@ -904,164 +985,274 @@ function wirePerform() {
     },
     { passive: true }
   );
-
-  const PAD_KEYS = ['z', 'x', 'c', 'v', 'b', 'n', 'm', ','];
-
-  window.addEventListener('keydown', (e) => {
-    if (state.screen !== 'perform') {
-      // The Studio's musical keyboard claims its keys before any shortcut.
-      if (studioKeyDown(e)) return;
-      const key = e.key.toLowerCase();
-      const typing = /^(input|select|textarea)$/i.test(e.target.tagName);
-      if (e.key === 'Escape') {
-        if (state.screen === 'docs') returnFromDocs();
-        else if (state.screen === 'studio') returnFromStudio();
-        else if (state.screen === 'projects') show('boot');
-      } else if (typing) {
-        // a form control has focus; leave the keystroke alone
-      } else if (key === 'd' && state.screen !== 'docs') {
-        openDocs();
-      } else if (key === 's' && state.screen !== 'studio') {
-        openStudio();
-      }
-      return;
-    }
-    const k = e.key.toLowerCase();
-    // Number keys select within the ACTIVE PROJECT's scene pool rather than the
-    // global registry: a project holds a handful of scenes, the registry holds
-    // more than there are digits, and the pool is what the performer chose.
-    const sceneIdx = Number(k) - 1;
-    const pool = state.engine.autoVJ.pool;
-    if (sceneIdx >= 0 && sceneIdx < pool.length) {
-      state.engine.autoVJ.enabled = false;
-      state.engine.setScene(pool[sceneIdx]);
-    } else if (k === ' ') {
-      e.preventDefault();
-      state.engine.nextScene();
-    } else if (k === 'a') {
-      state.engine.autoVJ.enabled = !state.engine.autoVJ.enabled;
-    } else if (k === 'f') {
-      document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
-    } else if (k === 'h') {
-      state.helpVisible = !state.helpVisible;
-      $('#help-overlay').classList.toggle('visible', state.helpVisible);
-    } else if (k === 'k') {
-      // The MIDI monitor is on K because M is a pad key.
-      state.monitorVisible = !state.monitorVisible;
-      $('#midi-monitor').classList.toggle('visible', state.monitorVisible);
-    } else if (k === 'd') {
-      state.engine.stop();
-      openDocs();
-    } else if (k === 's') {
-      state.engine.stop();
-      openStudio();
-    } else if (k === 'escape') {
-      if (state.helpVisible || state.monitorVisible) {
-        state.helpVisible = state.monitorVisible = false;
-        $('#help-overlay').classList.remove('visible');
-        $('#midi-monitor').classList.remove('visible');
-      } else {
-        state.engine.stop();
-        show('projects');
-      }
-    } else {
-      const pad = PAD_KEYS.indexOf(k);
-      if (pad >= 0 && !e.repeat) {
-        state.midi.control.pads[pad] = 0.9;
-        state.midi.control.lastPad = pad;
-        state.sampler.trigger(pad, 0.9);
-      }
-    }
-    bumpHelpBar();
-  });
-
-  $('#btn-back').addEventListener('click', () => {
-    state.engine.stop();
-    show('projects');
-  });
-
-  window.addEventListener('mousemove', () => state.screen === 'perform' && bumpHelpBar());
 }
 
-// ---------------------------------------------------------------- boot sequence
+// ---------------------------------------------------------------- frame tick
+
+let lastTick = 0;
+let lastScene = '';
+let lastDeckSync = 0;
+
+function frameTick(now) {
+  requestAnimationFrame(frameTick);
+  const dt = Math.min(0.05, (now - lastTick) / 1000 || 0.016);
+  lastTick = now;
+  const eng = state.engine;
+  const io = eng.io;
+
+  // top bar
+  const sceneName = eng.currentScene ? eng.currentScene.name : '';
+  if (sceneName !== lastScene) {
+    lastScene = sceneName;
+    $('#scene-now').textContent = sceneName;
+    for (const btn of document.querySelectorAll('#scene-bank [data-scene]')) {
+      btn.classList.toggle('current', eng.currentScene && btn.dataset.scene === eng.currentScene.id);
+    }
+  }
+  $('#t-clock').textContent = fmtClock(state.transport.state.position);
+  $('#t-play').textContent = state.transport.state.playing ? '❚❚' : '▶';
+  $('#t-play').classList.toggle('on', state.transport.state.playing);
+  $('#t-loop').classList.toggle('on', state.transport.state.loop.enabled);
+  $('#pill-fps').textContent = eng.stats.fps;
+
+  const c = state.midi.control;
+  const link = $('#pill-link');
+  link.textContent = c.isSway ? 'SWAY' : c.connected ? 'MIDI' : 'KEYS';
+  link.classList.toggle('pill-on', c.isSway || c.connected);
+
+  const a = state.audio.state;
+  $('#pill-in').textContent =
+    a.source === 'input' ? 'LINE' : a.source === 'system' ? 'LOOPBACK' : a.source === 'internal' ? 'GROOVE' : 'MUTE';
+
+  // input box
+  $('#input-meter').style.width = `${Math.round(a.level * 100)}%`;
+  ui.wave.update(dt, a.bands, '#2de1fc', '#ff2d95');
+
+  // deck + timeline
+  ui.surface.update(io, state.midi.monitor);
+  ui.timeline.updatePlayhead();
+
+  // periodic sync of cheap-but-not-per-frame things
+  if (now - lastDeckSync > 250) {
+    lastDeckSync = now;
+    refreshDeck();
+    updateProjectButton();
+    updateAutoBox();
+    const v = state.synth.activeVoices;
+    const voicePill = $('#synth-voices');
+    voicePill.textContent = v;
+    voicePill.classList.toggle('pill-on', v > 0);
+  }
+
+  if (state.monitorVisible) {
+    $('#midi-monitor').textContent = state.midi.monitor.join('\n') || '(waiting for MIDI…)';
+  }
+}
+
+// ---------------------------------------------------------------- project glue
+
+function postProjectLoad() {
+  renderSceneBank();
+  updateAutoBox();
+  updateProjectButton();
+  updateSourceLabel();
+  refreshDeck();
+  ui.assign.refresh();
+  ui.timeline.render();
+  renderSamples();
+  if (ui.drawer.isOpen('synth')) renderSynthPanel();
+  if (ui.drawer.isOpen('rack')) renderFxPanel();
+  $('#synth-enable').checked = state.synthEnabled;
+}
+
+// ---------------------------------------------------------------- boot
 
 async function main() {
-  const info = await window.akswayj.info();
+  const info = await window.swaycommand.info();
   $('#boot-version').textContent = `v${info.version} · ${info.platform}`;
 
   state.audio = await createAudioEngine();
-  // Sampler output goes to the speakers AND into the analyser, so stems the
-  // player triggers drive the visuals exactly like any other audio source.
+  // Sampler, synth, and the timeline all feed the speakers AND the analyser,
+  // so anything the instrument plays drives the visuals.
   const audioOuts = [state.audio.ctx.destination, state.audio.analyser];
   state.sampler = createSampler(state.audio.ctx, audioOuts);
-  // The synth shares the sampler's routing: heard on the speakers and mixed
-  // into the analyser, so playing it drives the visuals.
   state.synth = createSynth(state.audio.ctx, audioOuts);
+  state.transport = createTransport(state.audio.ctx, audioOuts);
 
-  // A pad strike plays its sample and feeds the visuals; the raw note plays
-  // the synth, so the Sway is an instrument as well as a controller.
+  // Every MIDI event goes to the assignment router — one dispatch path for
+  // hardware, keyboard pads, and the timeline alike.
   state.midi = await createMidi({
-    onEvent: (e) => {
-      if (e.kind === 'pad' && e.idx >= 0) {
-        state.sampler.trigger(e.idx, e.vel);
-        if (state.screen === 'studio') flashPad(e.idx);
-      } else if (e.kind === 'note') {
-        if (state.synthEnabled) state.synth.noteOn(e.note, e.vel);
-      } else if (e.kind === 'noteoff') {
-        state.synth.noteOff(e.note);
-      } else if (e.kind === 'bend') {
-        state.synth.pitchBend(e.value);
-      } else if (e.kind === 'mod') {
-        state.synth.modulation(e.value);
-      }
-    },
+    onEvent: (e) => state.router && state.router.handleMidiEvent(e),
   });
   state.engine = createEngine({ canvas: $('#stage'), quality: 'med' });
   state.engine.attachAudio(state.audio);
   state.engine.attachControl(state.midi.control);
 
-  // restore learned MIDI bindings
-  const settings = await window.akswayj.settings.get();
-  if (settings.midiOverrides) state.midi.setOverrides(settings.midiOverrides);
-  if (settings.kit) restoreKit(settings.kit); // deliberately not awaited: startup must not block on disk
+  state.router = createRouter({
+    engine: state.engine,
+    sampler: state.sampler,
+    synth: state.synth,
+    transport: state.transport,
+    midi: state.midi,
+    onDirty: () => state.projectStore && state.projectStore.markDirty(),
+  });
+  state.router.onSynthToggle((v) => {
+    state.synthEnabled = v;
+    $('#synth-enable').checked = v;
+  });
+  state.engine.setFrameHook(state.router.frame);
 
-  state.projects = await window.akswayj.projects.list();
-  renderProjects();
+  state.projectStore = createProjectStore({
+    engine: state.engine,
+    audio: state.audio,
+    sampler: state.sampler,
+    synth: state.synth,
+    transport: state.transport,
+    midi: state.midi,
+    router: state.router,
+    setSynthEnabled: (v) => {
+      state.synthEnabled = v;
+      state.router.synthEnabled = v;
+      $('#synth-enable').checked = v;
+    },
+    onApplied: () => ui.timeline && postProjectLoad(),
+    onMediaLoaded: () => {
+      if (!ui.timeline) return;
+      ui.timeline.render();
+      renderSamples();
+      refreshDeck();
+    },
+  });
 
-  // Automation handle. The page CSP admits no remote or inline script, so this
-  // is reachable only from the app's own bundle and from AKSWAYJ_PROBE, which
-  // is how the build is verified headlessly (see docs/ENVIRONMENT.md).
-  window.__akswayj = { state, studio, openStudio, openDocs, renderPads, renderSamples };
+  // --- UI assembly ---
+  initFrames();
+  wirePopover();
+  ui.wave = createWave($('#input-wave'));
+  ui.surface = createSurface($('#swaydeck'), { onSelect: onDeckSelect });
+  ui.drawer = createDrawer({
+    onOpenTab: (tab, first) => {
+      if (tab === 'synth' && first) renderSynthPanel();
+      if (tab === 'rack') renderFxPanel();
+      if (tab === 'kit') renderSamples();
+    },
+  });
+  ui.assign = createAssign({
+    router: state.router,
+    sampler: state.sampler,
+    synth: state.synth,
+    engine: state.engine,
+    midi: state.midi,
+    fxRanges,
+    fxDecks,
+    onChanged: () => {
+      state.projectStore.markDirty();
+      refreshDeck();
+    },
+    onLearnArmed: (armed) => ui.surface.setArmed(armed),
+  });
+  ui.timeline = createTimeline({
+    transport: state.transport,
+    engine: state.engine,
+    store: state.projectStore,
+    onEdit: () => state.projectStore.markDirty(),
+  });
+  new ResizeObserver(() => ui.timeline.render()).observe($('#timeline'));
+  ui.layout = createLayout({ root: $('#cockpit'), settings: window.swaycommand.settings });
+  state.router.onTouch((id) => {
+    if (!ui.assign.followEnabled() || popoverOpen()) return;
+    if (ui.assign.current() !== id) selectControl(id);
+  });
 
   wireDoctor();
-  wireProjects();
-  wireStudio();
+  wireTopbar();
+  wireKit();
   wireSynth();
   wireFx();
-  window.addEventListener('keyup', studioKeyUp);
   wireDocs();
-  wirePerform();
-  updateHud();
+  wireScenes();
+  wireKeyboard();
+  wireStageInput();
+  $('#input-src').addEventListener('click', openSourceMenu);
 
-  state.audio.autoStart(); // live input if possible, silent internal groove otherwise
+  // restore learned MIDI bindings
+  const settings = await window.swaycommand.settings.get();
+  if (settings.midiOverrides) state.midi.setOverrides(settings.midiOverrides);
 
+  // Automation handle. The page CSP admits no remote or inline script, so
+  // this is reachable only from the bundle and from SWAYCOMMAND_PROBE.
+  window.__swaycommand = {
+    state,
+    studio,
+    openStudio: (tab) => ui.drawer.open(tab || 'synth'),
+    openDocs,
+    renderPads: refreshDeck,
+    renderSamples,
+    renderTimeline: () => ui.timeline.render(),
+    transport: state.transport,
+    projectStore: state.projectStore,
+    router: state.router,
+    selectControl,
+    openProject: (p) => state.projectStore.openPath(p),
+    saveProject: () => state.projectStore.save(),
+  };
+
+  // The stage runs from the first frame; the door covers it until ENTER.
+  // Auto rotation stays off until a project decides — otherwise the engine
+  // free-runs the full registry during a slow boot and races the project's
+  // start scene.
+  state.engine.autoVJ.enabled = false;
+  state.engine.start();
+  requestAnimationFrame(frameTick);
+  state.audio.autoStart().then(updateSourceLabel);
+  window.swaycommand.platform.systemAudio().then((sa) => (studio.systemAudio = sa));
+
+  // --- boot project ---
   const params = new URLSearchParams(location.search);
   const autoplay = params.get('autoplay');
-  if (autoplay) {
-    const p = state.projects.find((x) => x.id === autoplay) || state.projects[0];
-    startPerformance(p);
-    const scene = params.get('scene');
-    if (scene) {
-      state.engine.autoVJ.enabled = false;
-      state.engine.setScene(scene, 0.3);
+  let loaded = false;
+  try {
+    if (autoplay && autoplay.toLowerCase().endsWith('.sway')) {
+      await state.projectStore.openPath(autoplay);
+      loaded = true;
+    } else if (autoplay) {
+      await state.projectStore.openTemplate(autoplay);
+      loaded = true;
     }
-    runDoctor(); // still populate the doctor screen in the background
+  } catch (err) {
+    console.warn('[boot] autoplay failed:', err.message);
+  }
+  if (!loaded) {
+    try {
+      const recent = await window.swaycommand.project.recent();
+      if (recent.length) {
+        await state.projectStore.openPath(recent[0].path);
+        loaded = true;
+      }
+    } catch {
+      /* recents are best-effort */
+    }
+  }
+  if (!loaded) await state.projectStore.openTemplate('first-flight');
+
+  const scene = params.get('scene');
+  if (scene) {
+    state.engine.autoVJ.enabled = false;
+    state.engine.setScene(scene, 0.3);
+  }
+
+  if (settings.kit) restoreKit(settings.kit); // legacy kit, deliberately not awaited
+  postProjectLoad();
+  selectControl(null);
+
+  if (autoplay) {
+    enterCockpit();
+    runDoctor(); // still populate the checks in the background
   } else {
-    show('boot');
+    openModal('system');
     runDoctor();
   }
 }
 
 main().catch((err) => {
-  document.body.innerHTML = `<pre style="color:#f66;padding:2rem;font-size:14px">AKSWAYJ failed to start:\n${err.stack}</pre>`;
+  document.body.innerHTML = `<pre style="color:#f66;padding:2rem;font-size:14px">SwayCommand failed to start:\n${err.stack}</pre>`;
 });

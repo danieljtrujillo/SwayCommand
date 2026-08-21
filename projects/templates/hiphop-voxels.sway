@@ -1,0 +1,221 @@
+{
+  "format": "sway",
+  "format_version": 1,
+  "app_version": "",
+  "audio_mode": "linked",
+  "created_at": null,
+  "modified_at": null,
+  "project": {
+    "meta": {
+      "id": "hiphop-voxels",
+      "name": "Hip Hop Voxels",
+      "description": "Pairs with Audima's official Ableton Hip Hop demo pack. Head-nod tempo, heavyweight blocks: the voxel field rides the 808, pads drop ripples across the grid, golds over deep browns.",
+      "author": "",
+      "vibe": "heavyweight",
+      "bpmHint": 88,
+      "pairsWith": "Audima Ableton Hip Hop demo pack",
+      "template": true
+    },
+    "palette": [
+      "#ffb300",
+      "#ff6f00",
+      "#8d5524",
+      "#fff3c4",
+      "#e63946"
+    ],
+    "engine": {
+      "quality": "med",
+      "fxEnabled": false,
+      "autoVJ": {
+        "enabled": true,
+        "pool": [
+          "voxels",
+          "ribbons",
+          "nebula"
+        ],
+        "minHold": 24,
+        "maxHold": 48,
+        "fadeTime": 5
+      },
+      "start": {
+        "scene": "voxels"
+      }
+    },
+    "fx": {
+      "params": {}
+    },
+    "synth": {
+      "enabled": true,
+      "preset": "Init",
+      "patch": null
+    },
+    "media": [],
+    "sampler": {
+      "kit": {
+        "version": 1,
+        "pads": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      "knobs": {
+        "master": 0.5,
+        "cutoff": 0.5,
+        "rate": 0.5,
+        "send": 0.5
+      }
+    },
+    "timeline": {
+      "loop": {
+        "enabled": false,
+        "start": 0,
+        "end": 0
+      },
+      "locators": [],
+      "tracks": [
+        {
+          "id": "audio-1",
+          "type": "audio",
+          "name": "Audio",
+          "gain": 1,
+          "muted": false,
+          "clips": []
+        },
+        {
+          "id": "visual-1",
+          "type": "visual",
+          "name": "Scenes",
+          "clips": []
+        }
+      ]
+    },
+    "assignments": {
+      "version": 1,
+      "noteRouting": {
+        "synth": "unassigned"
+      },
+      "pads": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        {
+          "type": "scene",
+          "scene": "voxels",
+          "transition": {
+            "type": "cut",
+            "duration": 0
+          }
+        },
+        {
+          "type": "scene",
+          "scene": "ribbons",
+          "transition": {
+            "type": "cut",
+            "duration": 0
+          }
+        },
+        {
+          "type": "scene",
+          "scene": "nebula",
+          "transition": {
+            "type": "cut",
+            "duration": 0
+          }
+        },
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "knobs": [
+        {
+          "target": "engine:hue",
+          "min": 0,
+          "max": 1,
+          "curve": "detent"
+        },
+        {
+          "target": "engine:fadeTime",
+          "min": 1,
+          "max": 8,
+          "curve": "linear"
+        },
+        null,
+        null,
+        null,
+        null,
+        null,
+        {
+          "target": "sampler:master",
+          "min": 0,
+          "max": 1,
+          "curve": "linear"
+        }
+      ],
+      "buttons": [
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        }
+      ],
+      "gestures": []
+    },
+    "midiOverrides": {}
+  }
+}

@@ -2,10 +2,20 @@
 // the hand. Every particle's position is computed in the vertex shader from
 // pure random seeds + time (layered sin/cos pseudo-curl), so the CPU only
 // pushes uniforms: bass swells the orbits, beats detonate a radial burst,
-// press clenches the swarm and sway shears it. One Points draw call.
+// press clenches the swarm, and sway morphs the flocking itself — one tight
+// murmuration glides apart into five sub-flock cells parked on a fixed ring
+// while each cell's cohesion radius pulls in. A strike is a scatter shock: a
+// velocity burst plus an attractor re-seed the swarm reforms from over ~2 s,
+// with the cells re-slotting on their ring. Nothing turns by itself: the
+// ring never revolves (the cells breathe radially and bob instead), and the
+// camera holds a fixed eye, only easing its look toward the attractor as it
+// chases the hand — each particle's pseudo-curl path is per-particle flow,
+// not a turning cloud. One Points draw call.
 // Scene contract: docs/SCENE_CONTRACT.md.
 
 export const meta = { id: 'swarm', name: 'Swarm', mood: 'hypnotic' };
+
+const TAU = Math.PI * 2;
 
 export function createScene(ctx) {
   const { THREE, quality } = ctx;
@@ -33,6 +43,7 @@ export function createScene(ctx) {
   geo.setAttribute('aSeed', new THREE.BufferAttribute(seed, 4));
 
   const mat = new THREE.ShaderMaterial({
+    glslVersion: THREE.GLSL3,
     transparent: true,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
@@ -42,7 +53,8 @@ export function createScene(ctx) {
       uBass: { value: 0 },
       uBurst: { value: 0 }, // beat/pad impulse, decayed CPU-side
       uPress: { value: 0 },
-      uSway: { value: 0 },
+      uMorph: { value: 0 },    // flocking morph: 0 = one murmuration, 1 = split cells
+      uCellSeed: { value: 0 }, // cell ring phase, re-seeded by strikes
       uHigh: { value: 0 },
       uSize: { value: 2.0 * (ctx.height / 1080) }, // resolution-stable point scale
       // more particles -> each one dimmer, so brightness stays tier-stable
@@ -51,26 +63,30 @@ export function createScene(ctx) {
       uColorB: { value: new THREE.Color(1, 1, 1) },
     },
     vertexShader: /* glsl */ `
-      attribute vec4 aSeed; // x phase, y speed, z radius, w color mix
+      in vec4 aSeed; // x phase, y speed, z radius, w color mix
       uniform float uTime;
       uniform vec3 uAttractor;
       uniform float uBass;
       uniform float uBurst;
       uniform float uPress;
-      uniform float uSway;
+      uniform float uMorph;
+      uniform float uCellSeed;
       uniform float uHigh;
       uniform float uSize;
-      varying float vMix;
-      varying float vTw;
+      out float vMix;
+      out float vTw;
       void main() {
         float ph = aSeed.x * 6.2831853;
         float sp = 0.25 + aSeed.y * 0.75;   // per-particle angular speed
         float t1 = uTime * sp + ph;
 
-        // orbit radius: seeded spread, swollen by bass, clenched by press
+        // orbit radius: seeded spread, swollen by bass, clenched by press;
+        // the flocking morph tightens it too (cohesion pulls in as the
+        // murmuration splits into sub-flock cells)
         float rad = 3.0 + aSeed.z * 9.0;
         rad *= 1.0 + uBass * 0.9;
         rad *= 1.0 - uPress * 0.6;
+        rad *= 1.0 - uMorph * 0.55;
 
         // layered incommensurate sin/cos = cheap stateless pseudo-curl orbit
         vec3 p;
@@ -80,7 +96,19 @@ export function createScene(ctx) {
         p += position * rad * 0.45;              // scatter the ring into a cloud
 
         p *= 1.0 + uBurst * (0.4 + aSeed.z * 0.9); // beat: expanding radial shell
-        p.x += p.y * uSway;                        // sway gesture shears the swarm
+
+        // flocking morph: aSeed.x assigns one of five sub-flock cells on a
+        // fixed ring around the attractor — the ring never revolves by
+        // itself; each cell breathes radially and bobs so the split still
+        // reads alive. uMorph glides the cell offset from zero (one tight
+        // murmuration) to full separation (several cells); uCellSeed
+        // re-slots the ring on strikes.
+        float ca = floor(aSeed.x * 5.0) * 1.2566371 + uCellSeed;
+        float cr = 1.0 + 0.12 * sin(uTime * 0.45 + ca * 2.0); // radial breath
+        vec3 cc = vec3(cos(ca) * cr,
+                       sin(ca * 1.7 + uTime * 0.19) * 0.55,
+                       sin(ca) * cr);
+        p += cc * uMorph * 11.0;
 
         vec4 mv = modelViewMatrix * vec4(uAttractor + p, 1.0);
         vMix = aSeed.w;
@@ -93,13 +121,14 @@ export function createScene(ctx) {
       uniform vec3 uColorA;
       uniform vec3 uColorB;
       uniform float uAlpha;
-      varying float vMix;
-      varying float vTw;
+      in float vMix;
+      in float vTw;
+      out vec4 fragColor;
       void main() {
         float d = length(gl_PointCoord - 0.5);
         float a = smoothstep(0.5, 0.0, d); // soft round sprite
         a *= a * (0.35 + 0.65 * vTw) * uAlpha;
-        gl_FragColor = vec4(mix(uColorA, uColorB, vMix), a);
+        fragColor = vec4(mix(uColorA, uColorB, vMix), a);
       }`,
   });
   const points = new THREE.Points(geo, mat);
@@ -108,8 +137,13 @@ export function createScene(ctx) {
 
   // --- preallocated scratch + scalar state
   const target = new THREE.Vector3(); // where the hand says the attractor should be
+  const shockOff = new THREE.Vector3(); // strike's attractor re-seed offset
   const camTarget = new THREE.Vector3(0, 0, 0);
-  let burst = 0; // beat/pad impulse energy, exponential decay
+  let burst = 0;      // beat/pad impulse energy, exponential decay
+  let shock = 0;      // strike scatter energy, ~2 s reform
+  let strikePrev = 0; // last frame's strike energy, for rising-edge detection
+  let swayS = 0;      // smoothed sway -> flocking morph position
+  let cellSeed = 0;   // sub-flock ring phase, re-seeded by strikes
 
   return {
     scene,
@@ -117,20 +151,42 @@ export function createScene(ctx) {
     update(dt, t, io) {
       const u = mat.uniforms;
 
-      // attractor chases the hand in world space with exponential lag
+      // strike: scatter shock — a velocity burst plus an attractor re-seed
+      // that decays over ~2 s, so the swarm blows apart and reforms; the
+      // sub-flock cells re-slot on their ring at the same instant
+      if (io.strike > strikePrev + 0.25) {
+        shock = 1;
+        shockOff.set(
+          (Math.random() - 0.5) * 24,
+          (Math.random() - 0.5) * 14,
+          (Math.random() - 0.5) * 10,
+        );
+        cellSeed = Math.random() * TAU;
+      }
+      strikePrev = io.strike;
+      shock *= Math.pow(0.25, dt);
+
+      // attractor chases the hand in world space with exponential lag;
+      // the shock offset shoves it off-hand and drains back as it reforms
       target.set((io.xy.x - 0.5) * 26, (io.xy.y - 0.5) * 16, 0);
+      target.addScaledVector(shockOff, shock);
       u.uAttractor.value.lerp(target, 1 - Math.exp(-dt * 3.5));
 
-      // burst: beats and pad hits detonate, then decay fast
+      // burst: beats and pad hits detonate, then decay fast; the strike
+      // shock rides the same radial-shell path as its velocity burst
       burst = Math.max(burst * Math.pow(0.04, dt), io.beat);
       for (let i = 0; i < 16; i++) if (io.pads[i] > burst) burst = io.pads[i];
+
+      // sway glides the flocking morph (murmuration <-> orbiting cells)
+      swayS += (io.gestures.sway - swayS) * (1 - Math.exp(-dt * 3));
 
       u.uTime.value = t;
       u.uBass.value = io.bands.bass;
       u.uHigh.value = io.bands.high;
-      u.uBurst.value = burst;
+      u.uBurst.value = Math.max(burst, shock * 0.9);
       u.uPress.value = io.gestures.press;
-      u.uSway.value = (io.gestures.sway - 0.5) * 1.2;
+      u.uMorph.value = swayS;
+      u.uCellSeed.value = cellSeed;
 
       // two palette entries per frame; slow cycle, lastPad shoves the accent
       const ia = ((t * 0.15) | 0) % 5;
@@ -138,11 +194,10 @@ export function createScene(ctx) {
       u.uColorA.value.copy(io.palette[ia]).multiplyScalar(io.intensity);
       u.uColorB.value.copy(io.palette[ib]).multiplyScalar(io.intensity);
 
-      // slow drifting orbit around the swarm; look-at eases toward the attractor
-      const orbit = t * 0.05;
-      camera.position.x = Math.sin(orbit) * 30;
-      camera.position.z = Math.cos(orbit) * 30;
-      camera.position.y = 4 + Math.sin(t * 0.11) * 3 + io.beat * 0.5;
+      // fixed eye at (0, 4, 30) — nothing orbits or bobs by itself; the beat
+      // lifts it a touch and the look-at eases toward the attractor as it
+      // chases the hand
+      camera.position.y = 4 + io.beat * 0.5;
       camTarget.lerp(u.uAttractor.value, 1 - Math.exp(-dt * 1.5));
       camera.lookAt(camTarget);
     },

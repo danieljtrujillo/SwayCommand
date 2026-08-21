@@ -1,298 +1,180 @@
-# AKSWAYJ handoff
+# SwayCommand handoff
 
-Written 2026-08-19 for the next engineer or agent. Every number below was measured against the **installed build**, not inferred from source. Where a claim is a measurement, the measurement and the probe output are given.
+Written 2026-08-20 for the next engineer or agent, after the single-page cockpit redesign. This is an internal engineering note. It is deliberately **not** in `docs/`, not in the documentation index, and not packaged into the app — `electron-builder.yml` ships `docs/**/*.md` and `README.md` by exact name, so a root-level file never reaches an end user.
 
-This is an internal engineering note. It is deliberately **not** in `docs/`, not in the documentation index, and not packaged into the app — `electron-builder.yml` ships `docs/**/*.md` and `README.md` by exact name, so a root-level file never reaches an end user.
-
-Product documentation lives in [`docs/`](docs/). Start with [docs/OVERVIEW.md](docs/OVERVIEW.md) for terminology; this note assumes it.
+Product documentation lives in [`docs/`](docs/) and was regenerated against this source tree on 2026-08-20. Start with [docs/OVERVIEW.md](docs/OVERVIEW.md) for terminology; this note assumes it.
 
 ---
 
-## 1. Do this before touching anything
+## 1. Repository state
 
-**There is no version control.** `git rev-parse` reports "not a git repository". A `.gitignore` exists; `.git` does not. 14 scenes, the synth, the effects rack, and the documentation suite exist only as working-tree files with no history and no recovery path.
+Version control exists. The working branch is `cockpit`; `main` holds the pre-redesign import. Recent history on `cockpit`:
 
-```sh
-cd c:/Users/Cyboman/Documents/Dev/AKSWAYJ
-git init && git add -A && git commit -m "AKSWAYJ initial import"
+```
+f8f6338 Handoff: record the visuals engine pass and verification discipline
+353d0fa Wormhole: hard-science space in three regimes; doc updates
+228b9e2 Sway and strike morph the generators: vjshader, spectra
+a6aaf47 Sway and strike morph the generators: nebula, mandelbulb, cymatic
+1c6ee2e Sway and strike morph the generators: beams, swarm, ribbons, warp
+ea3adb2 Cymatic Plate: faithful theDAW cymatics platform
+46bf7c8 Ferrofluid Orb: faithful theDAW port with real reflections
+7b3f0ea Anaglyph and mosaic in the rack; frame-wrecking knob defaults; real valley
+d0c2098 Real Quantum Lattice, HDR pipeline, per-scene UnrealBloom, shared environment
+e8856d9 Rename AKSWAYJ to SwayCommand everywhere
+709d2b3 Regenerate documentation for the cockpit; select audio clips on the band
+710fd61 Retire legacy presets; template scene pads; verification hooks
+bbe9649 Single-surface cockpit
 ```
 
-`node_modules` 457 MB, `release` 417 MB, `dist` 2.1 MB — all gitignored.
+The rename in `e8856d9` is total: product name, wordmarks, `window.swaycommand` (preload API), `window.__swaycommand` (automation handle), the `SWAYCOMMAND_*` env hooks, appId, installer artifact, launcher scripts, and every doc. The Electron userData directory follows the product name, so settings written under the old name (learned MIDI overrides, the legacy kit) did not carry over. A fresh installer — `release/SwayCommand-Setup-0.1.0.exe`, built 2026-08-20 18:58 after the visuals pass and the doc reconciliation — was installed per-user and probed (§3). The `AKSWAYJ-Setup-0.1.0.exe` beside it and the `akswayj` install under `%LOCALAPPDATA%\Programs` are the pre-rename build; neither was removed.
 
-**Second hazard, hit twice already.** Background agents edited scene files *after* a build was cut, so a packaged installer did not contain the code that had just been reviewed. Both times it was caught only by comparing file mtimes against the build timestamp. Before packaging: confirm nothing is running, and that nothing under `src/` is newer than `dist/renderer.bundle.js`.
-
----
-
-## 2. The reported problem: scenes the user cannot find
-
-The user reported the Ferrofluid Orb, Cymatic Plate, Chrome Valley, and Quantum Lattice as "not visible anywhere".
-
-**It is five scenes, not four — `spectra` sits in the same blind spot.**
-
-The scenes are correctly registered, correctly pooled, and render perfectly. A probe confirmed that pressing `3` in Chrysanthemum lands on "Ferrofluid Orb" in 3.5 s with the HUD naming it correctly. They are invisible because **every surface that could name a scene declines to**, and because one of them is too dark to notice. Two independent causes; fixing either alone leaves the complaint standing.
-
-### Cause A — nothing in the interface reveals that a scene exists
-
-Ranked by contribution.
-
-**A1 — The default project excludes all of them. Probability of encountering one is exactly zero.**
-`projects/index.json` `order[0]` is `first-flight`, the first card and the de-facto default. Its pool is 9 scenes: `beams, swarm, ribbons, voxels, warp, nebula, mandelbulb, cymatic, vjshader`. Auto-VJ, `Space`, and every digit key are all incapable of reaching the other five from there.
-
-| Project | Pool size | Contains, of the five |
-|---|---|---|
-| `first-flight` (default) | 9 | none |
-| `chrysanthemum` | 8 | ferrofluid, chladni, lattice, spectra |
-| `hyperspace` | 7 | valley, lattice, spectra |
-| `garage-neon` | 5 | valley, lattice |
-| `nebula-drift` | 5 | ferrofluid, chladni |
-| `dnb-tunnel` | 4 | none |
-| `hiphop-voxels` | 3 | none |
-| `beam-sixteen` | 2 | none (Auto-VJ disabled) |
-
-Four of eight projects contain none. *Fix: add them to `first-flight.json`.*
-
-**A2 — No project opens on any of them.**
-All eight `start.scene` values are legacy scenes: `beams, warp, mandelbulb, beams, ribbons, warp, voxels, nebula`. Even in the four projects that do pool one, the user is never shown one on entry. Combined with A1, the number of ways to see one of these scenes without prior knowledge is **zero**. *Fix: make one of them the `start.scene` of `chrysanthemum` or `hyperspace`.*
-
-**A3 — The picker discloses no scene names.**
-`renderProjects()` (`src/renderer/app.js:177-192`) emits swatches, name, vibe/BPM/pairsWith pills, description, and a PLAY affordance. `p.scenes` is never referenced. Measured across the rendered grid: **2,439 characters of picker DOM, zero scene names.** The one case-insensitive hit for "chladni" is prose inside Chrysanthemum's description. There is no scene list, gallery, or browser anywhere — `sceneList` is never imported into `app.js`.
-
-**A4 — The digit keys are unlabeled, and the two labels that exist contradict each other.**
-`app.js:934-939` maps `Number(key)-1` into `state.engine.autoVJ.pool` — the *project* pool. The index therefore changes per project:
-
-| Project | Digit map for the five |
-|---|---|
-| `chrysanthemum` | 3=ferrofluid, 4=chladni, 5=lattice, 8=spectra |
-| `hyperspace` | 4=lattice, 5=valley, 6=spectra |
-| `garage-neon` | 2=valley, 3=lattice |
-| `nebula-drift` | 2=ferrofluid, 3=chladni |
-
-Nothing on screen states any of this. The help bar (`index.html:167`) says `1–9 project scenes`; the help overlay (`index.html:183`) says `1–8 scenes`. They disagree, neither names a scene, and `1–8` is a leftover from the obsolete registry-indexed behaviour still described in `docs/ENGINE.md:42`.
-
-**A5 — The in-app documentation actively asserts these scenes do not exist.**
-The Documentation screen renders `docs/*.md`, and those are stale at 8 scenes:
-
-| File | Stale claim |
-|---|---|
-| `docs/SCENE_CONTRACT.md:114` | "The registry holds eight scenes"; inventory table stops at `cymatic` |
-| `docs/ENGINE.md:42` | "the eight scene modules"; claims digits index `sceneList` directly |
-| `docs/ENVIRONMENT.md:54` | "the eight ids in the scene registry" |
-| `docs/PROJECTS.md:82-89` | Stale pool tables — hyperspace shown as 4 scenes vs its actual 7 |
-
-A grep of `docs/` for the five scene names returns **one** hit, and it is the word "lattice" inside the `warp` shader description. The installed `app.asar` contains all their display names, so the build is current and only the docs lie. *Fix: regenerate the inventory and pool tables from the registry and project JSONs.*
-
-**A6 — Auto-VJ is slow even in the right project.** Expected wait 88–260 s, and never in the four projects above.
-
-### Cause B — the Ferrofluid Orb is near-invisible even when on screen
-
-Specific to `ferrofluid`; a rendering problem, not navigation. Mean luminance and lit-pixel fraction (luma > 18) over the stage area of captured frames:
-
-| Scene | Mean luma | Lit pixels |
-|---|---|---|
-| **ferrofluid** | **0.9** | **1.0 %** |
-| valley | 3.3 | 5.3 % |
-| beams | 3.3 | 8.4 % |
-| lattice | 3.5 | 3.0 % |
-| chladni | 4.1 | 10.1 % |
-| voxels | 4.2 | 11.6 % |
-| mandelbulb | 11.4 | 26.7 % |
-| vjshader | 17.1 | 24.3 % |
-
-**12× dimmer than the Mandelbulb, 3.7× dimmer than the next-dimmest scene.** Causes in order:
-
-1. It is black chrome by design — `MeshStandardMaterial({ color: 0x010101, metalness: 0.99, roughness: 0.003 })`. Nearly all its light is *reflected*.
-2. The upstream reflection source is gone. theDAW loads `piz_compressed.exr` through `PMREMGenerator`; scenes may not load assets ([scene contract](docs/SCENE_CONTRACT.md) rule 4), so a weak procedural gradient stands in. Black chrome has almost nothing to reflect.
-3. Upstream's `UnrealBloomPass(strength 1.65)` is absent — the compositor owns tone shaping — and an additive fresnel shell substitutes for it.
-4. `fieldStrength = pow(abs(np.y), 1.5)` puts structure only at the poles. Faithful to the original; do not "fix" it.
-5. Quiet input. A floor of 0.16 was added so silence still shows a standing spike field.
-
-Act on 2 and 3: raise `envMapIntensity`, brighten the procedural environment, strengthen the fresnel shell. **Do not touch the Rosensweig maths** — it is a verified faithful port.
+`node_modules`, `release`, and `dist` are gitignored. Commit in small units; the pre-git era of this project lost history it never had.
 
 ---
 
-## 3. The next objective: a single-page cockpit
+## 2. What the redesign did
 
-The brief: **one page, everything inside the window, a command center for a full-blown Audima Labs Sway entertainment application.** Reference images are coming from the user — **ask for them and treat them as authoritative over everything in this section.**
+The five full-window screens (boot, projects, studio, docs, perform) are gone. The app is one always-live page: the stage renders from the first frame to quit, and every panel works on top of it. Layout and interaction model: [docs/OVERVIEW.md](docs/OVERVIEW.md#the-cockpit).
 
-### The real budget is 1266 × 683, not 1440 × 900
-
-`src/main/main.js:173-177` requests 1440 × 900 (min 960 × 600). Measured in the installed build: **innerWidth 1266, innerHeight 683, dpr 1.5** — the request is clamped by this machine's 1280 × 720 DIP work area at 150 % scaling, and chrome eats 14 px. Budget against **864,678 px²**, not 1,296,000. At the declared minimum the budget falls to ~554,000 px².
-
-### What exists today is the opposite of a cockpit
-
-Five mutually exclusive full-window screens, swapped by `show()` (`app.js:39-46`) toggling one `.active` class. Four of the five scroll.
-
-| Screen | scrollHeight vs 683 | Overflow | Notes |
-|---|---|---|---|
-| `studio` | 2525 | **+1842 px (3.70 screens)** | 4 stacked panels |
-| `docs` body | 4123 | +3440 px (6.0 screens) | screen itself is correctly viewport-locked |
-| `boot` | 989 | +306 px | **Enter CTA sits 176 px below the fold** |
-| `projects` | 986 | +303 px | 2 of 8 cards cut |
-| `perform` | fits | — | the only one that fits |
-
-**Studio holds 138 interactive controls (154 targets with pads). Only 10 — 7.2 % — are fully visible.** At a true 1440 × 900 it is still 17/138 (12.3 %). Control density, not panel size, is the core problem.
-
-| Panel | Height | Controls |
-|---|---|---|
-| Synth | 1087 px | 87 (59 rows + 17 keys + mod matrix) |
-| Audio source | 701 px | 8 |
-| Kit builder | 684 px | 6 + 16 pads |
-| Effects rack | 559 px | 36 |
-
-A cockpit must absorb ~2.84 M px² of Studio content into 0.86 M px² of window — **3.3 : 1**.
-
-### Four findings that change the design, not just the layout
-
-**3a — Opening Studio or Docs halts the render loop.** Measured: `engine.stats.frames`/`acc` freeze across a 250 ms sample after `s` or `d`, and resume after `Esc`. Cause: `app.js:953-957` calls `state.engine.stop()` before `openStudio()`/`openDocs()`. **Today it is impossible to touch any of the 36 FX params, the 84-entry synth manifest, the 16 pads, or the audio source while a frame is being drawn.** A cockpit removes those `stop()` calls entirely, which also removes `returnFromStudio()`/`returnFromDocs()`.
-
-**3b — `engine.resize()` is bound only to the window `resize` event.** `engine.js:257`, plus one explicit call at `app.js:45`. There is no `ResizeObserver`. `resize()` correctly reads `canvas.clientWidth`, so it *will* work in a grid cell — but any cockpit that changes the stage cell without a window resize (collapsing a drawer, toggling a rail) leaves the renderer, `rtA`/`rtB`/`rtComp`, and the FX rack at stale dimensions. **Add a `ResizeObserver` on the stage element.**
-
-**3c — All three responsive breakpoints are dead.** `@media (max-width: 900px)`, `(max-width: 700px)`, `(max-width: 820px)` in `styles.css:130,160,316` sit below `minWidth: 960`; the narrowest reachable viewport is ~946 px. Roughly 8 lines of stylesheet never fire, and there is currently **no** working layout adaptation.
-
-**3d — The audio level meter renders 0 px wide.** `.meter { flex: 1 }` shares a flex row with `#studio-source`, whose full device label ("DEFAULT - MICROPHONE (4- ARCTIS NOVA PRO) (1038:12CD)") consumes the whole 335 px row. Measured 0 × 8 px. It also only updates while the Studio screen is open (`app.js:841`), so there is no level indication during a performance at all. Needs `min-width: 0` / truncation on the pill, and the update moved out of the screen check.
-
-### Space budget for the redesign
-
-Performance-critical — must be live while frames render:
-
-| Element | Today | Cost today |
-|---|---|---|
-| Stage canvas | full-bleed | 1266 × 683, 100 % |
-| Scene selection (14) | **0 on-screen controls** | keyboard only; 9 of 14 reachable in a session |
-| Project selection (8) | separate screen | 1124 × 838 of cards |
-| Auto-VJ / transport | 1 read-only pill | 0 buttons; minHold/maxHold/fadeTime have no UI |
-| Audio source + level | buried in Studio | 8 controls, 449 px list, 0 px meter |
-| 16 pads | Studio | 433 × 433 px = **21.6 % of the window** for 16 cells; 56 px cells would be 248 × 248 |
-| MIDI / Sway state, fps | 2 pills | fine as-is |
-
-Setup-only, safe behind a drawer, tab, or overlay: the synth's 87 controls, the rack's 36, the kit builder's file management, the Doctor's 8 checks, and the docs viewer (the clearest candidate for eviction — 6 screens of scroll, and it is already correctly viewport-locked, which is the pattern to reuse).
-
-**Reusable groundwork:** both the synth panel and the FX panel already generate their controls from a manifest — `synth.controlManifest()` (84 entries, theDAW's `VisualControl` shape) and the exported `RANGES` table in `fxrack.js` (36 entries). A cockpit can re-render the same data into any layout without touching the engines.
-
----
-
-## 4. State of the code
+New modules:
 
 | Path | Purpose |
 |---|---|
-| `src/main/main.js` | Window, permissions, IPC, doc whitelist, audio-file dialog, loopback handler |
-| `src/main/doctor.js` | Startup system checks |
-| `src/main/audima.js` | Audima CDN client, minisign verification |
-| `src/main/driver-install.js` | Windows DFU driver install via elevated `pnputil` |
-| `src/preload/preload.js` | The entire IPC surface behind `contextBridge` |
-| `src/renderer/app.js` | Screen flow, HUD, Studio, synth panel, FX panel, docs viewer |
-| `src/renderer/markdown.js` | Dependency-free Markdown renderer |
-| `src/renderer/engine/engine.js` | Dual-target crossfade compositor, Auto-VJ, FX hook |
-| `src/renderer/engine/colormaster.js` | 10 palettes, crossfaded |
-| `src/renderer/engine/fxrack.js` | VJ-9000 effect decks, 36 parameters |
-| `src/renderer/engine/scenes/*.js` | 14 scenes |
-| `src/renderer/audio/audio.js` | Analysis, band split, beat detect, sources |
-| `src/renderer/audio/sampler.js` | Pad kit playback |
-| `src/renderer/audio/synth.js` + `wavetables.js` | Vital-class wavetable synth |
-| `src/renderer/midi/midi.js`, `swaymap.js` | Sway-first MIDI, factory map |
+| `src/shared/swayproject.js` | The `.sway` document: schema, defaults, `validateProject` (fills defaults, warns, never throws on content), `legacyToSway`. Shared by main and renderer; dependency-free. |
+| `src/main/projectfile.js` | `.sway` I/O: read/write with atomic rename, size cap, format gating; id-gated bundled templates; recents pruning; `statAudio` (sha256 + bytes). |
+| `src/renderer/project/projectstore.js` | Document lifecycle: open/apply (fixed hydration order), async sequential media loading, collect-on-save, media registration. |
+| `src/renderer/control/router.js` | The single dispatch point: pad/button/note events, change-driven knob dispatch, per-frame gesture routes, timeline visual clips, LEARN persistence, touch-to-select. |
+| `src/renderer/audio/transport.js` | Timeline playback: `AudioBufferSourceNode` scheduling on the context clock, loop, seek, per-clip fades; visual lane fires the router. |
+| `src/renderer/ui/frame.js`, `popover.js`, `wave.js` | Chrome: panel frames, the shared popover, the INPUT box band display. |
+| `src/renderer/ui/surface.js` | The Sway deck schematic (SVG, mutated per frame); the control-id grammar; `PAD_CELLS`. |
+| `src/renderer/ui/assign.js` | The assignment panel: per-control editors, FOLLOW/LEARN/CLEAR. |
+| `src/renderer/ui/drawer.js` | The SYNTH / RACK / KIT drawer shell; lazy first render. |
+| `src/renderer/ui/timeline.js` | The timeline band: ruler (scrub/loop/locators), visual lane (DOM clips), audio lane (canvas waveforms), playhead. |
 
-### Scenes and provenance — three licences in play
+Changes in existing modules:
 
-| Scene | Origin | Licence |
-|---|---|---|
-| beams, swarm, ribbons, voxels, nebula, cymatic, warp, mandelbulb | original | project MIT |
-| **ferrofluid** | theDAW `cymatics/sphere-shader.ts` | **Apache-2.0**, notice retained |
-| **chladni** | theDAW `cymatics/cymatics-shader.ts` | **Apache-2.0**, notice retained |
-| **valley** | theDAW `cymatics/landscape-shader.ts` | **Apache-2.0**, notice retained |
-| **lattice** | theDAW `lib/quantumLattice.ts` | theDAW repo MIT |
-| **vjshader** | VJ-9000 `shader/shaderPresets.ts` | **no licence upstream** |
-| **spectra** | VJ-9000 `spectra/SpectraRenderer.ts` | **no licence upstream** |
-| fxrack | VJ-9000 `components/VideoOutput.tsx` | **no licence upstream** |
+- **engine.js** — `cutTo` (instant switch), `prewarm` (one scene per frame after project apply), a `ResizeObserver` on the stage canvas, `params { hue, intensity }` replacing the hardwired knobs 0–2, `setFrameHook` (the router's slot), `applyProject` (the `.sway` shape; replays the fx snapshot through `setFxParam`), and `fx` / `fxEnabled` / `setFxParam` / `resetFx` on the public object. `autoVJ.fadeTime` is no longer overwritten per frame.
+- **fxrack.js** — exports `DECKS` beside `RANGES`; the phantom deck keys `zoomPunch` / `slitScan` / `timeDisplace` are dropped and `audioReactive` / `asciiAccent` are surfaced, so every deck key has a range entry and the UI cannot silently skip parameters.
+- **midi.js** — emits the full event set (`pad`, `note`, `noteoff`, `bend`, `mod`, `cc` with resolved target); note-offs are no longer swallowed. The router is the one `onEvent` consumer.
+- **audio.js** (analysis) — `useSystemAudio()` reads Windows WASAPI loopback correctly (video track dropped on arrival, explicit no-audio-track failure), `state.source` gained `'system'`, `state.deviceId` records the granted input, `releaseInput`/`stopInternal` exported.
+- **main.js** — IPC gained `project:*` (openDialog, saveDialog, read, write, recent, templates, readTemplate) and `files:statAudio`; `projects:list` is gone with the picker. `SWAYCOMMAND_AUTOPLAY` now takes a template id or a `.sway` path; `SWAYCOMMAND_WINDOW=WxH` forces the initial window size for layout screenshots.
+- **app.js** — rebuilt as cockpit assembly. `window.__swaycommand` is now `{ state, studio, openStudio(tab), openDocs, renderPads, renderSamples, transport, projectStore, router, selectControl, openProject, saveProject }`; `state.screen` no longer exists.
 
-**`voxels.js` is the user's favourite and is off-limits.** Unmodified since 18:13 on the day it was written; keep it that way unless the user says otherwise.
-
-Licensing landmines:
-
-1. **VJ-9000 has no LICENCE file in any commit** — verified across full history. Default is all rights reserved. theDAW's README credits Daniel Joaquin Trujillo, matching this user's account, so it is their own work to reuse; a third party could not rely on that. Flagged to the user; a licence should be added before distribution.
-2. **Apache-2.0 cymatics shaders** require the notice retained and changes stated. Every port's header does both — **do not strip them**.
-3. **theDAW's LICENCE names "Stability AI"**, inherited from `stable-audio-tools`. Attribution to GANTASMO comes from the README.
-4. **Audima's terms forbid redistributing their binaries.** The Doctor fetches from `cdn.audima.com.au` onto the user's machine and never bundles. Keep it that way.
-
-### Audio
-
-One analysis source at a time: any input device, Windows WASAPI loopback (`setDisplayMediaRequestHandler` with `audio: 'loopback'`), or a silent internal 120 BPM groove. Loopback is Windows-only; macOS/Linux need a virtual device and the UI says so.
-
-`synth.js` is a Vital-class wavetable synth — 3 oscillators over 7 generated spectral tables, unison, sub, noise, 2 filters, 3 envelopes, 4 LFOs, a 9 × 15 modulation matrix, 7 effects, 7 presets. It does **not** do Vital's spectral warp, sample/text-to-wavetable import, a wavetable editor, or full MPE. See [docs/SYNTH.md](docs/SYNTH.md).
-
-Sampler and synth both connect to speakers *and* analyser, so anything played drives the visuals.
-
-### theDAW alignment already in place — preserve this
-
-- `synth.voiceTrigger()` returns theDAW's exact signature `(ctx, dest, midi, velocity, when, duration, master)`. Verified: arity 7, one voice during the note, zero after release.
-- `synth.controlManifest()` returns theDAW's `VisualControl` shape, 84 entries.
-- `fxrack.js` mirrors theDAW's audio-routing pattern: a parameter table with per-key ranges and band-driven modulation.
-- All audio modules are factory functions taking `ctx` and a destination array.
-
-A module that cannot be lifted into theDAW unchanged is a divergence.
+Projects: the 8 legacy presets became bundled templates (`projects/templates/*.sway`, converted via `legacyToSway`), reachable from the project menu. Format reference: [docs/PROJECTS.md](docs/PROJECTS.md).
 
 ---
 
-## 5. Verifying work without a human
+## 2b. The visuals engine pass (same day, after the docs regen)
 
-No test suite. Verification drives the real app headlessly through env vars read in `src/main/main.js`.
+The user's directive: use the REAL effects and visuals from theDAW, make striking and swaying morph each visual's own generative parameters (never rotate-the-object responses), and put frame-wrecking effects on the knobs.
+
+**Engine (`engine.js`)** — render targets A/B/comp are now half-float (additive HDR survives), a per-scene **UnrealBloomPass** runs over the composite (`meta.bloom { strength, radius, threshold }` or a live `instance.bloom` that `update()` mutates; strength crossfades with the scene mix; skipped when absent), a **PMREM RoomEnvironment** is generated once and handed to scenes as `ctx.environment` (the reflection source that fixed the invisible chrome), and `io.strike` = max pad energy per frame is the strike dimension. Auto-VJ starts disabled at boot until a project decides (boot-race fix).
+
+**Faithful theDAW ports** (upstream at `c:\Users\Cyboman\Documents\Dev\theDAW`): `lattice.js` (full 373-node / 756-beam topology from `lib/quantumLattice.ts`, positions pouring at 0.06/frame, morphEnergy shockwave, per-shape scales and bloom multipliers; strike advances the geometry, sway morphs the filament field), `ferrofluid.js` (`cymatics/sphere-shader.ts` verbatim + RoomEnvironment + three-point rig + backdrop dome; stage luminance ~11% vs the old ~1%; strike cycles spike density, sway glides density/viscosity, press crushes to mirror chrome), `chladni.js` (`cymatics/cymatics-shader.ts` verbatim, spectral-centroid mode index, cover camera; strike jumps the nodal mode with ring-down, sway bows it), `valley.js` (`cymatics/landscape-shader.ts` verbatim + fbm plasma sun + halo + palette point light + 240-star sky; **sway crossfades the whole terrain chrome↔ferrofluid via isFerrofluid**, strike quakes the ridges, press dives between them). All carry Apache-2.0 notices with updated change statements.
+
+**Morph passes over the rest** (voxels untouched — standing constraint): beams (field spread/cross-tilt + phase reseed), swarm (murmuration↔orbiting cells + scatter shock), ribbons (silk↔coils + traveling whipcrack), nebula (fbm spectrum re-weighting + curl rotation + ignition front), mandelbulb (power 6..12 + golden-angle basin jumps), cymatic (resonance-mode lift + jump/ring-down), vjshader (preset-space morph vectors, zero-at-rest; strike kicks + seed-jumps; a Mandelbox scale <~1.6 engulfs the camera — documented in its table), spectra (log↔lin axis warp, fold comb, radial burst; strike = full-band slam through the mel machinery).
+
+**`warp.js` — the Wormhole, redesigned to the user's spec** (hard science, photoreal, one fullscreen quad): three regimes — DRIFT (blackbody starfield via octahedral cell hashing, limb-darkened G-type star with corona under bloom, faint palette nebulosity, slow coast, xy looks around), WARP (STRIKE toggles it; stars streak along great circles toward the travel direction — aberration integration over STREAK_K samples — with Doppler blue/red fore/aft; **SWAY sets velocity**, `2^((sway−0.5)·2.6)`), WORMHOLE (**press ≥ 0.7 held 0.25 s**; thin-lens deflection ~1/b bends the sky around the mouth, Einstein ring at the photon radius, the throat shows a second seed's sky inverted; the ~4.2 s transit swaps seeds — you exit somewhere else — then settles back to drift). Tuning notes: star PSF widens with magnitude and the per-star peak clamps at 1.7 or isolated hot pixels turn UnrealBloom's low mips into squares; bloom base 0.55/0.5/0.7 rising with warp/hole/flash.
+
+**Rack + knobs**: `fxrack.js` gains `anaglyph` (depth-scaled red/cyan stereo in FRAG_FINAL, counter-rotation at high drive) and `mosaic` (grouted tile quantiser in the geometry pass, per-cell brightness hash) — 38 params now, both arm-gated, free at zero. Default knob table: 1 hue (detent), 2 fade length, 3 intensity, 4 glitch, 5 anaglyph, 6 mosaic, 7 echo trails, 8 kit level; **driving any `fx:` target auto-enables the rack** (router `driveTarget` + punches). Templates regenerated with the new knob table.
+
+**Verification state**: every scene screenshot-verified individually by its author at 60 fps (A/B sway/strike pairs), plus a 14-scene sweep probe — all 60 fps. One sweep anomaly was traced to the live hardware: the physical Sway was connected and a pad strike legitimately cut scenes mid-run. **Verification discipline (user request): keep headless app launches RARE — batch probes into one run, prefer build-only checks, never fire per-tweak screenshot loops.**
+
+---
+
+## 2c. Will I Dream (later on 2026-08-20)
+
+User brief: use the black hole / wormhole / hyperspace / warp effects added to `C:\Users\Cyboman\Downloads\ScifiUI` (all MIT CodePen exports — Jamie's "Wormhole", Darryl Huffman's "Black Hole (WebGL Shader)", Sean Free's "#codevember 13" event horizon, Techartist's "Cosmic Anomaly Visualizer", Rizki Gunawan's "Threejs SciFi Flight"); a scene with NO effects applied at rest; hyperspace/warp on X and Y with the maximum at highest X, lowest Y (right of the deck, close to the sensors); PAD 7 opens a black hole that radially fades everything from the center out; hyperspace as a layer ABOVE everything else; nothing rotating, forward motion only, except PAD 8 banks left and PAD 15 banks right; a new celestial object at the end of every hyperspace jump except when the black hole was pressed; named "Will I Dream", with the song of that name from this machine's Music folder.
+
+Delivered: `src/renderer/engine/scenes/willidream.js` — the 15th registry entry; its header documents the four regimes and the state machine; pads follow the deck's 1-based numbering, so PAD 7 / 8 / 15 are indices 6 / 7 / 14 (`PAD_BLACKHOLE`, `PAD_BANK_LEFT`, `PAD_BANK_RIGHT`). Three draw calls: the star field (`Points`, scrolled and wrapped in the vertex shader, forward only), the celestial object (`Points`, one static generator per shape — pulsar, spiral galaxy, solar system, nebula, ringed planet — no time term in any angle), and the overlay quad drawn last (renderOrder 10, premultiplied-additive custom blending so one pass both adds the streak field and occludes with the black disc and the radial swallow). The black-hole lens (pull ~ mass / d²) is applied at vertex level to stars and object and in UV space to the overlay. No `meta.bloom` — the scene asks for no effects. `projects/templates/will-i-dream.sway` (second in `index.json`) links `C:\Users\Cyboman\Music\New Will I Dream Master Style 2 - Live Punchy.mp3` by absolute path (sha256 `510de9de…`, 9,167,722 bytes, 229.008 s, 48 kHz CBR 320) on the audio lane 0:00–3:49 with the scene on the visual lane; rack off, Auto-VJ off, pads unassigned so strikes reach only the scene. Docs updated to fifteen scenes / nine templates: README, OVERVIEW, ENGINE, ENVIRONMENT, SCENE_CONTRACT (inventory row), PROJECTS (template table + the absolute-path note).
+
+Verified in two dev-app runs (~19:25): the console was hooked before the scene's first shader compile — zero errors or warnings; 60 fps at rest, at full warp, through both banks, at the jump end, and with the hole opening over hyperspace; `projectStore.openTemplate('will-i-dream')` took 25 ms, the media decoded (229.008 s), the transport held the buffer, `play()` advanced the clock and drove the analysis (level 0.99). Screenshots: the arrival (pulsar ahead over the star field) and the black hole mid-swallow over the streak field. **Not yet packaged** — the installed build (18:58) predates this scene; repack before judging installed behavior.
+
+---
+
+## 2d. The second pass (2026-08-20, evening) — standing rules changed
+
+The user reviewed Will I Dream and the cockpit and set rules that now bind the whole project. Read these before touching anything:
+
+- **Pads are numbered 0–15 as the user drew them on the deck**: top rows first, left cluster 0–3, right cluster 4–7, then the bottom rows, left 8–11, right 12–15 (`PAD_CELLS` in `surface.js`; the assignment panel shows `PAD n` 0-based). The note→index map is unchanged (chromatic base 24); `scripts/midi-session.ps1` prints the new strike order.
+- **Nothing drives an effect by default — ever.** `defaultKnobs()` is eight nulls; every template lost its `fx:*` and `engine:intensity` knobs (the factory presets keep hue / fade length / kit level; `will-i-dream` maps nothing). The router reconciles fx every frame (`reconcileFx`): a key no assignment drives any more is reset to its rack default, and if a control had switched the rack on (`rackOnByControl`) and nothing drives it, the rack switches off. `fxrack.js` exports `DEFAULTS` for that. Clearing a pad/knob/route therefore also stops whatever effect it was driving.
+- **Nothing auto-rotates, in any scene or effect.** Every scene was swept: Wormhole's coast yaw, Nebula's kaleidoscope spin, Mandelbulb's solid spin and haze phase, Cymatic Orb's orb spin / camera drift / azimuthal phase advance, VJ Shader's camera self-drift, Spectra's auto-orbit modes and world-group sway rotation, Swarm's revolving cell ring and camera orbit, Ribbons' camera orbit, Ferrofluid's camera drift and phyllotaxis spin, Cymatic Plate's nodal-spoke drift, Chrome Valley's star-field roll, Voxels' slow camera orbit (the one-term `t * 0.06` — the only edit ever made to the off-limits scene, made because the rule said "any scene"), and the rack's radial-spoke wheel (`baseRotation` held at 0). Hand-driven orbits, per-particle flow, scrolling, breathing, and path travel stay. It is hard rule 8 in the scene contract.
+- **Every shader is GLSL3** (`glslVersion: THREE.GLSL3`, `in`/`out`, `out vec4 fragColor`, `texture()`): all fifteen scenes' custom materials, the engine composite pass, and the seven rack passes were converted in place (maths identical; `onBeforeCompile` injections into three's built-in materials stay in three's own conventions by necessity). Hard rule 4 in the contract; the memory file `no-ai-attribution-modern-stack` records it.
+- **No AI attribution anywhere**: no `Co-Authored-By` trailers, no "generated by" lines in headers, docs, or PR bodies. The older commits on `cockpit` carry such trailers; they were not rewritten.
+
+What was built in this pass:
+
+- **Will I Dream v2** (`scenes/willidream.js`): forward motion fixed (the field now streams toward the camera); the stars ARE the streaks — one instanced mesh of screen-space capsules from each star's position to where it was a shutter ago, so hyperspace radiates along each star's own line of flight with no pattern; sway morphs the distribution from random scatter to an ordered lattice; a raymarched Schwarzschild black hole in the overlay (geodesic bending, accretion disk seen nearly edge-on with its far side lensed over and under the shadow, Doppler beaming, photon-ring glow) that the ship falls into (virtual camera 80 → 2.2 rs) while a point lens pushes the star field outward; celestial objects ray-cast analytically on one camera-facing quad — pulsar (core, jets, magnetosphere tori), spiral galaxy (inclined plane, log-spiral arms, bulge, dust), solar system (limb-darkened sun, six shaded planets with atmospheres, one ringed with mutual shadows, a belt, faint orbit lines), layered nebula, ringed gas giant — instead of particle blobs; pads 7 / 8 / 15 as the deck numbers them. Three draw calls, GLSL3, no bloom.
+- **Beam Sixteen v2** (`scenes/beams.js`): one instanced mesh of axial-billboard beam quads whose fragment shader crossfades HOLOGRAM / LASER / ELECTRICITY on `io.knobs[3]` (KNOB 4; `s = knob × 2`, τ = 0.15 s so the knob's speed is the transition's speed; 0.5 = pure laser at rest), a floor with impact pools and reflection streaks, dust that catches the beams; sway fan/cross-tilt morph and strike re-seed kept; fixed eye.
+- **Resizable / collapsible cockpit** (`ui/layout.js`, wired from `app.js`): grips on the rails, timeline, deck, and the assign/input split (`--rail-w-left`, `--rail-w-right`, `--tl-h`, `--deck-h`, `--input-h`; double-click resets), a collapse chip per region (rails, assign, input, timeline, deck → 18 px strips), persisted in settings under `layout`, composing with solo view.
+
+---
+
+## 3. What is verified
+
+- Code-level: the documentation set was rewritten 2026-08-20 by reading every claim out of this source tree (module by module, including `swayproject.js`, `router.js`, `transport.js`, `projectfile.js`, and the `ui/` set). The docs are the closest thing to a spec; where they and the code disagree, something regressed.
+- Reconciled after the visuals pass (later on 2026-08-20): `README.md` (rack parameter count, gesture and knob tables, the Wormhole row) and the scene inventory table in `docs/SCENE_CONTRACT.md` (every morph-pass scene and the theDAW ports, re-read from each scene's header and `update()`) now describe the shipped scenes. `ENGINE.md`, `STUDIO.md`, `OVERVIEW.md`, `PROJECTS.md` were already current.
+- 15 scenes registered (`scenes/index.js`); all 9 templates parse through `validateProject` with no warnings and carry the expected pools (checked by script against `projects/templates/`; `will-i-dream` carries 1 media, 1 audio clip, 1 visual clip).
+- The pre-redesign hardware baseline still applies: Sway USB identity `VID 0x0483` / `PID 0x52A4` confirmed on hardware, port name `Audima Labs The Sway`, factory CC map exercised on the installed build.
+- Second pass (2026-08-20, late evening), dev app on the upgraded stack — three 0.185.1, Electron 43.4.1, esbuild 0.28.2 (target chrome140): three runs, console hooked before any compile — all fifteen scenes compiled as GLSL3 with zero errors or warnings; Will I Dream at 60 fps at rest, through two jumps (galaxy, then the solar system arrival captured: limb-darkened sun, ringed giant, shaded planets, belt), the sway distribution morph, and the black-hole fall (60 fps with the geodesic raymarch at 52 steps; captured mid-fall: lensed shadow, photon ring, edge-on disk, streaks bending in); the `will-i-dream` template opened with all-null knobs and the rack off, the song decoded and played; Beam Sixteen at 60 fps in laser, hologram, and electricity (captured at electricity under a full sway fan); the layout found 5 grips and 6 chips, and the left rail collapsed to 18 px. MIDI access was granted but no port was present during these runs (the Sway was unplugged) — hardware behaviour of the new pad order is still unverified. A note for the next Electron upgrade: npm's allow-scripts gating skipped Electron's postinstall, so `node node_modules/electron/install.js` had to be run by hand before `dist/electron.exe` existed.
+- Installed build, 2026-08-20 21:27 (supersedes the 19:02 line below): `SwayCommand-Setup-0.1.0.exe` built 21:26 on Electron 43.4.1 / three 0.185.1 (asar checked for GLSL3 materials, `willidream`, `lay-grip`, `reconcileFx`, the new pad constants, zero `AKSWAYJ`), installed with `/S`, probed from the installed exe with the console hooked: 15 scenes compiled with zero errors, every scene at 60 fps in the `cutTo` sweep (Cymatic Orb read 58 in its first-compile window), Will I Dream at full warp 60 fps, 5 grips / 6 chips present, First Flight's knobs hue / fade / kit only, rack off. The probe's rail-collapse was persisted by the layout store and then cleared again from `%APPDATA%\SwayCommand\settings.json` so the next launch opens uncollapsed.
+- Installed build, 2026-08-20 19:02: `SwayCommand-Setup-0.1.0.exe` (built 18:58 from a bundle with no newer `src/` file; the asar checked for the new code and the refreshed docs, zero `AKSWAYJ` strings) installed with `/S` to `%LOCALAPPDATA%\Programs\swaycommand` and probed headlessly from the installed exe in one run — `SWAYCOMMAND_AUTOPLAY=first-flight`, one batched `SWAYCOMMAND_PROBE`, `SWAYCOMMAND_SHOT` at 30 s. Result: blast door entered, First Flight loaded with no warnings, 14 scenes registered, the new knob table in the assignments, 8 template pads, MIDI on `Audima Labs The Sway` (the hardware was connected; no strikes landed during the run), audio on the default input, and a `cutTo` sweep over all 14 scenes reading 60 fps each at a 1275 × 583 stage; the screenshot shows the Wormhole in DRIFT with the top-bar counter at 60. Window-size budgets remain unmeasured.
+
+---
+
+## 4. Known gaps
+
+| Gap | Detail | Fix path |
+|---|---|---|
+| Loop seam is frame-quantized | `transport.update()` checks the loop boundary once per rAF call, so the seam lands up to one frame late; the audio sources themselves stop at the check, not on the audio clock. Accepted for v1. | Schedule the post-seam sources ahead on the context clock instead of rescheduling at the check (`src/renderer/audio/transport.js`, `update`). |
+| Decoded-size pre-flight is an estimate | `projectstore.js` warns above ~600 MB and refuses above ~1.5 GB of estimated decoded size, assuming 48 kHz stereo Float32 — and only when a duration is already cached, so a first-time oversized file has no pre-flight and hits the decoder directly. | Persist duration on first add (already done via `addMedia`) and consider probing the container header for duration before decode. |
+| Pad physical order unverified | `PAD_CELLS` in `src/renderer/ui/surface.js` maps screen cells to pad indices assuming bottom rows first, left cluster 0–7, right cluster 8–15. Not yet checked against the hardware. | Run `scripts/midi-session.ps1` with the Sway connected and strike the pads in the order it prints; `padStrikeOrder.pad` in the report must read 0..15, otherwise reorder the `PAD_CELLS` entries — nothing else references the geometry. |
+| Sway button CCs are learn-only | Audima has not published the eight buttons' CC numbers; slots ship empty (`cc: null`) until LEARN captures them. | The same `scripts/midi-session.ps1` run lists them as `unmappedCCs` in first-seen order (buttons should show 0 / 127 value pairs; knob presses surface there too); add them to `swaymap.js` as defaults if stable. |
+| Dual decode for shared media | A media file used by both the kit and the timeline decodes twice — the sampler decodes internally, the transport needs its own `AudioBuffer` (`projectstore.js`, `loadMediaAsync`). Rare enough that v1 does not share. | Give the sampler a `getBuffer(id)` accessor and hand the same buffer to the transport. |
+| ~~Audio-lane clips cannot be selected on the band~~ | Fixed the day this note was written: `#tl-audio` now hit-tests pointerdown — click selects, drag moves, the trailing edge resizes, Delete/arrows apply (`src/renderer/ui/timeline.js`). Kept here because the fix landed after the docs pass. | — |
+
+---
+
+## 5. Packaging hazard
+
+Hit twice before the redesign: source files edited **after** a build was cut, so the packaged installer did not contain the code that had just been reviewed. It was caught only by comparing file mtimes against the build timestamp. Before packaging:
+
+1. Confirm no agent or watcher is still writing under `src/`.
+2. Run `npm run build:renderer`, then verify nothing under `src/` is newer than `dist/renderer.bundle.js`.
+3. Then `npm run dist:win` (or `dist:mac` / `dist:linux`). Output lands in `release/`; the Windows installer is one-click, per-user, `%LOCALAPPDATA%\Programs\swaycommand`, silent with `/S`.
+
+Docs are not bundled by the renderer build — `docs/**/*.md` and `README.md` are packaged as files — so documentation edits need only a repack, not a bundle.
+
+---
+
+## 6. Verifying work without a human
+
+No test suite. Verification drives the real app headlessly through env vars read in `src/main/main.js` ([docs/ENVIRONMENT.md](docs/ENVIRONMENT.md) has the full reference and working probe examples):
 
 | Variable | Effect |
 |---|---|
-| `AKSWAYJ_SHOT` | Capture the window to a PNG, then quit |
-| `AKSWAYJ_SHOT_DELAY` | ms before capture, default 5000 |
-| `AKSWAYJ_AUTOPLAY` | Boot into a project id |
-| `AKSWAYJ_SCENE` | Force a scene id. **Bypasses navigation — never use it to judge discoverability** |
-| `AKSWAYJ_PROBE` | Run JS in the page 3000 ms after load; return value prints as `[probe] …` |
+| `SWAYCOMMAND_SHOT` | Capture the window to a PNG, then quit |
+| `SWAYCOMMAND_SHOT_DELAY` | ms before capture, default 5000 |
+| `SWAYCOMMAND_WINDOW` | `WxH` initial window size, for narrow-layout screenshots |
+| `SWAYCOMMAND_AUTOPLAY` | Template id **or** `.sway` file path; skips the SYSTEM modal |
+| `SWAYCOMMAND_SCENE` | Force a scene id. Bypasses navigation — never use it to judge discoverability |
+| `SWAYCOMMAND_PROBE` | Run JS in the page 3000 ms after load; result prints as `[probe] …` |
 
-`window.__akswayj` exposes `{ state, studio, openStudio, openDocs, renderPads, renderSamples }`; `state` carries `engine, midi, audio, sampler, synth, projects, screen`.
+`window.__swaycommand` is the automation handle (shape in section 2). Two prepared runs live in `scripts/`: `midi-session.ps1` (with `midi-session-probe.js`) is the hardware monitor session for §4 — it runs the dev app with a probe that wraps the MIDI monitor ring buffer for N seconds and prints one JSON report (pad strike order, unmapped CCs, mapped CCs, raw lines), then quits through a late `SWAYCOMMAND_SHOT`. The installed-build probe used for §3 is the pattern for any packaged check: launch `%LOCALAPPDATA%\Programs\swaycommand\SwayCommand.exe` itself with the env vars set — its main-process stdout reaches a redirected file — and batch everything into one async probe expression (`executeJavaScript` awaits a returned promise) with the shot delay past the probe's own timers. Standing traps, all hit during earlier work:
 
-```powershell
-$env:ELECTRON_RUN_AS_NODE = ''            # REQUIRED
-$env:AKSWAYJ_SHOT = "$env:TEMP\x.png"
-$env:AKSWAYJ_SHOT_DELAY = '12000'
-$env:AKSWAYJ_PROBE = "(async () => JSON.stringify({ scenes: window.__akswayj.state.engine.sceneList.length }))()"
-& "$env:LOCALAPPDATA\Programs\akswayj\AKSWAYJ.exe" 2>$null | Select-String 'probe'
-```
-
-Four traps, all hit during this work:
-
-- **`ELECTRON_RUN_AS_NODE` is set in these shells.** Electron then starts as plain Node and dies with `Cannot read properties of undefined (reading 'whenReady')`. Clear it every launch.
-- **`AKSWAYJ_SHOT_DELAY` must exceed the probe's own timers**, or the app quits mid-probe and prints nothing.
-- **Env vars leak between runs.** Clear `AKSWAYJ_AUTOPLAY`/`AKSWAYJ_SCENE` explicitly.
-- **Do not read the WebGL canvas by drawing it into a 2D canvas** — the renderer runs without `preserveDrawingBuffer` and it reads back pure black. Use `AKSWAYJ_SHOT` and measure the PNG; that is how the luminance table in section 2 was produced.
-
-Build: `npm run build:renderer`, then `npm run dist:win`. Output `release/AKSWAYJ-Setup-0.1.0.exe`, one-click, per-user, installs to `%LOCALAPPDATA%\Programs\akswayj`, silent with `/S`.
+- **`ELECTRON_RUN_AS_NODE` may be set in agent shells.** Electron then starts as plain Node and dies with `Cannot read properties of undefined (reading 'whenReady')`. Clear it every launch.
+- **`SWAYCOMMAND_SHOT_DELAY` must exceed the probe's own timers**, or the app quits mid-probe and prints nothing.
+- **Env vars leak between runs.** Clear `SWAYCOMMAND_AUTOPLAY` / `SWAYCOMMAND_SCENE` explicitly.
+- **Launch sparingly.** The user has asked for restraint on headless app launches: batch multiple checks into one probe, prefer `node scripts/build-renderer.js` alone for syntax-level verification, and reserve screenshots for milestones.
+- **The hardware may be live.** With the Sway connected, its pad strikes and CCs reach the router during headless runs — a scene changing "by itself" mid-probe is usually a real strike on a template-assigned pad, not a bug.
+- **Do not read the WebGL canvas by drawing it into a 2D canvas** — the renderer runs without `preserveDrawingBuffer` and reads back pure black. Use `SWAYCOMMAND_SHOT` and measure the PNG.
 
 ---
 
-## 6. Known defects
+## 7. Standing constraints
 
-| Item | Detail |
-|---|---|
-| **No git repository** | Fix first |
-| **Five scenes undiscoverable** | Section 2, Cause A. Not fixed |
-| **Ferrofluid Orb near-invisible** | Section 2, Cause B. Not fixed |
-| **Studio/Docs halt the renderer** | `app.js:953-957`. Blocks all live control |
-| **Level meter renders 0 px wide** | Flex row collapse; also only updates on the Studio screen |
-| **`engine.resize()` has no ResizeObserver** | Stage in a resizable cell will render stale |
-| **3 dead CSS breakpoints** | All below `minWidth: 960` |
-| **3 FX params silently unrendered** | `FX_DECKS` names `zoomPunch`, `slitScan`, `timeDisplace`; none has a `RANGES` entry, so they are skipped without warning. Two `RANGES` entries (`audioReactive`, `asciiAccent`) are exposed nowhere |
-| **FX rack ships disabled** | `#fx-enable` is unchecked in `index.html` |
-| **Docs stale at 8 scenes / 6 projects** | `SCENE_CONTRACT.md`, `ENGINE.md`, `ENVIRONMENT.md`, `PROJECTS.md` |
-| **Help bar and overlay disagree** | `1–9` vs `1–8`, neither naming a scene |
-| **MIDI-learn has no UI** | `midi.learn()` has no caller; `midiOverrides` is read at startup and hand-editable but never written |
-| **Binaries unsigned** | SmartScreen warns; macOS un-notarized |
-| **4 factory-map values unconfirmed** | Knob-press CCs, button defaults, pad channel 1 vs 16, MPE. **The Sway is now connected** — a `K` monitor session would settle them |
-| **No automated tests** | Screenshot and probe only |
-
----
-
-## 7. Verified facts
-
-Measured against the installed build, 2026-08-19:
-
-- 14 scenes registered, all rendering at 60 fps on Intel HD 630 / Radeon Vega M
-- 8 projects, 18 documents, 84-entry synth manifest, 36 FX parameters, 138 Studio controls
-- Sway physically connected: port `Audima Labs The Sway`, manufacturer `STMicroelectronics`, Doctor reports `Connected (normal mode)`, DFU driver staged
-- USB identity confirmed on hardware, matching the reverse-engineered values: VID `0x0483`, PID `0x52A4`
-- Real viewport 1266 × 683 at dpr 1.5; installer 89.8 MB
+- **`voxels.js` is the user's favourite scene and is off-limits** unless they say otherwise.
+- **Apache-2.0 ports** (`ferrofluid`, `chladni`, `valley` — from theDAW's cymatics shaders) carry the required licence notice and statement of changes in their headers. Do not strip them.
+- **VJ-9000 has no licence file upstream** (`vjshader`, `spectra`, the fx rack derive from it). It is the author's own work, but a licence should be added before third-party distribution.
+- **Audima's terms forbid redistributing their binaries.** The Doctor fetches from `cdn.audima.com.au` onto the user's machine and never bundles. Keep it that way.
+- **theDAW alignment**: the synth keeps theDAW's `voiceTrigger` signature and `controlManifest` shape; audio modules are factory functions taking `ctx` and a destination array. A module that cannot be lifted into theDAW unchanged is a divergence.

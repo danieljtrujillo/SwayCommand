@@ -1,12 +1,12 @@
 # Synth
 
-AKSWAYJ includes a wavetable synthesizer so a Sway is playable as an instrument without installing a plugin. Audima's downloads page recommends [Vital](https://vital.audio/) to first-time users ("Vital Synth Pack Free · Best for Beginners") and ships a Sway project for it; this engine targets the same ground.
+SwayCommand includes a wavetable synthesizer so a Sway is playable as an instrument without installing a plugin. Audima's downloads page recommends [Vital](https://vital.audio/) to first-time users ("Vital Synth Pack Free · Best for Beginners") and ships a Sway project for it; this engine targets the same ground.
 
-Implementation: [`src/renderer/audio/synth.js`](../src/renderer/audio/synth.js) and the wavetable bank in [`src/renderer/audio/wavetables.js`](../src/renderer/audio/wavetables.js). The panel lives on the Studio screen ([STUDIO.md](STUDIO.md)).
+Implementation: [`src/renderer/audio/synth.js`](../src/renderer/audio/synth.js) and the wavetable bank in [`src/renderer/audio/wavetables.js`](../src/renderer/audio/wavetables.js). The panel lives in the SYNTH drawer ([STUDIO.md](STUDIO.md)).
 
 ## Capability against Vital
 
-| Vital feature | AKSWAYJ | Notes |
+| Vital feature | SwayCommand | Notes |
 |---|---|---|
 | 3 wavetable oscillators | Yes | 7 generated tables, continuous morph |
 | Wavetable position morph | Yes | Crossfade between adjacent spectral frames |
@@ -75,10 +75,10 @@ Destinations: oscillator position, level and tune; both filters' cutoff and reso
 | Sway notes | Note-on and note-off drive the synth, including notes outside the pad range that the Theory Engine sends |
 | Pitch bend | Applies over the patch's bend range, default 2 semitones |
 | CC 1 | Mod wheel, available as a matrix source |
-| On-screen keyboard | Two octaves from C3 on the Studio panel |
-| Computer keyboard | `A W S E D F T G Y H U J K O L P ;` while the Studio is open; the keys are not captured elsewhere, so perform-screen shortcuts are unaffected |
+| On-screen keyboard | Seventeen keys from C3 in the SYNTH drawer |
+| Computer keyboard | `A W S E D F T G Y H U J K O L P ;` while the SYNTH drawer is open; the keys are not captured elsewhere, so the cockpit shortcuts are unaffected |
 
-Pads keep their two jobs: they trigger kit samples and drive the visuals. The synth reads the raw note number in parallel, so one strike can do both.
+Whether a pad strike also plays the synth is decided by the project's note-routing mode: by default, pads that carry an assignment no longer double-fire the synth, while free pitches — Theory Engine notes outside the pad range — always reach it ([STUDIO.md](STUDIO.md#note-routing)).
 
 ## theDAW alignment
 

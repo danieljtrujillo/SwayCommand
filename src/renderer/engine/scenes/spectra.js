@@ -27,14 +27,16 @@
 //     eq = 0.85 + pct*0.55, pow(.., 1.15), the EMA (default 0.65), the
 //     30-band `energy` tracker and its 0.15 display lerp;
 //   * all SEVEN themes (hex for hex) and all FIVE camera modes with their
-//     upstream radii, heights, look targets, steer rates, damping and clamps;
-//   * the world-group sway block and the geometry layout (50x50 terrain at
-//     y=-2, walls 1000x320 at x=+/-280 in a group at y=45, FOV 55).
+//     upstream radii, heights, look targets, steer rates, damping and clamps
+//     (less their self-advancing orbit / bob / slide terms — item 10);
+//   * the world-group sway block (its translations; the rotations are out,
+//     item 10) and the geometry layout (50x50 terrain at y=-2, walls
+//     1000x320 at x=+/-280 in a group at y=45, FOV 55).
 //
-// ADAPTED (see the inline notes marked "AKSWAYJ"):
+// ADAPTED (see the inline notes marked "SwayCommand"):
 //   1. AUDIO. Upstream takes a live FFT of any width when the host supplies
 //      one (`getSpectrum()`), and otherwise synthesizes a SPECTRUM_SIZE-wide
-//      (256-bin) stand-in into its own `synthBins`. AKSWAYJ scenes get only
+//      (256-bin) stand-in into its own `synthBins`. SwayCommand scenes get only
 //      io.bands.bass/mid/high + io.level, so the synthesis branch is the only
 //      branch: a 256-bin source spectrum — upstream's own fallback width, so
 //      the mel resampler's `srcLen` arithmetic stays literally upstream's — is
@@ -42,14 +44,17 @@
 //      verbatim mel/EMA chain. Only the CONTENT of those 256 bins differs from
 //      upstream; every consumer of them is unchanged. This is the one place
 //      the port cannot be literal — full note at synthSpectrum().
-//   2. GLSL. Upstream is already GLSL1 (three.js ShaderMaterial: `varying`,
-//      `texture2D`, `gl_FragColor`), so NO version port was needed. This file
-//      is GLSL1 — no `glslVersion`, no `#version`, no in/out. There are no
-//      loops in any of the three shaders, so no bounds to make constant.
-//      Added guards: `max(-mvPosition.z, 0.25)` and `min(.., 64.0)` around the
-//      point-size divide (NaN and fill-rate respectively) and `max(..,0.0)` on
-//      the pow base in the mel chain.
-//   3. NO POST. Upstream stacks an UnrealBloomPass; AKSWAYJ owns compositing,
+//   2. GLSL. Upstream is GLSL1 (three.js ShaderMaterial: `varying`,
+//      `texture2D`, `gl_FragColor`). This file is GLSL3 (GLSL ES 3.00): all
+//      three ShaderMaterials set `glslVersion: THREE.GLSL3`, `attribute` /
+//      `varying` are `in` / `out`, `texture2D` is `texture`, and each fragment
+//      shader writes a declared `out vec4 fragColor`; three.js supplies the
+//      `#version` and precision headers. The maths are upstream's unchanged.
+//      There are no loops in any of the three shaders, so no bounds to make
+//      constant. Added guards: `max(-mvPosition.z, 0.25)` and `min(.., 64.0)`
+//      around the point-size divide (NaN and fill-rate respectively) and
+//      `max(..,0.0)` on the pow base in the mel chain.
+//   3. NO POST. Upstream stacks an UnrealBloomPass; SwayCommand owns compositing,
 //      so the wall and particle emissive terms carry a BLOOM_GAIN lift to
 //      stand in for the missing bloom.
 //   4. NO DOM. Upstream scrolls the wall spectrogram on a 2048x512 2-D canvas
@@ -67,6 +72,32 @@
 //   8. Cold-start prefill of the history grid, tier-scaled mesh/texture sizes,
 //      a livelier default scroll rate, and mel tables precomputed once
 //      (identical arithmetic, just hoisted out of the per-frame loop).
+//   9. SWAY / STRIKE. Upstream has no gesture surface. Sway is a LAYOUT
+//      morph: it glides the analyzer between arrangements — the frequency
+//      axis re-warps (log <-> lin), the mirror re-folds (one pair -> a
+//      multi-fold comb) and the plane blooms into a radial burst — via three
+//      uniforms the height math mixes in (u_axisWarp / u_fold / u_radial;
+//      0 / 1 / 0 reproduce the upstream layout exactly). A STRIKE (io.strike
+//      on a pad rising edge) is a spectral slam: a full-band impulse enters
+//      the synthesized SOURCE spectrum, so it rides upstream's own mel / EMA /
+//      energy machinery through the terrain, the wall ring and the flight
+//      height field before scrolling away with the history, and the layout
+//      SEED jumps — the arrangement sway morphs toward steps to the next
+//      LAYOUT_SEEDS entry, the way the Quantum Lattice steps geometries.
+//  10. NO AUTONOMOUS ROTATION (project rule: nothing auto-rotates in any
+//      scene). Upstream's Dynamic Orbit and Bird's Eye cameras advanced their
+//      orbit angle by themselves (t*0.18 / t*0.25 behind an auto-rotate flag
+//      on pad 7), Dynamic Orbit bobbed its height on sin(t*0.3), Deep Horizon
+//      slid its eye on sin(t*0.3), and the world-group sway block rocked the
+//      whole world on three sin/cos(t) rotations. Every one of those
+//      self-advancing terms is removed: the orbit angles rest at the upstream
+//      non-rotating values (0.6 / 0) and move only with the io.xy stick, the
+//      world-group rotation holds at zero, and pad 7 is a pure slam like pad
+//      15. Kept: io.xy steering in every mode, Free Flight's hand-integrated
+//      yaw / pitch and forward travel, Canyon Flight's hand-driven bank, the
+//      energy-driven radius / height / world-position terms, the world
+//      group's lateral slide (a translation, not a turn), the terrain scroll
+//      and the particle drift.
 // ===========================================================================
 //
 // The mechanism: a 256x256 scrolling spectrogram history lives in a RedFormat
@@ -75,8 +106,10 @@
 // left/right about the centre line, time running away from the camera. Two
 // curved walls carry the same spectrum as a distant backdrop, and a 1200-point
 // additive particle field floats above it. Pads pick the theme (0-6) and the
-// camera mode (8-12), io.xy steers whichever camera is live, press compresses
-// the relief, sway shears the scroll, the beat pulses the particles, and
+// camera mode (8-12), and every strike slams a full-band impulse through the
+// display while the layout seed jumps; io.xy steers whichever camera is live,
+// press compresses the relief, sway morphs the layout itself — axis warp,
+// fold count, radial bloom, shear — the beat pulses the particles, and
 // knobs 3-7 give scroll speed, height, particle amount, wall curvature and
 // spectrum smoothing. Follows docs/SCENE_CONTRACT.md; reference style: warp.js.
 
@@ -88,7 +121,7 @@ const HISTORY_SIZE = 256;  // history rows in the ring      (upstream 256)
 const FOV = 55;            // upstream camera FOV
 const PADS = 16;
 
-// AKSWAYJ: the synthesized stand-in for upstream's live analyser buffer.
+// SwayCommand: the synthesized stand-in for upstream's live analyser buffer.
 // Width is upstream's own: its fallback fills `synthBins = new Uint8Array(
 // SPECTRUM_SIZE)` and fillColumn then resamples with `srcLen = src.length`, so
 // SRC_BINS === SPECTRUM_SIZE makes targetIndex, lowBin/highBin, the fraction
@@ -108,7 +141,7 @@ const ENERGY_IMPACT = 1.0;
 
 // Upstream SCROLL_ROWS_PER_SEC is 2.0 — a 128 s sweep of the 256-row history,
 // chosen there because the renderer runs continuously behind a whole set.
-// AKSWAYJ shows a scene for 18-40 s at a time, so knob 3 centres on 6 rows/s
+// SwayCommand shows a scene for 18-40 s at a time, so knob 3 centres on 6 rows/s
 // (a 43 s sweep) and spans 1.5 .. 24; upstream's 2.0 sits at knob 3 ~= 0.10.
 const SCROLL_ROWS_MID = 6.0;
 
@@ -118,6 +151,28 @@ const WALL_FLOOR = 0.08;
 // Stands in for the UnrealBloomPass upstream runs at strength 0.9 — the wall
 // and particle layers are authored dim on the assumption that bloom lifts them.
 const BLOOM_GAIN = 2.2;
+
+// --- SwayCommand layout morph / strike ---------------------------------------
+// Sway glides the analyzer between arrangements instead of merely shearing
+// it. The morph is staged along the sway travel — the frequency axis re-warps
+// first, then the field re-folds, then the plane blooms radial — so the
+// restructure reads as one continuous gesture; every channel rests at exactly
+// the upstream layout when sway is 0.
+const TAU_SWAY = 1.5;   // sway smoothing, seconds — the layout glides, never snaps
+const TAU_LAYOUT = 0.6; // per-channel glide toward the seeded arrangement
+const SLAM_TAU = 0.30;  // strike impulse decay, seconds
+
+// The arrangements a strike seeds — sway morphs the resting layout toward the
+// active entry, and a strike steps the index (the Quantum Lattice convention).
+// fold: extra triangle folds of the frequency axis beyond the upstream
+// mirrored pair; warp: log/lin re-map depth (negative crushes toward linear);
+// radial: plane -> radial burst; skew: shear direction and weight.
+const LAYOUT_SEEDS = [
+  { fold: 1.6, warp: 0.9, radial: 1.0, skew: 1.0 },    // mirrored pair -> radial burst
+  { fold: 3.2, warp: 0.4, radial: 0.7, skew: -1.0 },   // dense comb, half bloom
+  { fold: 0.0, warp: 1.0, radial: 1.0, skew: 0.6 },    // pure log stretch -> full burst
+  { fold: 2.2, warp: -0.6, radial: 0.35, skew: -0.5 }, // lin-crushed folded fan
+];
 
 // The seven upstream themes, hex for hex (SPECTRA_THEMES). `grid` and `bg` are
 // carried for completeness: upstream binds gridColor to a uniform no shader
@@ -142,7 +197,7 @@ const M_FREECAM = 4;
 
 // --- shared GLSL -----------------------------------------------------------
 
-// AKSWAYJ palette reconciliation. The scene keeps inferno and the seven themes
+// SwayCommand palette reconciliation. The scene keeps inferno and the seven themes
 // as its authentic colour identity — replacing them would destroy the port —
 // so the engine palette enters as an ADDITIVE emissive term layered on the
 // ridges, the wall and the particles rather than as the base ramp. The palette
@@ -150,8 +205,8 @@ const M_FREECAM = 4;
 // and every degree of knob-0 hue rotation is visible in the frame: peaks and
 // specular glints carry palette hue, particles are mixed 55% toward palette
 // entries, and the wall gets a palette wash. Same wrap-around lerp helper as
-// warp.js / cymatic.js, constant-index only so GLSL1 accepts it in fragment
-// shaders.
+// warp.js / cymatic.js, constant-index only (a fragment-shader restriction of
+// GLSL ES 1.00 that GLSL3 lifts; the helper is kept as is).
 const PAL_GLSL = /* glsl */ `
   uniform vec3 uColors[5];
 
@@ -280,11 +335,11 @@ export function createScene(ctx) {
   }
 
   /**
-   * AKSWAYJ ADAPTATION — THE ONE PLACE THIS PORT CANNOT BE LITERAL.
+   * SwayCommand ADAPTATION — THE ONE PLACE THIS PORT CANNOT BE LITERAL.
    *
    * Upstream reads a live FFT (`getSpectrum()`), falling back to a
    * three-plateau synthesis from bass/mid/high across SPECTRUM_SIZE bins only
-   * when the host offers no spectrum. AKSWAYJ scenes NEVER receive a spectrum
+   * when the host offers no spectrum. SwayCommand scenes NEVER receive a spectrum
    * — io carries three band scalars and io.level — so the fallback path is the
    * only path, and upstream's version of it (a hard step at p<0.18 / p<0.5
    * plus the ripple 0.7 + 0.3*sin(p*9)) reads as three flat mesas.
@@ -293,14 +348,18 @@ export function createScene(ctx) {
    * centres in MEL space (weights precomputed above), upstream's ripple is
    * kept verbatim on top, and a deterministic per-bin shimmer — one sine per
    * bin, fixed seeded rate and phase, driven by the scene clock — breaks the
-   * remaining flatness into spectrogram-like grain. The result is written in
-   * place into the preallocated `synthBins`; nothing is allocated.
+   * remaining flatness into spectrogram-like grain. A strike's slam impulse
+   * is added FULL-BAND on top, so the hit enters every consumer of the
+   * spectrum at once — terrain, wall ring, energy tracker, flight height
+   * field — and then scrolls away with the history as a rippling ridge. The
+   * result is written in place into the preallocated `synthBins`; nothing is
+   * allocated.
    *
    * Everything downstream of this function — the mel resampling, the EMA, the
    * energy tracker, both textures, every shader — is upstream's, unchanged.
    */
   function synthSpectrum(tSec, bass, mid, high) {
-    // AKSWAYJ: upstream reads a real analyser whose noise floor keeps the
+    // SwayCommand: upstream reads a real analyser whose noise floor keeps the
     // terrain lit even between transients. Three smoothed bands have no such
     // floor, so a quiet passage synthesized to near zero and the inferno ramp
     // — which begins at 0x000004 — rendered the whole field black. A small
@@ -311,6 +370,9 @@ export function createScene(ctx) {
       v *= binRipple[i];
       v *= 0.72 + 0.28 * (0.5 + 0.5 * Math.sin(tSec * binRate[i] + binPhase[i]));
       v = floor * binRipple[i] + v * (1 - floor);
+      // SwayCommand: the spectral slam — a full-band strike impulse, textured
+      // by the upstream ripple so the ridge still reads as spectrum.
+      v += slam * 0.9 * (0.7 + 0.3 * binRipple[i]);
       v *= 255;
       synthBins[i] = v > 255 ? 255 : v < 0 ? 0 : v | 0;
     }
@@ -367,9 +429,9 @@ export function createScene(ctx) {
     energy = sum / (trackingBands * 255.0);
   }
 
-  // AKSWAYJ: cold-start relief. The history begins empty upstream and takes a
+  // SwayCommand: cold-start relief. The history begins empty upstream and takes a
   // full sweep to fill; upstream ran for whole sets so that was invisible, but
-  // an AKSWAYJ scene may only be on screen for 20 s. A low-amplitude
+  // an SwayCommand scene may only be on screen for 20 s. A low-amplitude
   // deterministic field (well under the audio's own range) is seeded once so
   // the terrain reads as terrain from frame one, and is overwritten by real
   // columns as they scroll past. Three octaves of value noise, not sines: sines lay
@@ -422,7 +484,7 @@ export function createScene(ctx) {
   dataTexture.unpackAlignment = 1;
   dataTexture.needsUpdate = true;
 
-  // AKSWAYJ: the wall spectrogram. Upstream keeps this on a 2048x512 2-D
+  // SwayCommand: the wall spectrogram. Upstream keeps this on a 2048x512 2-D
   // canvas, scrolling it one pixel per frame with drawImage and drawing the
   // fresh column at x = 0. No DOM here, so the same picture is a RedFormat
   // ring buffer: one column written per frame at the head, and a scroll offset
@@ -477,8 +539,11 @@ export function createScene(ctx) {
     u_heightMulti: { value: 1.0 },
     u_energyImpact: { value: ENERGY_IMPACT },
     u_useColormap: { value: 1.0 },
-    u_skew: { value: 0.0 },      // AKSWAYJ: sway shears the scroll
-    u_palMix: { value: 0.5 },    // AKSWAYJ: palette emissive weight
+    u_skew: { value: 0.0 },      // SwayCommand: sway shears the scroll
+    u_fold: { value: 1.0 },      // SwayCommand: frequency-axis folds (1 = upstream mirror)
+    u_axisWarp: { value: 0.0 },  // SwayCommand: log<->lin frequency re-map depth
+    u_radial: { value: 0.0 },    // SwayCommand: plane -> radial burst morph
+    u_palMix: { value: 0.5 },    // SwayCommand: palette emissive weight
     u_palPhase: { value: 0.0 },
     u_intensity: { value: 1.0 },
     u_colorLow: { value: themeLow },
@@ -489,6 +554,7 @@ export function createScene(ctx) {
   };
 
   const terrainMat = new THREE.ShaderMaterial({
+    glslVersion: THREE.GLSL3,
     transparent: true,
     side: THREE.DoubleSide,
     uniforms: terrainUniforms,
@@ -500,17 +566,29 @@ export function createScene(ctx) {
       uniform float u_heightMulti;
       uniform float u_energyImpact;
       uniform float u_skew;
-      varying float v_height;
-      varying float v_amp;
-      varying vec2 v_uv;
+      uniform float u_fold;
+      uniform float u_axisWarp;
+      uniform float u_radial;
+      out float v_height;
+      out float v_amp;
+      out vec2 v_uv;
+      // SwayCommand layout morph. Upstream reads abs(uv.x - 0.5) * 2.0 — one
+      // mirrored pair. u_fold re-folds the axis as a triangle wave (1.0 is
+      // upstream exactly; higher values comb the field into repeated mirrors)
+      // and u_axisWarp bends the mapping log <-> lin (exponent < 1 stretches
+      // the lows outward, > 1 crushes them). Both rest on the upstream layout.
+      float freqAt(float x) {
+        float f = abs(fract(x * u_fold) - 0.5) * 2.0;
+        return pow(f, 1.0 - u_axisWarp * 0.55);
+      }
       void main() {
         v_uv = uv;
-        // u_skew is the AKSWAYJ addition: a shear of the history axis across
+        // u_skew is the SwayCommand addition: a shear of the history axis across
         // the frequency axis, so sway drags the scroll diagonally. Everything
         // else is upstream's terrain vertex shader unchanged.
         float sampleY = fract((u_offset / ${HISTORY_SIZE}.0) + uv.y + u_skew * (uv.x - 0.5));
-        float freqUv = abs(uv.x - 0.5) * 2.0;
-        float rawHeight = texture2D(u_texture, vec2(freqUv, sampleY)).r;
+        float freqUv = freqAt(uv.x);
+        float rawHeight = texture(u_texture, vec2(freqUv, sampleY)).r;
         v_amp = rawHeight;
         float boosted = smoothstep(u_noiseGate, 1.0, rawHeight);
         float centerSmooth = smoothstep(0.0, 0.02, freqUv) * 0.1 + 0.9;
@@ -520,6 +598,14 @@ export function createScene(ctx) {
         v_height = boosted * u_heightMulti * centerSmooth * edge;
         vec3 newPosition = position;
         newPosition.z += v_height * (5.0 + (u_energy * u_energyImpact) * 5.0);
+        // SwayCommand radial burst: the same relief re-arranged as a disc —
+        // frequency becomes the angle, history the radius, so the spectrum
+        // reads as concentric rings bursting outward from the centre.
+        // u_radial glides the plane between the two arrangements; the x-edge
+        // alpha fade in the fragment shader hides the angular seam.
+        float ang = (uv.x - 0.5) * 6.2831853;
+        float rad = mix(4.0, 25.0, uv.y);
+        newPosition.xy = mix(newPosition.xy, vec2(sin(ang), cos(ang)) * rad, u_radial);
         gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
       }
     `,
@@ -531,6 +617,8 @@ export function createScene(ctx) {
       uniform float u_energy;
       uniform float u_time;
       uniform float u_skew;
+      uniform float u_fold;
+      uniform float u_axisWarp;
       uniform float u_palMix;
       uniform float u_palPhase;
       uniform float u_intensity;
@@ -538,9 +626,10 @@ export function createScene(ctx) {
       uniform vec3 u_colorMid;
       uniform vec3 u_colorHigh;
       uniform vec3 u_colorPeak;
-      varying float v_height;
-      varying float v_amp;
-      varying vec2 v_uv;
+      in float v_height;
+      in float v_amp;
+      in vec2 v_uv;
+      out vec4 fragColor;
       ${PAL_GLSL}
       // Accurate inferno colormap (Matt Zucker polynomial fit) -- the standard
       // spectrogram palette: near-black -> deep purple -> magenta -> orange ->
@@ -564,13 +653,19 @@ export function createScene(ctx) {
         c = mix(c, u_colorPeak, smoothstep(0.66, 1.0, t));
         return c;
       }
+      // SwayCommand: the same fold/warp of the frequency axis as the vertex
+      // shader, so the derived normals track the morphed layout exactly.
+      float freqAt(float x) {
+        float f = abs(fract(x * u_fold) - 0.5) * 2.0;
+        return pow(f, 1.0 - u_axisWarp * 0.55);
+      }
       // Reconstruct the geometric height at an arbitrary uv (mirrors the vertex
       // displacement) so a surface normal can be derived in-shader: bump/normal
       // relief lit from the spectrogram itself, no external normal map.
       float terrainH(vec2 uvc) {
         float sY = fract((u_offset / ${HISTORY_SIZE}.0) + uvc.y + u_skew * (uvc.x - 0.5));
-        float fU = abs(uvc.x - 0.5) * 2.0;
-        float rh = texture2D(u_texture, vec2(fU, sY)).r;
+        float fU = freqAt(uvc.x);
+        float rh = texture(u_texture, vec2(fU, sY)).r;
         float b = smoothstep(u_noiseGate, 1.0, rh);
         float cs = smoothstep(0.0, 0.02, fU) * 0.1 + 0.9;
         float ed = smoothstep(0.0, 0.12, uvc.y) * smoothstep(1.0, 0.82, uvc.y);
@@ -594,7 +689,7 @@ export function createScene(ctx) {
         float spec = pow(clamp(dot(nrm, hVec), 0.0, 1.0), 28.0) * amp;
         float light = 0.72 + 0.55 * diff + 0.7 * spec;
         vec3 col = base * light;
-        // --- AKSWAYJ: palette emissive on the ridges. Additive and weighted
+        // --- SwayCommand: palette emissive on the ridges. Additive and weighted
         //     by amp * (0.35 + 0.65 * amp) — a softened square, so the dark
         //     valleys stay pure colormap while the mid-tones and peaks carry
         //     enough engine hue for a ColorMaster crossfade or a knob-0 hue
@@ -605,7 +700,7 @@ export function createScene(ctx) {
         float edgeFade = smoothstep(0.0, 0.12, v_uv.x) * smoothstep(1.0, 0.88, v_uv.x);
         float depthFade = smoothstep(0.0, 0.05, v_uv.y) * smoothstep(1.0, 0.72, v_uv.y);
         float alpha = (0.55 + amp * 0.45) * edgeFade * depthFade;
-        gl_FragColor = vec4(col * u_intensity, alpha);
+        fragColor = vec4(col * u_intensity, alpha);
       }
     `,
   });
@@ -614,7 +709,7 @@ export function createScene(ctx) {
   const terrain = new THREE.Mesh(terrainGeo, terrainMat);
   terrain.rotation.x = -Math.PI / 2; // local +z becomes world +y: relief grows up
   terrain.position.set(0, -2, 0);
-  terrain.renderOrder = 1; // AKSWAYJ: explicit order for the three alpha layers
+  terrain.renderOrder = 1; // SwayCommand: explicit order for the three alpha layers
   // The vertex shader lifts z by up to (5.0 + energy*5.0) = 10 units, which the
   // geometry's own bounding sphere knows nothing about. Every upstream camera
   // happens to sit inside that sphere so nothing is culled wrongly today, but
@@ -639,7 +734,7 @@ export function createScene(ctx) {
     u_intensity: terrainUniforms.u_intensity,
     uColors: terrainUniforms.uColors,
     u_curveRadius: { value: 400.0 }, // upstream default; knob 6 drives it
-    u_wallOffset: { value: 0.0 },    // AKSWAYJ: ring head, replaces the blit
+    u_wallOffset: { value: 0.0 },    // SwayCommand: ring head, replaces the blit
     u_wallSpan: { value: (WALL_W - 1) / WALL_W },
   };
 
@@ -648,6 +743,7 @@ export function createScene(ctx) {
 
   function makeWall(x, rotY, flipX) {
     const mat = new THREE.ShaderMaterial({
+      glslVersion: THREE.GLSL3,
       transparent: true,
       side: THREE.DoubleSide,
       depthWrite: false,
@@ -658,7 +754,7 @@ export function createScene(ctx) {
       }, wallCommon),
       vertexShader: /* glsl */ `
         uniform float u_curveRadius;
-        varying vec2 v_uv;
+        out vec2 v_uv;
         void main() {
           v_uv = uv;
           vec3 pos = position;
@@ -681,7 +777,8 @@ export function createScene(ctx) {
         uniform vec3 u_colorMid;
         uniform vec3 u_colorHigh;
         uniform vec3 u_colorPeak;
-        varying vec2 v_uv;
+        in vec2 v_uv;
+        out vec4 fragColor;
         ${PAL_GLSL}
         vec3 getPalette(float t, float energy) {
           vec3 low = u_colorLow;
@@ -696,20 +793,20 @@ export function createScene(ctx) {
         void main() {
           vec2 sampleUv = v_uv;
           if (u_flipX > 0.5) sampleUv.x = 1.0 - sampleUv.x;
-          // AKSWAYJ: the ring-buffer read that replaces upstream's canvas blit.
+          // SwayCommand: the ring-buffer read that replaces upstream's canvas blit.
           // u_wallOffset is the newest column; walking sampleUv.x back through
           // the (repeat-wrapped) ring walks back through time.
           sampleUv.x = u_wallOffset - sampleUv.x * u_wallSpan;
-          float t = texture2D(u_texture, sampleUv).r;
+          float t = texture(u_texture, sampleUv).r;
           vec3 col = getPalette(t, u_energy);
-          // AKSWAYJ: palette wash over the theme ramp.
+          // SwayCommand: palette wash over the theme ramp.
           col = mix(col, pal(fract(u_palPhase + v_uv.y * 0.6) * 5.0), clamp(u_palMix * 0.7, 0.0, 0.85));
           float edgeX = smoothstep(0.0, 0.2, v_uv.x) * smoothstep(1.0, 0.8, v_uv.x);
           float edgeY = smoothstep(0.0, 0.2, v_uv.y) * smoothstep(1.0, 0.6, v_uv.y);
           // 0.45 / 0.25 are upstream; ${BLOOM_GAIN.toFixed(2)} stands in for the
           // UnrealBloomPass this port cannot run.
-          gl_FragColor = vec4(col * 0.45 * ${BLOOM_GAIN.toFixed(2)} * u_intensity,
-                              t * edgeX * edgeY * 0.25 * ${BLOOM_GAIN.toFixed(2)});
+          fragColor = vec4(col * 0.45 * ${BLOOM_GAIN.toFixed(2)} * u_intensity,
+                           t * edgeX * edgeY * 0.25 * ${BLOOM_GAIN.toFixed(2)});
         }
       `,
     });
@@ -737,9 +834,9 @@ export function createScene(ctx) {
   const pPos = new Float32Array(PARTICLE_COUNT * 3);
   const pScale = new Float32Array(PARTICLE_COUNT);
   const pColor = new Float32Array(PARTICLE_COUNT * 3);
-  const pHue = new Float32Array(PARTICLE_COUNT); // AKSWAYJ: palette lookup seed
+  const pHue = new Float32Array(PARTICLE_COUNT); // SwayCommand: palette lookup seed
 
-  // AKSWAYJ: upstream authored gl_PointSize for a 720-tall framebuffer at
+  // SwayCommand: upstream authored gl_PointSize for a 720-tall framebuffer at
   // DPR 1. Scaling by the real framebuffer height keeps the sprites the same
   // apparent size at 1080p and above. Reading the renderer's pixel ratio is a
   // query, not a state change. Seeded here because the engine only calls
@@ -755,7 +852,7 @@ export function createScene(ctx) {
   const particleUniforms = {
     u_time: { value: 0 },
     u_energy: { value: 0 },
-    u_beat: { value: 0 },      // AKSWAYJ: io.beat pulses the field
+    u_beat: { value: 0 },      // SwayCommand: io.beat pulses the field
     u_intensity: { value: 1 },
     u_palMix: { value: 0.65 }, // particles lean hardest on the engine palette
     u_palPhase: terrainUniforms.u_palPhase,
@@ -765,6 +862,7 @@ export function createScene(ctx) {
 
   const particleGeo = new THREE.BufferGeometry();
   const particleMat = new THREE.ShaderMaterial({
+    glslVersion: THREE.GLSL3,
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
@@ -777,14 +875,14 @@ export function createScene(ctx) {
       uniform float u_palMix;
       uniform float u_palPhase;
       uniform float u_pxScale;
-      attribute float aScale;
-      attribute float aHue;
-      attribute vec3 aColor;
-      varying vec3 vColor;
-      varying float vAlpha;
+      in float aScale;
+      in float aHue;
+      in vec3 aColor;
+      out vec3 vColor;
+      out float vAlpha;
       ${PAL_GLSL}
       void main() {
-        // AKSWAYJ: theme colour mixed toward the engine palette. Upstream used
+        // SwayCommand: theme colour mixed toward the engine palette. Upstream used
         // three.js vertexColors and the implicit "color" attribute; the
         // attribute is declared explicitly here so nothing depends on
         // USE_COLOR being injected by the renderer.
@@ -818,14 +916,15 @@ export function createScene(ctx) {
     `,
     fragmentShader: /* glsl */ `
       uniform float u_energy;
-      varying vec3 vColor;
-      varying float vAlpha;
+      in vec3 vColor;
+      in float vAlpha;
+      out vec4 fragColor;
       void main() {
         float dist = length(gl_PointCoord - vec2(0.5));
         if (dist > 0.5) discard;
         float intensity = (0.5 - dist) * 2.0;
         vec3 finalColor = mix(vColor, vec3(0.7, 0.9, 1.0), u_energy * 0.25);
-        gl_FragColor = vec4(finalColor, vAlpha * intensity);
+        fragColor = vec4(finalColor, vAlpha * intensity);
       }
     `,
   });
@@ -836,7 +935,7 @@ export function createScene(ctx) {
   worldGroup.add(particles);
 
   // --- theme state ---------------------------------------------------------
-  // AKSWAYJ: upstream opens on the mel-spectrogram theme, whose inferno ramp
+  // SwayCommand: upstream opens on the mel-spectrogram theme, whose inferno ramp
   // starts at 0x000004 and reads as a black field on the engine's black
   // ground. Cyber Horizon is the brightest of the seven and is the default
   // here; pads still select any theme, mel-spectrogram included.
@@ -907,7 +1006,12 @@ export function createScene(ctx) {
     const offsetProgress = currentRow / HISTORY_SIZE;
     const rawY = offsetProgress + vClamp + skew * (uClamp - 0.5);
     const sampleY = rawY - Math.floor(rawY);
-    const freqUv = Math.abs(uClamp - 0.5) * 2.0;
+    // SwayCommand: mirror the layout morph's fold/warp of the frequency axis
+    // (the radial term is left out — flight keeps a conservative planar read,
+    // in the same spirit as the height-scale mismatch noted above).
+    const foldX = uClamp * (1 + foldCur);
+    const fTri = Math.abs(foldX - Math.floor(foldX) - 0.5) * 2.0;
+    const freqUv = Math.pow(fTri, 1.0 - warpCur * 0.55);
     let spectrumIdx = Math.floor(freqUv * (SPECTRUM_SIZE - 1));
     if (spectrumIdx < 0) spectrumIdx = 0;
     else if (spectrumIdx > SPECTRUM_SIZE - 1) spectrumIdx = SPECTRUM_SIZE - 1;
@@ -932,7 +1036,6 @@ export function createScene(ctx) {
   let clock = 0;          // own clock: only advances while the scene is visible
   let modeIndex = M_DYNAMIC;
   let lastCamMode = -1;
-  let autoRotate = true;
   const prevPads = new Float32Array(PADS);
 
   // flight / freecam rig (upstream names)
@@ -947,11 +1050,27 @@ export function createScene(ctx) {
   let skew = 0;
   let palPhase = 0;
 
+  // SwayCommand layout morph / strike state: the smoothed sway position, the
+  // glided layout channels, the strike-seeded arrangement index and the slam
+  // impulse. All rest at zero — the upstream layout exactly.
+  let swaySm = 0;
+  let foldCur = 0;    // extra folds beyond the upstream mirrored pair
+  let warpCur = 0;    // log<->lin re-map depth
+  let radialCur = 0;  // plane -> radial burst
+  let layoutSeed = 0; // which LAYOUT_SEEDS entry sway morphs toward
+  let slam = 0;       // full-band strike impulse
+
   // preallocated scratch (upstream allocated an Euler and a Vector3 per frame)
   const eul = new THREE.Euler(0, 0, 0, 'YXZ');
   const fwd = new THREE.Vector3();
 
   const lerp = (a, b, t) => a + (b - a) * (t < 0 ? 0 : t > 1 ? 1 : t);
+  // scalar smoothstep — stages the layout channels along the sway travel
+  const sstep = (a, b, x) => {
+    const r = (x - a) / (b - a);
+    const c = r < 0 ? 0 : r > 1 ? 1 : r;
+    return c * c * (3 - 2 * c);
+  };
 
   function applyCamera(tSec, dt, io, heightMulti) {
     const e = energy * ENERGY_IMPACT;
@@ -1013,24 +1132,29 @@ export function createScene(ctx) {
       if (camera.position.x > 25) camera.position.x -= 50;
       camera.position.y = Math.max(1.5, Math.min(18, camera.position.y));
     } else if (modeIndex === M_OVERHEAD) {
-      // Bird's Eye. xy nudges the orbit angle and the altitude.
-      const a = (autoRotate ? tSec * 0.25 : 0) + stickX * 1.2;
+      // Bird's Eye. xy sets the orbit angle and the altitude; the angle no
+      // longer advances by itself (header item 10).
+      const a = stickX * 1.2;
       camera.position.set(Math.sin(a) * 2, 30 - stickY * 9, Math.cos(a) * 2);
       camera.up.set(0, 0, -1);
       camera.lookAt(0, 0, 0);
     } else if (modeIndex === M_HORIZON) {
-      // Deep Horizon. xy slides along the ridge line and lifts the eye.
-      const sway = Math.sin(tSec * 0.3) * 3 + stickX * 9;
-      camera.position.set(sway, 1 + e * 2 + stickY * 4, 30);
+      // Deep Horizon. xy slides along the ridge line and lifts the eye; the
+      // upstream sin(t*0.3) self-slide is removed (header item 10).
+      const slide = stickX * 9;
+      camera.position.set(slide, 1 + e * 2 + stickY * 4, 30);
       camera.up.set(0, 1, 0);
       camera.lookAt(0, 3, -8);
     } else {
-      // Dynamic Orbit (upstream default). xy adds orbit offset and height.
-      const a = (autoRotate ? tSec * 0.18 : 0.6) + stickX * 1.6;
+      // Dynamic Orbit (upstream default). xy sets orbit offset and height;
+      // the upstream t*0.18 orbit advance and sin(t*0.3) height bob are
+      // removed (header item 10) — the eye rests at the upstream
+      // non-rotating angle 0.6 and energy still breathes the radius.
+      const a = 0.6 + stickX * 1.6;
       const r = 22 - e * 3;
       camera.position.set(
         Math.sin(a) * r,
-        7 + Math.sin(tSec * 0.3) * 1.5 + stickY * 5,
+        7 + stickY * 5,
         Math.cos(a) * r,
       );
       camera.up.set(0, 1, 0);
@@ -1046,17 +1170,25 @@ export function createScene(ctx) {
       clock += dt; // own clock, so a cached scene never jumps on re-entry
       const tSec = clock;
 
+      // strike impulse decays first, so this frame's edges can re-arm it
+      slam *= Math.exp(-dt / SLAM_TAU);
+
       // --- PADS ------------------------------------------------------------
-      // 0-6  theme          7   toggle auto-rotate
-      // 8-12 camera mode    13  next theme   14  next camera mode   15 unused
+      // 0-6  theme          7   pure slam (the upstream auto-rotate toggle is
+      //                         gone with auto-rotate itself — header item 10)
+      // 8-12 camera mode    13  next theme   14  next camera mode   15 free
+      // EVERY rising edge is also a STRIKE — the spectral slam: io.strike
+      // (the engine's max pad energy) becomes a full-band impulse in the
+      // source spectrum, and the layout seed jumps so sway morphs toward the
+      // next arrangement. Pads keep their picks on top; 15 is a pure slam.
+      let struck = false;
       for (let i = 0; i < PADS; i++) {
         const v = io.pads[i];
         if (v > 0.1 && v > prevPads[i] + 0.05) {
+          struck = true;
           if (i < THEMES.length) {
             themeIndex = i;
             applyTheme();
-          } else if (i === 7) {
-            autoRotate = !autoRotate;
           } else if (i >= 8 && i < 8 + MODES.length) {
             modeIndex = i - 8;
           } else if (i === 13) {
@@ -1067,6 +1199,10 @@ export function createScene(ctx) {
           }
         }
         prevPads[i] = v;
+      }
+      if (struck) {
+        slam = Math.max(slam, io.strike > 1 ? 1 : io.strike < 0 ? 0 : io.strike);
+        layoutSeed = (layoutSeed + 1) % LAYOUT_SEEDS.length;
       }
 
       // --- KNOBS 3-7 -------------------------------------------------------
@@ -1110,10 +1246,24 @@ export function createScene(ctx) {
       dataTexture.needsUpdate = true;
       writeWallColumn();
 
+      // --- SWAY -> LAYOUT MORPH --------------------------------------------
+      // Sway glides the analyzer between arrangements — never a camera trick:
+      // the frequency axis re-warps first, then re-folds into a comb, then
+      // the plane blooms into the radial burst, all toward the strike-seeded
+      // arrangement. Sway is unipolar with rest 0 (docs/MIDI.md), so every
+      // channel contributes zero at rest and the layout IS upstream's; the
+      // smoothing keeps a jumpy CC from tearing the mesh.
+      const swRaw = io.gestures.sway < 0 ? 0 : io.gestures.sway > 1 ? 1 : io.gestures.sway;
+      swaySm += (swRaw - swaySm) * (1 - Math.exp(-dt / TAU_SWAY));
+      const sd = LAYOUT_SEEDS[layoutSeed];
+      const kl = 1 - Math.exp(-dt / TAU_LAYOUT);
+      foldCur += (sd.fold * sstep(0.10, 0.65, swaySm) - foldCur) * kl;
+      warpCur += (sd.warp * sstep(0.05, 0.80, swaySm) - warpCur) * kl;
+      radialCur += (sd.radial * sstep(0.45, 0.95, swaySm) - radialCur) * kl;
+      // the shear keeps its old feel but now rests at exactly zero
+      skew += (sd.skew * 0.30 * sstep(0.05, 0.90, swaySm) - skew) * kl;
+
       // --- UNIFORMS --------------------------------------------------------
-      // sway shears the scroll; smoothed so a jumpy CC does not tear the mesh
-      const ks = 1 - Math.exp(-dt * 3.0);
-      skew += ((io.gestures.sway - 0.5) * 0.30 - skew) * ks;
       palPhase += dt * 0.035;
       if (palPhase > 1) palPhase -= 1;
 
@@ -1126,8 +1276,11 @@ export function createScene(ctx) {
       terrainUniforms.u_heightMulti.value = heightMulti;
       terrainUniforms.u_energyImpact.value = ENERGY_IMPACT;
       terrainUniforms.u_skew.value = skew;
+      terrainUniforms.u_fold.value = 1 + foldCur;
+      terrainUniforms.u_axisWarp.value = warpCur;
+      terrainUniforms.u_radial.value = radialCur;
       terrainUniforms.u_palPhase.value = palPhase;
-      // AKSWAYJ: upstream renders on its own dark ground with a bloom pass the
+      // SwayCommand: upstream renders on its own dark ground with a bloom pass the
       // engine does not provide, so the terrain needs headroom to read here.
       terrainUniforms.u_intensity.value = io.intensity * 2.4;
       // the palette rides the beat so peaks flare in engine hue
@@ -1140,7 +1293,8 @@ export function createScene(ctx) {
       particleUniforms.u_time.value = tSec;
       particleUniforms.u_energy.value +=
         (energy * ENERGY_IMPACT - particleUniforms.u_energy.value) * 0.15;
-      particleUniforms.u_beat.value = io.beat;
+      // SwayCommand: a slam flares the particle field the way a beat does
+      particleUniforms.u_beat.value = io.beat > slam ? io.beat : slam;
       particleUniforms.u_intensity.value = io.intensity * (0.55 + pAmount * 0.65);
       particles.position.y = energy * ENERGY_IMPACT * 8.0;
       particleGeo.setDrawRange(0, Math.max(1, Math.round(PARTICLE_COUNT * pAmount)));
@@ -1150,17 +1304,17 @@ export function createScene(ctx) {
         worldGroup.position.set(0, 0, 0);
         worldGroup.rotation.set(0, 0, 0);
       } else {
+        // SwayCommand: upstream also rocked worldGroup.rotation.x/y/z on
+        // sin/cos(tSec) here — a self-advancing rotation of the whole world,
+        // removed (header item 10); the rotation holds at zero. The
+        // translations stay: the lateral slide and the energy-driven
+        // pull-back / dip.
         const eScaled = energy * ENERGY_IMPACT;
         const swayTurn = Math.sin(tSec * 0.4);
         worldGroup.position.x += (swayTurn * -8.0 - worldGroup.position.x) * 0.02;
         worldGroup.position.z += (eScaled * -4.0 - worldGroup.position.z) * 0.1;
         worldGroup.position.y += (eScaled * -2.5 - worldGroup.position.y) * 0.1;
-        const rotX = Math.sin(tSec * 1.1) * -0.02 * (1.0 + eScaled * 2);
-        const rotZ = swayTurn * 0.15 + Math.cos(tSec * 0.8) * -0.02 * (1.0 + eScaled * 2);
-        const rotY = swayTurn * 0.1;
-        worldGroup.rotation.x += (rotX - worldGroup.rotation.x) * 0.1;
-        worldGroup.rotation.y += (rotY - worldGroup.rotation.y) * 0.1;
-        worldGroup.rotation.z += (rotZ - worldGroup.rotation.z) * 0.1;
+        worldGroup.rotation.set(0, 0, 0);
       }
 
       applyCamera(tSec, dt, io, heightMulti);

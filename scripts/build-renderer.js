@@ -17,7 +17,7 @@ async function main() {
     bundle: true,
     format: 'iife',
     platform: 'browser',
-    target: 'chrome120',
+    target: 'chrome140',
     outfile: path.join(dist, 'renderer.bundle.js'),
     minify: false,
     sourcemap: false,
@@ -26,6 +26,15 @@ async function main() {
 
   for (const f of ['index.html', 'styles.css']) {
     fs.copyFileSync(path.join(root, 'src', 'renderer', f), path.join(dist, f));
+  }
+  // Bundled display font — the CSP has no font-src, so remote fonts cannot load.
+  const fontsSrc = path.join(root, 'src', 'renderer', 'fonts');
+  if (fs.existsSync(fontsSrc)) {
+    const fontsDist = path.join(dist, 'fonts');
+    fs.mkdirSync(fontsDist, { recursive: true });
+    for (const f of fs.readdirSync(fontsSrc)) {
+      fs.copyFileSync(path.join(fontsSrc, f), path.join(fontsDist, f));
+    }
   }
   console.log('[build] renderer bundled to dist/');
 }

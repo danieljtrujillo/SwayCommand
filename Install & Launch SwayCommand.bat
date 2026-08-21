@@ -1,8 +1,8 @@
 @echo off
-rem AKSWAYJ - double-click installer / launcher (Windows)
+rem SwayCommand - double-click installer / launcher (Windows)
 rem Installs Node.js (if needed), installs dependencies, and starts the app.
 setlocal
-title AKSWAYJ - Install ^& Launch
+title SwayCommand - Install ^& Launch
 chcp 65001 >nul
 cd /d "%~dp0"
 powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\install-launch.ps1"

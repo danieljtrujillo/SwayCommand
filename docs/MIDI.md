@@ -1,6 +1,19 @@
 # MIDI input
 
-The MIDI layer lives in two renderer modules: [`src/renderer/midi/midi.js`](../src/renderer/midi/midi.js) (device binding, message routing, MIDI-learn, monitor) and [`src/renderer/midi/swaymap.js`](../src/renderer/midi/swaymap.js) (the factory map and the control-state constructor). Consumers never read raw MIDI; they read the control state, a normalized snapshot that `createMidi()` owns and the engine receives through `attachControl()`. Hardware provenance for every factory binding: [SWAY_INTEGRATION.md](SWAY_INTEGRATION.md).
+The MIDI layer lives in two renderer modules: [`src/renderer/midi/midi.js`](../src/renderer/midi/midi.js) (device binding, message routing, MIDI-learn, monitor) and [`src/renderer/midi/swaymap.js`](../src/renderer/midi/swaymap.js) (the factory map and the control-state constructor). Above it sits the assignment router, [`src/renderer/control/router.js`](../src/renderer/control/router.js) — the single dispatch point between the control surface and everything playable. Consumers never read raw MIDI: continuous values land in the control state (which the engine reads through `attachControl()`), and discrete events flow through the router. Hardware provenance for every factory binding: [SWAY_INTEGRATION.md](SWAY_INTEGRATION.md).
+
+## Event flow
+
+```
+hardware MIDI ─┐
+keyboard pads ─┼─> router ──> sampler   (pad sample actions)
+timeline      ─┘      ├────> synth     (note routing, bend, mod wheel)
+                      ├────> engine    (scene actions, engine params, Auto-VJ)
+                      ├────> fx rack   (knob targets, punches, button toggles)
+                      └────> transport (play/pause and stop toggles)
+```
+
+The MIDI module's `onEvent` callback is the router's `handleMidiEvent`; the keyboard pad keys call the same function, so keys and hardware take one dispatch path; the transport's visual-lane events arrive through a separate subscription but land in the same module. Continuous control (XY, gestures, knobs) additionally flows through the control state into the engine's per-frame `io`, where the router's frame hook reads it back for knob and gesture dispatch.
 
 ## Device detection and binding policy
 
@@ -25,6 +38,8 @@ Each rescan writes three connection fields into the control state:
 | `isSway` | `true` when the bound port matched the Sway name |
 | `portName` | the Sway port name; otherwise a comma-joined list of all bound port names; `null` when nothing is bound |
 
+The link pill in the top bar reads these fields: `SWAY`, `MIDI`, or `KEYS`.
+
 ## Message routing
 
 The message handler ignores the MIDI channel for routing; messages on any channel are accepted. Every incoming message stamps `control.lastEventAt` with `performance.now()`.
@@ -32,17 +47,38 @@ The message handler ignores the MIDI channel for routing; messages on any channe
 | Message | Condition | Handling |
 |---|---|---|
 | Control Change (`0xB0`) | a learn is pending | The CC number is captured as the binding for the pending target; the value is not applied. |
-| Control Change (`0xB0`) | no learn pending | The CC number is resolved to a target — learned overrides first, then the factory map — and the target is set to `value / 127`. An unmatched CC is only logged to the monitor. |
-| Note On (`0x90`, velocity > 0) | note resolves to a pad | `pads[index] = velocity / 127`; `lastPad = index`. The optional `onEvent` callback fires with `{ kind: 'pad', idx, vel }` on every Note On, with `idx = -1` when the note maps to no pad. |
-| Note Off (`0x80`, or `0x90` with velocity 0) | — | Ignored. Pad values decay in the engine, not in the MIDI layer. |
-| Program Change (`0xC0`) | program 37 | `control.awake = false` (the Sway's sleep announcement). |
-| Program Change (`0xC0`) | program 38 | `control.awake = true` (wake). |
+| Control Change (`0xB0`) | no learn pending | The CC number is resolved to a continuous target — learned overrides first, then the factory map — and the target is written into the control state as `value / 127`. CC 1 additionally emits a `mod` event (the synth's mod-wheel source). Every CC then emits a `cc` event `{ cc, value, channel, target }` — the router matches learned button bindings and touch-to-select on it. |
+| Note On (`0x90`, velocity > 0) | — | If the note resolves to a pad, `pads[index] = velocity / 127` and `lastPad = index`. Two events fire: `pad` `{ idx, vel }` (with `idx = -1` when no pad matched) and `note` `{ note, vel, channel, idx }` — the raw pitch rides along so note routing can tell an assigned pad from a free pitch. |
+| Note Off (`0x80`, or `0x90` with velocity 0) | — | Emits `noteoff` `{ note, channel, idx }`. Pad values decay in the engine, but a gate-mode pad needs the release, and a synth voice must be released. |
+| Pitch bend (`0xE0`) | — | Emits `bend` with the 14-bit value scaled to 0..1 (center 0.5). |
+| Program Change (`0xC0`) | program 37 / 38 | `control.awake = false` / `true` (the Sway's sleep and wake announcements). |
 | Any other status | — | Not handled. |
 
-Pad-index resolution for Note On tries two lookups in order:
+Pad-index resolution for notes tries two lookups in order:
 
-1. Chromatic range: notes 24–39 map to pad indices 0–15 (`note - 24`). This is the layout Audima's own Ableton demo packs use and the layout AKSWAYJ normalizes to.
+1. Chromatic range: notes 24–39 map to pad indices 0–15 (`note - 24`). This is the layout Audima's own Ableton demo packs use and the layout SwayCommand normalizes to.
 2. Factory B-minor table: the note is looked up in the Theory Engine grid `47 49 50 52 54 55 57 59 61 62 64 66 67 69 71 73`; its position is the pad index. A note in neither set resolves to no pad.
+
+## The assignment router
+
+`createRouter()` owns the project's assignment table ([STUDIO.md](STUDIO.md) documents the editing surface; [PROJECTS.md](PROJECTS.md) the stored shape) and applies it three ways.
+
+**Events** — `handleMidiEvent(e)`:
+
+- `pad`: executes the pad's assignment — trigger a sample, switch the scene (disabling Auto-VJ; the entry transition decides cut versus fade), or start a held effect punch (previous parameter value saved, restored on release).
+- `note` / `noteoff`: consults `noteRouting.synth` — `always`, `unassigned` (the default: notes whose pad carries an assignment do not reach the synth; free pitches such as Theory Engine notes always do), or `off`. Note-offs release unconditionally in every mode so a voice can never hang; a noteoff whose index maps to a pad also releases gate-mode samples and ends punches.
+- `cc`: matched against the learned button slots (CC number, plus channel when one was pinned); a rising edge across 0.5 executes the button's toggle target. The event's resolved continuous target, if any, feeds touch-to-select.
+- `bend` / `mod`: forwarded to the synth.
+
+**Frames** — the router registers itself as the engine's frame hook (`engine.setFrameHook`), running inside the frame after control ingestion and before the palette update. Each frame it updates the transport, then dispatches knobs and gesture routes:
+
+- Knobs are change-driven: a knob's assignment fires only when the hardware position moves past a small epsilon, so an idle knob never fights a value edited in a drawer panel. The 0–1 position runs through the assignment's curve (`linear`, or `detent` — center of travel maps to exactly zero) and min–max range, then drives the target: `engine:hue` / `engine:intensity` / `engine:fadeTime`, any numeric `fx:` parameter, any `synth:` range parameter, or the four `sampler:` knobs.
+- Gesture routes (X, Y, PULSE, PRESS, SWAY — any number of routes per dimension) are applied after knobs, so on a shared target the gesture wins.
+- Held punches are re-asserted last so nothing overwrites them mid-hold.
+
+**Timeline** — the transport reports visual-clip entries to the router, which suspends Auto-VJ while the timeline drives the stage (restoring its previous state when playback stops or leaves the clips) and applies the clip: the stored transition at a played boundary, an instant cut on any seek or play start.
+
+The router also records the last physically touched control — pads, learned buttons, moved knobs, and factory-mapped continuous CCs — which is what lets the assignment panel follow the hardware (FOLLOW).
 
 ## Normalization
 
@@ -78,11 +114,11 @@ The factory map in `swaymap.js` reproduces the Sway's Base Project V2 assignment
 | Sleep | Program Change | 37 |
 | Wake | Program Change | 38 |
 
-The map declares pads on channel 1 or channel 16 (`channels: [0, 15]`) because Audima's `.swayproj` and Ableton script disagree about the transmit channel (unconfirmed); since the router ignores channel entirely, both arrive correctly. Knob-press CCs and the eight mappable buttons have no entry in the factory map; their defaults are not established (unconfirmed).
+The map declares pads on channel 1 or channel 16 (`channels: [0, 15]`) because Audima's `.swayproj` and Ableton script disagree about the transmit channel (unconfirmed); since the router ignores channel entirely, both arrive correctly. Knob-press CCs and the eight mappable buttons have no entry in the factory map; their defaults are not established (unconfirmed), which is why button slots start empty and are filled by LEARN.
 
 ## MIDI-learn
 
-Any continuous control can be rebound at runtime, which also makes any class-compliant controller a full replacement for the Sway. The API on the object returned by `createMidi()`:
+Any continuous control can be rebound at runtime, which also makes any class-compliant controller a full replacement for the Sway. The low-level API on the object returned by `createMidi()`:
 
 | Function | Behavior |
 |---|---|
@@ -91,7 +127,7 @@ Any continuous control can be rebound at runtime, which also makes any class-com
 | `setOverrides(o)` | Replaces the whole override set. |
 | `getOverrides()` | Returns a shallow copy of the current override set. |
 
-Valid learn targets:
+Valid continuous learn targets:
 
 | Target | Control-state field |
 |---|---|
@@ -102,7 +138,7 @@ Valid learn targets:
 
 Overrides win over the factory map: incoming CC numbers are checked against the override set first, in insertion order, and only unmatched CCs fall through to the factory table. An override adds a binding for its target without removing the factory CC for that target; when an override claims a CC number the factory map assigns elsewhere, the override wins for that number. Only CC messages can be learned; notes cannot.
 
-Persistence uses the settings IPC surface. At startup, `src/renderer/app.js` reads the settings file over the `settings:get` channel and, when a `midiOverrides` key is present, applies it with `setOverrides()`. The `settings:set` channel merges a patch into `settings.json` in the Electron `userData` directory (locations in [OVERVIEW.md](OVERVIEW.md#data-locations)). The current renderer contains no code path that writes overrides back after a learn; persisting a changed binding requires a caller to pass the result of `getOverrides()` to `window.akswayj.settings.set({ midiOverrides })`.
+The caller is the router's `learnBinding(target)`, reached through the LEARN chip in the assignment panel ([STUDIO.md](STUDIO.md)). After every completed learn it persists the override set to `settings.json` (`midiOverrides`, applied again at the next startup) and marks the project dirty, so the binding also lands in the `.sway` file on the next save. A **button** learn captures the CC number and channel into the button slot instead; the temporary continuous override recorded on the way is deleted immediately so a button press never drives a knob path.
 
 ## Monitor
 
@@ -112,35 +148,22 @@ The layer keeps a 14-entry ring buffer (`MONITOR_SIZE`) of human-readable messag
 |---|---|---|
 | Control Change | `CC<num>=<value> ch<n>` plus ` → <target>` when routed | `CC50=64 ch1 → xy:x` |
 | Note On | `NOTE <note> vel<velocity> ch<n>` plus ` → pad<index>` when a pad matched | `NOTE 24 vel127 ch16 → pad0` |
+| Note Off | `NOTE OFF <note> ch<n>` | `NOTE OFF 24 ch16` |
+| Pitch bend | `BEND <value> ch<n>` (value 0..1, three decimals) | `BEND 0.500 ch1` |
 | Program Change | `PC <program> ch<n>` | `PC 38 ch1` |
 | Learn capture | `LEARN <target> ← CC<num>` | `LEARN knob:3 ← CC71` |
 
-On the perform screen, the `K` key toggles the `#midi-monitor` overlay; the HUD update joins the buffer with newlines and shows `(waiting for MIDI…)` while the buffer is empty. The monitor sits on `K` rather than `M` because `M` is the seventh pad key.
+The `K` key toggles the `#midi-monitor` overlay, which joins the buffer with newlines and shows `(waiting for MIDI…)` while the buffer is empty; the deck's display element also shows the newest line. The monitor sits on `K` rather than `M` because `M` is the seventh pad key.
 
 ## Mouse and keyboard equivalents
 
-`wirePerform()` in [`src/renderer/app.js`](../src/renderer/app.js) writes the same control state from mouse and keyboard. Pointer and wheel handlers are gated on `control.isSway` being `false`; they stay active while a generic (non-Sway) MIDI controller is bound, and go inert only when a Sway is bound.
+`src/renderer/app.js` writes the same control state from mouse and keyboard. Pointer and wheel handlers on the stage canvas are gated on `control.isSway` being `false`; they stay active while a generic (non-Sway) MIDI controller is bound, and go inert only when a Sway is bound.
 
 | Input | Effect |
 |---|---|
-| Pointer move over the canvas | `xy.x` = horizontal position 0..1; `xy.y` = vertical position 0..1 with the bottom edge as 0 |
+| Pointer move over the stage | `xy.x` = horizontal position 0..1; `xy.y` = vertical position 0..1 with the bottom edge as 0 |
 | Pointer button down / up | `gestures.press` = 1 / 0 |
-| Wheel | `gestures.pulse` increases by `abs(deltaY) × 0.002`, clamped to 1; each wheel event schedules a halving of the value 150 ms later |
-| `Z X C V B N M ,` | pads 0–7: pad value set to 0.9 and `lastPad` updated |
+| Wheel over the stage | `gestures.pulse` increases by `abs(deltaY) × 0.002`, clamped to 1; each wheel event schedules a halving of the value 150 ms later |
+| `Z X C V B N M ,` | pads 1–8: the pad value is set to 0.9 and the strike is dispatched through `router.handleMidiEvent`, exactly as a hardware strike would be; the key release dispatches a `noteoff` so gate-mode pads work from the keyboard |
 
-Pad keys are not gated on `isSway`. Pads 8–15 have no keyboard equivalent. A pad strike — from hardware or from a pad key — also fires the Wormhole scene's hyperspace jump: that scene arms the sequence when any pad value exceeds 0.25 and rises more than 0.06 above its previous frame ([SCENE_CONTRACT.md](SCENE_CONTRACT.md#scene-inventory)).
-
-The remaining perform-screen keys address the engine, the HUD, and the screen flow rather than the control state:
-
-| Key | Effect |
-|---|---|
-| `1`–`8` | Selects the scene at that position in the registry and clears the Auto-VJ flag |
-| `Space` | Crossfades to another scene from the project pool |
-| `A` | Toggles Auto-VJ |
-| `F` | Toggles fullscreen |
-| `H` | Toggles the help overlay |
-| `K` | Toggles the MIDI monitor overlay |
-| `D` | Stops the render loop and opens the documentation viewer |
-| `Esc` | Closes an open overlay, otherwise stops the render loop and returns to the project picker |
-
-`D` also opens the viewer from the Doctor and project-picker screens, where `Escape` closes it and returns to the screen it was opened from; returning to a performance restarts the render loop. The README carries the same list alongside the hardware controls ([README](../README.md#controls)).
+Pad keys are not gated on `isSway`, and auto-repeat is ignored. Pads 9–16 have no keyboard equivalent. The full cockpit key list — scene digits, transport, drawers, overlays — lives in the [README](../README.md#controls) and in the CONTROLS modal (`H`).

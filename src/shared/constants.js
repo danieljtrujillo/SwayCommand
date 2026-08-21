@@ -1,4 +1,4 @@
-// Shared constants for AKSWAYJ — main process and build scripts.
+// Shared constants for SwayCommand — main process and build scripts.
 // All Audima facts below were verified against official Audima artifacts
 // (firmware USB descriptors, companion app binaries, Cubase/Ableton scripts)
 // on 2026-08-19. See docs/RESEARCH.md for sources.
@@ -18,7 +18,7 @@ const SWAY = {
 
 const AUDIMA = {
   // cdn.audima.com.au 403-blocks curl/python/Go User-Agents; any honest custom UA passes.
-  USER_AGENT: 'AKSWAYJ/0.1 (Sway companion; +https://github.com/akswayj)',
+  USER_AGENT: 'SwayCommand/0.1 (Sway companion; +https://github.com/swaycommand)',
   HOME: 'https://audima.com.au/',
   DOWNLOADS_PAGE: 'https://audima.com.au/downloads/',
   // Tauri updater manifest: { version, platforms: { 'windows-x86_64': { url, signature }, ... } }
@@ -39,7 +39,7 @@ const AUDIMA = {
 };
 
 const APP = {
-  NAME: 'AKSWAYJ',
+  NAME: 'SwayCommand',
   TAGLINE: 'Gesture VJ instrument for the Audima Labs Sway',
 };
 

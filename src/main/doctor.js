@@ -95,7 +95,7 @@ async function checkSway() {
       label: 'Audima Sway',
       status: 'info',
       detail:
-        'Not detected. Plug it in over USB any time — AKSWAYJ hot-attaches automatically. Until then, mouse, keyboard, and any class-compliant MIDI controller all work.',
+        'Not detected. Plug it in over USB any time — SwayCommand hot-attaches automatically. Until then, mouse, keyboard, and any class-compliant MIDI controller all work.',
     };
   } catch (err) {
     return { id: 'sway', label: 'Audima Sway', status: 'info', detail: `USB scan unavailable (${err.message}); MIDI detection still works once the app is running.` };
@@ -150,7 +150,7 @@ async function checkCompanion() {
       label: 'Audima Sway Software',
       status: 'info',
       detail:
-        'Not installed. Optional — AKSWAYJ plays without it. It is only needed to edit the Sway\u2019s on-device presets or update firmware.',
+        'Not installed. Optional — SwayCommand plays without it. It is only needed to edit the Sway\u2019s on-device presets or update firmware.',
       fix: { id: 'fetch-companion', label: 'Download from Audima (signature-verified)' },
     };
   } catch (err) {
@@ -180,7 +180,7 @@ async function checkDfuDriver() {
       label: 'Firmware-update driver',
       status: 'info',
       detail:
-        'Not installed. Normal play needs no driver; this is only used when updating Sway firmware. Install now or later — AKSWAYJ fetches Audima\u2019s official package.',
+        'Not installed. Normal play needs no driver; this is only used when updating Sway firmware. Install now or later — SwayCommand fetches Audima\u2019s official package.',
       fix: { id: 'install-dfu-driver', label: 'Install DFU driver (official, elevated)' },
     };
   } catch (err) {

@@ -6,7 +6,7 @@
 // the author's own prior project theDAW (https://github.com/gantasmo/theDAW),
 // which this repository records as MIT-licensed in README.md ("theDAW by
 // GANTASMO (MIT)") and docs/RESEARCH.md. Reused here by the same author under
-// those MIT terms; AKSWAYJ is itself MIT (package.json). Files drawn on:
+// those MIT terms; SwayCommand is itself MIT (package.json). Files drawn on:
 //   • src/components/VideoOutput.tsx   — the whole 2D-canvas effect pipeline:
 //       feedback wash, tiling/kaleidoscope/mirror, softEdges gradients, the
 //       radial-spoke wheel, pixelate downscale, glitch slice tearing, rgbGhost
@@ -29,10 +29,11 @@
 //   1. 2D canvas → GPU. Every per-pixel canvas op became a fragment-shader
 //      stage; forward canvas transforms (rotate/scale/clip/drawImage) became
 //      inverse UV maps. The maths and constants are reproduced verbatim.
-//   2. GLSL route: GLSL1 (three.js ShaderMaterial default). The upstream ASCII
-//      shader was `#version 300 es`; it is ported to GLSL1 — `out vec4 O` →
-//      `gl_FragColor`, `texture()` → `texture2D()`, `gl_FragCoord.xy/u_resolution`
-//      → a `varying vec2 vUv`. No array constructors were needed.
+//   2. GLSL route: GLSL3 (GLSL ES 3.00, `glslVersion: THREE.GLSL3` on every
+//      material). The upstream ASCII shader was already `#version 300 es`; it
+//      keeps `texture()` and its own fragment output (`out vec4 O` → `out vec4
+//      fragColor`), and `gl_FragCoord.xy/u_resolution` → an `in vec2 vUv`. No
+//      array constructors were needed.
 //   3. Pass folding. All the cheap per-pixel work lives in four mega-shaders
 //      (geometry+feedback, corruption, the colour grade+blur, and optics+
 //      overlays) with uniform toggles. Only trails/feedback (persistent
@@ -43,13 +44,17 @@
 //      upstream keeps a 60-frame full-resolution ring of canvases. Echo trails
 //      became an exponential accumulator (same operator, see ECHO TRAILS) and
 //      backskip a short tier-scaled ring. Both are called out at their sites.
-//   5. Additions for AKSWAYJ, all marked `// [AKSWAYJ]`: io.beat/io.gestures.pulse
+//   5. Additions for SwayCommand, all marked `// [SwayCommand]`: io.beat/io.gestures.pulse
 //      as extra strobe triggers, an optional palette-driven ASCII accent, an
 //      optional radial mode for the chromatic-aberration offset, and the
 //      audio-sweetening ARM GATE — upstream lets bass push glitch/ghost/split/
 //      warp up from a fader parked at zero, which "autoplays" a deck the VJ has
 //      switched off; here each push is gated on its own fader being > 0. The
 //      push VALUE is upstream's (see the render() block); only the gate is new.
+//      Two rack-native effects are additions outright (no upstream source):
+//      `anaglyph`, a depth-scaled red/cyan stereo split in FRAG_FINAL, and
+//      `mosaic`, a grouted tile quantiser in FRAG_GEO — both marked at their
+//      sites and both taking the same arm-gated bass sweetening.
 //
 // NOT PORTED (out of scope for this rack — they are sources or whole-frame
 // compositors, not the effect decks): equirect projection, stereo SBS/TB,
@@ -84,6 +89,7 @@
 //     mirrorY        false      toggle          VJControls TogglePad "Mirror Y"
 //     kaleidoscope   false      toggle          VJControls TogglePad "Kaleido"
 //     tiling         1          1..8   step 1   Fader "Grid Tiling"
+//     mosaic         0          0..1            [SwayCommand] see MOSAIC at FRAG_GEO
 //     radialSpokes   0          0..24  step 1   Fader "Radial Mirror (Spokes)"
 //     feedback       0.85       0..0.99         Fader "Feedback Wash"
 //     softEdges      true       toggle          TogglePad "Soft Edges"
@@ -95,7 +101,8 @@
 //     chromaAb       0          0..1            Fader "Chroma Ab"
 //     pixelate       0          0..1            Fader "Pixel Destroy"
 //     backskip       0          0..1            Fader "Backskip"
-//     chromaAbRadial false      toggle          [AKSWAYJ] see CHROMA/RGB SPLIT
+//     chromaAbRadial false      toggle          [SwayCommand] see CHROMA/RGB SPLIT
+//     anaglyph       0          0..1            [SwayCommand] see ANAGLYPH at FRAG_FINAL
 //   CHROMATICS
 //     hue            0          0..360 deg      Fader "Hue Cycle"
 //     saturation     100        0..300 %        Fader "Saturation"
@@ -118,21 +125,22 @@
 //     asciiCols      160        40..320 step 1  Fader "Density (cols)"
 //     asciiMono      false      toggle          TogglePad "Mono"
 //     asciiAccent    '#00ff41'  #rrggbb         colour input
-//     asciiPalette   true       toggle          [AKSWAYJ] accent from io.palette
+//     asciiPalette   true       toggle          [SwayCommand] accent from io.palette
 //   GLOBAL
 //     audioReactive  true       toggle          upstream default is FALSE (no
-//                                               mic guaranteed); AKSWAYJ always
+//                                               mic guaranteed); SwayCommand always
 //                                               has an audio engine, so the bass
 //                                               sweetening is armed by default.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Upstream DEFAULT_VJ_STATE values for every key this rack owns (types.ts). */
-const DEFAULTS = Object.freeze({
+export const DEFAULTS = Object.freeze({
   // GEOMETRICS
   mirrorX: false,
   mirrorY: false,
   kaleidoscope: false,
   tiling: 1,
+  mosaic: 0,
   radialSpokes: 0,
   feedback: 0.85,
   softEdges: true,
@@ -145,6 +153,7 @@ const DEFAULTS = Object.freeze({
   pixelate: 0,
   backskip: 0,
   chromaAbRadial: false,
+  anaglyph: 0,
   // CHROMATICS
   hue: 0,
   saturation: 100,
@@ -183,14 +192,27 @@ export const RANGES = Object.freeze({
   ascii: true, asciiMono: true, asciiPalette: true, audioReactive: true,
   chromaAbRadial: true,
   asciiAccent: 'hex',
-  tiling: [1, 8], radialSpokes: [0, 24], feedback: [0, 0.99],
+  tiling: [1, 8], radialSpokes: [0, 24], feedback: [0, 0.99], mosaic: [0, 1],
   glitch: [0, 1], rgbGhost: [0, 1], rgbSplit: [0, 1], waveWarp: [0, 1],
-  chromaAb: [0, 1], pixelate: [0, 1], backskip: [0, 1],
+  chromaAb: [0, 1], pixelate: [0, 1], backskip: [0, 1], anaglyph: [0, 1],
   hue: [0, 360], saturation: [0, 300], contrast: [0, 300], brightness: [0, 200],
   sepia: [0, 1], grayscale: [0, 1], blur: [0, 1],
   echoTrails: [0, 40], strobe: [0, 1], posterizeTime: [1, 60],
   asciiCols: [40, 320],
 });
+
+/**
+ * UI grouping for the rack panel. Lives beside RANGES so the deck list and the
+ * parameter table cannot drift apart: every key here has a RANGES entry, and
+ * every RANGES key appears in exactly one deck.
+ */
+export const DECKS = Object.freeze([
+  { name: 'Geometrics', keys: ['mirrorX', 'mirrorY', 'kaleidoscope', 'softEdges', 'tiling', 'mosaic', 'radialSpokes', 'feedback'] },
+  { name: 'Corruption', keys: ['glitch', 'rgbGhost', 'rgbSplit', 'chromaAb', 'chromaAbRadial', 'anaglyph', 'waveWarp', 'pixelate', 'backskip'] },
+  { name: 'Chromatics', keys: ['hue', 'saturation', 'contrast', 'brightness', 'invert', 'edgeDetect', 'sepia', 'grayscale', 'blur', 'scanlines', 'crt', 'vignette'] },
+  { name: 'Timecode', keys: ['echoTrails', 'strobe', 'posterizeTime', 'audioReactive'] },
+  { name: 'ASCII', keys: ['ascii', 'asciiCols', 'asciiMono', 'asciiAccent', 'asciiPalette'] },
+]);
 
 // ── ASCII constants — AsciilineRenderer.ts, verbatim ────────────────────────
 /** ASCILINE's 93-char ramp, dark (space) to light (@). Verbatim. */
@@ -206,9 +228,12 @@ const MAX_SLICES = 12;
 const TAU = Math.PI * 2;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SHADERS — GLSL1 throughout (three.js ShaderMaterial compiles GLSL1 by default;
-// no `glslVersion` is set anywhere in this file). Every division, pow base and
-// normalize below is guarded: a NaN blanks the frame.
+// SHADERS — GLSL3 (GLSL ES 3.00) throughout: every material below sets
+// `glslVersion: THREE.GLSL3` (through MAT_OPTS), so the vertex stage uses
+// in/out, each fragment stage declares its own `out vec4 fragColor`, and
+// sampling is `texture()`. three.js supplies `#version 300 es`, the precision
+// statements and the position/uv/matrix declarations in its prefix. Every
+// division, pow base and normalize below is guarded: a NaN blanks the frame.
 //
 // Coordinate conventions. The canvas 2D pipeline upstream works in device
 // pixels with y DOWN and the origin top-left; three.js render-target UV has y UP
@@ -219,7 +244,7 @@ const TAU = Math.PI * 2;
 // ─────────────────────────────────────────────────────────────────────────────
 
 const VERT = /* glsl */ `
-  varying vec2 vUv;
+  out vec2 vUv;
   void main() {
     vUv = uv;
     gl_Position = vec4(position.xy, 0.0, 1.0); // fullscreen, no matrices
@@ -229,8 +254,9 @@ const VERT = /* glsl */ `
 const FRAG_COPY = /* glsl */ `
   precision highp float;
   uniform sampler2D tSrc;
-  varying vec2 vUv;
-  void main() { gl_FragColor = vec4(texture2D(tSrc, vUv).rgb, 1.0); }`;
+  in vec2 vUv;
+  out vec4 fragColor;
+  void main() { fragColor = vec4(texture(tSrc, vUv).rgb, 1.0); }`;
 
 // ── ECHO TRAILS ─────────────────────────────────────────────────────────────
 // Upstream (VideoOutput.tsx, "Time-domain Composite Pass"):
@@ -258,11 +284,12 @@ const FRAG_ECHO = /* glsl */ `
   uniform sampler2D tAcc;   // previous accumulator (ping-pong)
   uniform float uAlpha;     // a   = 1 / (N + 1)
   uniform float uAlphaGain; // a*g = a * (1 - (1-a)^(N+1))
-  varying vec2 vUv;
+  in vec2 vUv;
+  out vec4 fragColor;
   void main() {
-    vec3 s = texture2D(tSrc, vUv).rgb;
-    vec3 a = texture2D(tAcc, vUv).rgb;
-    gl_FragColor = vec4(s * uAlphaGain + a * (1.0 - uAlpha), 1.0);
+    vec3 s = texture(tSrc, vUv).rgb;
+    vec3 a = texture(tAcc, vUv).rgb;
+    fragColor = vec4(s * uAlphaGain + a * (1.0 - uAlpha), 1.0);
   }`;
 
 // ── GEOMETRY + FEEDBACK WASH ────────────────────────────────────────────────
@@ -291,6 +318,14 @@ const FRAG_ECHO = /* glsl */ `
 //     out = geo * (1 - 0.95*fb) + prev * 0.95*fb*fb
 //   At the 0.85 default that is 0.1925*geo + 0.6864*prev — a decaying wash, not
 //   a unity-gain feedback loop. Reproduced exactly, fb-squared and all.
+//
+// [SwayCommand] MOSAIC — rack-native, no upstream source; deliberately distinct
+// from pixelate above. The frame is quantised into square tiles (4..64 px,
+// ramped by the fader), each tile samples its own CENTRE, a thin grout line is
+// darkened on the tile borders and each tile takes a subtle brightness
+// variation from a hash of its integer coords, so the result reads as tilework
+// rather than resolution loss. Neutral-skip: uMosCells = (0,0) leaves srcUv
+// untouched and mosShade at exactly 1.0, so the off state is the old shader.
 const FRAG_GEO = /* glsl */ `
   precision highp float;
   uniform sampler2D tSrc;
@@ -301,15 +336,27 @@ const FRAG_GEO = /* glsl */ `
   uniform vec2  uMirror;      // (mirrorX, mirrorY) as 0/1
   uniform float uSoft;        // 0/1
   uniform vec2  uPixCells;    // pixelate cell counts; (0,0) = off
+  uniform vec2  uMosCells;    // [SwayCommand] mosaic tile counts; (0,0) = off
+  uniform float uMosGrout;    // [SwayCommand] grout half-width, tile units
+  uniform float uMosTint;     // [SwayCommand] per-tile brightness amplitude
   uniform float uFbGeo;       // 1 - 0.95*fb
   uniform float uFbPrev;      // 0.95*fb*fb
-  varying vec2 vUv;
+  in vec2 vUv;
+  out vec4 fragColor;
 
   // One black gradient fill: alpha 1 at the edge, 0 from 15% to 85%.
   float softAlpha(float u) {
     float lo = 1.0 - clamp(u / 0.15, 0.0, 1.0);          // 0.15 is a literal: safe
     float hi = clamp((u - 0.85) / 0.15, 0.0, 1.0);
     return clamp(lo + hi, 0.0, 1.0);
+  }
+
+  // [SwayCommand] per-tile hash for the mosaic tint — the same construction
+  // FRAG_FINAL's value noise uses, so the rack keeps a single hash flavour.
+  float hash21(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
   }
 
   void main() {
@@ -342,15 +389,29 @@ const FRAG_GEO = /* glsl */ `
       srcUv = (floor(srcUv * uPixCells) + 0.5) / uPixCells;
     }
 
-    vec3 geo = texture2D(tSrc, srcUv).rgb;
+    // [SwayCommand] mosaic: quantise into square tiles, sample each tile's
+    // CENTRE; the shade term (grout + hashed per-tile tint) multiplies the
+    // fetch below. See the MOSAIC note above FRAG_GEO.
+    float mosShade = 1.0;
+    if (uMosCells.x > 0.0) {
+      vec2 mg = srcUv * uMosCells;
+      vec2 mc = floor(mg);
+      vec2 db = abs(fract(mg) - 0.5);            // 0 at tile centre, 0.5 at border
+      srcUv = (mc + 0.5) / uMosCells;            // tile-centre sample
+      float grout = step(0.5 - uMosGrout, max(db.x, db.y));
+      mosShade = (1.0 - 0.45 * grout) * (1.0 + (hash21(mc) - 0.5) * uMosTint);
+    }
+
+    vec3 geo = texture(tSrc, srcUv).rgb;
+    if (uMosCells.x > 0.0) geo *= mosShade;
 
     if (uSoft > 0.5) {
       geo *= 1.0 - softAlpha(e.x);     // the X gradient fill…
       geo *= 1.0 - softAlpha(e.y);     // …then the Y gradient fill
     }
 
-    vec3 prev = texture2D(tPrev, vUv).rgb;
-    gl_FragColor = vec4(geo * uFbGeo + prev * uFbPrev, 1.0);
+    vec3 prev = texture(tPrev, vUv).rgb;
+    fragColor = vec4(geo * uFbGeo + prev * uFbPrev, 1.0);
   }`;
 
 // ── CORRUPTION (post-geometry canvas stage) ─────────────────────────────────
@@ -420,7 +481,8 @@ const FRAG_CORRUPT = /* glsl */ `
   uniform vec2  uGhostShift;    // (sx, sy) canvas px
   uniform float uStrobe;        // 0/1 — fire this frame
   uniform vec3  uStrobeCol;     // white, or black when invert is on
-  varying vec2 vUv;
+  in vec2 vUv;
+  out vec4 fragColor;
 
   const float TAU = 6.2831853;
 
@@ -434,7 +496,7 @@ const FRAG_CORRUPT = /* glsl */ `
     // uSpokes is >= 2 at the call site, but the guard is UNCONDITIONAL: ANGLE
     // flattens the if-guarded call below into a select on some drivers and
     // then evaluates the untaken side. With uSpokes = 0 that is TAU/0 -> inf,
-    // then mod(inf, 0) -> NaN, and a NaN reaching gl_FragColor blanks the
+    // then mod(inf, 0) -> NaN, and a NaN reaching fragColor blanks the
     // whole frame. (No backticks in this comment: it lives inside a JS
     // template literal, where a backtick would end the shader string.)
     float spokes = max(uSpokes, 2.0);
@@ -476,7 +538,7 @@ const FRAG_CORRUPT = /* glsl */ `
     // first, so anything outside reads black. Masked rather than branched so
     // the function keeps a single exit.
     float inside = step(0.0, u.x) * step(u.x, 1.0) * step(0.0, u.y) * step(u.y, 1.0);
-    return texture2D(tSrc, clamp(u, 0.0, 1.0)).rgb * inside;
+    return texture(tSrc, clamp(u, 0.0, 1.0)).rgb * inside;
   }
 
   vec3 screenBlend(vec3 b, vec3 s) { return b + s - b * s; }
@@ -497,15 +559,15 @@ const FRAG_CORRUPT = /* glsl */ `
 
     if (uStrobe > 0.5) col = mix(col, uStrobeCol, 0.9);
 
-    gl_FragColor = vec4(col, 1.0);
+    fragColor = vec4(col, 1.0);
   }`;
 
 // ── ASCII ───────────────────────────────────────────────────────────────────
-// AsciilineRenderer.ts FRAG, ported GLSL3 → GLSL1:
-//   `#version 300 es` dropped, `out vec4 O` → gl_FragColor, `texture()` →
-//   `texture2D()`, and `gl_FragCoord.xy / u_resolution` → the vUv varying (the
-//   same value; upstream needed the fragcoord form because its quad carried no
-//   attributes). The luma weights, the mono/accent branch and the
+// AsciilineRenderer.ts FRAG, kept GLSL3 (GLSL ES 3.00):
+//   `#version 300 es` is supplied by three.js, `out vec4 O` → `out vec4
+//   fragColor`, `texture()` stays, and `gl_FragCoord.xy / u_resolution` → the
+//   vUv input (the same value; upstream needed the fragcoord form because its
+//   quad carried no attributes). The luma weights, the mono/accent branch and the
 //   `col *= 0.85 + 0.25*u_volume + 0.15*u_bass` audio term are verbatim. The
 //   glyph-index line is the even-spread form `clamp(floor(luma*N), 0, N-1)`,
 //   which gives all 93 glyphs an equal 1/N slice of luma and folds the
@@ -530,7 +592,8 @@ const FRAG_ASCII = /* glsl */ `
   uniform vec3  u_accent;
   uniform float u_bass;
   uniform float u_volume;
-  varying vec2 vUv;
+  in vec2 vUv;
+  out vec4 fragColor;
   void main() {
     vec2 uv = vUv;
     vec2 cell = floor(uv * u_grid);
@@ -542,7 +605,7 @@ const FRAG_ASCII = /* glsl */ `
     for (int y = 0; y < ASCII_TAPS; y++) {
       for (int x = 0; x < ASCII_TAPS; x++) {
         vec2 o = (vec2(float(x), float(y)) - (float(ASCII_TAPS) - 1.0) * 0.5) * step_;
-        src += texture2D(u_source, cuv + o).rgb;
+        src += texture(u_source, cuv + o).rgb;
       }
     }
     src /= float(ASCII_TAPS * ASCII_TAPS);
@@ -557,11 +620,11 @@ const FRAG_ASCII = /* glsl */ `
     // available, check it for the off-by-one variant floor(luma*(N-1)+0.5).
     float idx = clamp(floor(luma * u_n), 0.0, u_n - 1.0);
     vec2 auv = vec2((idx + inCell.x) / u_n, inCell.y);
-    float ink = texture2D(u_atlas, auv).a;
+    float ink = texture(u_atlas, auv).a;
     vec3 col = (u_mono > 0.5) ? (u_accent * ink) : (src * ink);
     // Gentle audio pulse on the ink brightness.
     col *= 0.85 + 0.25 * u_volume + 0.15 * u_bass;
-    gl_FragColor = vec4(col, 1.0);
+    fragColor = vec4(col, 1.0);
   }`;
 
 // ── CHROMATICS + OPTICS (the CSS/SVG filter chain and the DOM overlays) ─────
@@ -630,11 +693,24 @@ const FRAG_ASCII = /* glsl */ `
 // Screening images whose channels are disjoint reduces to taking each channel
 // from its own source, so the three-way blend is exact, not an approximation.
 // feOffset by (dx,dy) means result(p) = in(p - d), hence red samples at -d.
-// [AKSWAYJ] `chromaAbRadial` (default false, off = pure upstream) sends the
+// [SwayCommand] `chromaAbRadial` (default false, off = pure upstream) sends the
 // chromaAb component along the radial direction instead of a fixed diagonal —
 // the plugin registry describes this effect as "radial per-channel RGB offsets"
 // even though the implementation upstream is a uniform feOffset. Off by default
 // so the ported behaviour is what you get unless you ask for the other one.
+//
+// [SwayCommand] ANAGLYPH — rack-native, no upstream source (upstream's stereo
+// SBS/TB compositor is out of scope, see the header). Deliberately distinct
+// from the flat feOffset split above: red is displaced left and slightly down,
+// green+blue (cyan) right and slightly up, and the parallax scales with the
+// distance from a screen-centre convergence plane — zero at the centre, full
+// at the corners — so the separation reads as depth rather than a channel
+// shift. At high drive the red and cyan images also counter-rotate slightly
+// about the centre (uAnaRot ramps cubically, so it only wakes near the top of
+// the fader). The anaglyph taps JOIN the split's own taps, so split+anaglyph
+// together still cost three s3 evaluations; with uAnaPx at (0,0) the tap
+// positions collapse to the split's exact previous expressions, which is the
+// no-op-on-a-uniform branch this always-on pass requires.
 //
 // SCANLINES / CRT / VIGNETTE — the DOM overlays, index.css:
 //   .scanlines-overlay  4px tile, top 2px clear, bottom 2px rgba(0,0,0,0.3),
@@ -665,10 +741,11 @@ const FRAG_GRADE = /* glsl */ `
   uniform mat3  uM2;           // grayscale * sepia
   uniform vec4  uAff;          // (mC,kC) contrast; (mB,kB) brightness+invert
   uniform float uBlurPx;       // fxBlur * 20, in pixels; 0 = off
-  varying vec2 vUv;
+  in vec2 vUv;
+  out vec4 fragColor;
 
   vec3 graded(vec2 uv) {
-    vec3 c = texture2D(tSrc, uv).rgb;
+    vec3 c = texture(tSrc, uv).rgb;
     c = clamp(uM1 * c, 0.0, 1.0);
     c = clamp(c * uAff.x + uAff.y, 0.0, 1.0);   // contrast(), clamped per spec
     c = clamp(c * uAff.z + uAff.w, 0.0, 1.0);   // brightness(), invert folded in
@@ -680,7 +757,7 @@ const FRAG_GRADE = /* glsl */ `
     // One accumulator and one exit on purpose: an early return here makes
     // ANGLE's HLSL translation emit a "potentially uninitialized variable"
     // warning for the synthesised return temp, and that is not a warning worth
-    // shipping. gl_FragColor is written on every path.
+    // shipping. fragColor is written on every path.
     vec3 acc = graded(vUv);
     if (uBlurPx > 0.0) {
       for (int i = 0; i < BLUR_TAPS; i++) {   // constant bound, unrollable
@@ -691,7 +768,7 @@ const FRAG_GRADE = /* glsl */ `
       }
       acc /= float(BLUR_TAPS + 1);            // BLUR_TAPS >= 4: never zero
     }
-    gl_FragColor = vec4(acc, 1.0);
+    fragColor = vec4(acc, 1.0);
   }`;
 
 /**
@@ -708,13 +785,16 @@ const FRAG_FINAL = /* glsl */ `
   uniform float uWarpFreq;     // 0.01 + waveWarp * 0.04, cycles/pixel
   uniform vec2  uSplitPx;      // (rgbSplit*100, 0)
   uniform vec2  uChromaPx;     // (chromaAb*20, chromaAb*15)
-  uniform float uChromaRadial; // 0/1 [AKSWAYJ]
+  uniform float uChromaRadial; // 0/1 [SwayCommand]
+  uniform vec2  uAnaPx;        // [SwayCommand] red/cyan parallax at full depth, canvas px; (0,0) = off
+  uniform float uAnaRot;       // [SwayCommand] per-eye counter-rotation, radians
   uniform float uScan;         // 0/1
   uniform float uCrt;          // 0/1
   uniform float uCrtAlpha;     // 0.1 * animated opacity
   uniform vec3  uCrtBar;       // (y0 canvas px, height px, on)
   uniform float uVig;          // 0/1
-  varying vec2 vUv;
+  in vec2 vUv;
+  out vec4 fragColor;
 
   // ---- one tap of the graded + blurred image FRAG_GRADE produced ----
   // gradeRT is ClampToEdge, so the edge kernel, the warp and the split all get
@@ -722,7 +802,7 @@ const FRAG_FINAL = /* glsl */ `
   // default (edgeMode="duplicate"); feOffset/feDisplacementMap would strictly
   // give transparent black past the filter region, but a hard black seam under
   // a 150 px warp looks like a bug, so the clamp is used throughout.
-  vec3 s1(vec2 uv) { return texture2D(tSrc, uv).rgb; }
+  vec3 s1(vec2 uv) { return texture(tSrc, uv).rgb; }
 
   // ---- feConvolveMatrix -1 -1 -1 / -1 8 -1 / -1 -1 -1, divisor 1 ----
   vec3 s2(vec2 uv) {
@@ -783,7 +863,7 @@ const FRAG_FINAL = /* glsl */ `
     // ---- feOffset red/blue split, screen-recombined ----
     vec2 dPx = uSplitPx + uChromaPx;
     if (uChromaRadial > 0.5) {
-      // [AKSWAYJ] send the chromaAb term along the radius instead
+      // [SwayCommand] send the chromaAb term along the radius instead
       vec2 rel = (vUv - 0.5) * uRes;
       float len = length(rel);
       // Unconditional guard rather than a ?: — both sides of a GLSL ternary are
@@ -796,9 +876,27 @@ const FRAG_FINAL = /* glsl */ `
     }
 
     vec3 col;
-    if (dot(dPx, dPx) > 0.0) {
+    // [SwayCommand] the anaglyph taps ride the split's; see ANAGLYPH above.
+    if (dot(dPx, dPx) > 0.0 || uAnaPx.x > 0.0) {
       vec2 d = vec2(dPx.x, -dPx.y) * uTexel;   // canvas px -> uv (y flips)
-      col = vec3(s3(vUv - d).r, s3(vUv).g, s3(vUv + d).b);
+      vec2 uvR = vUv;
+      vec2 uvC = vUv;
+      if (uAnaPx.x > 0.0) {
+        vec2 rel = (vUv - 0.5) * uRes;
+        // parallax grows with distance from the screen-centre convergence
+        // plane (same normalisation as the radial chromaAb / vignette)
+        float depth = clamp(length(rel) / max(0.5 * length(uRes), 1.0), 0.0, 1.0);
+        // sampling red at +a displays the red image shifted by -a — left and
+        // down in y-up uv space; cyan mirrors it to the right and up
+        vec2 a = uAnaPx * depth * uTexel;
+        // slight opposing per-eye rotation about the centre at high drive
+        float cA = cos(uAnaRot), sA = sin(uAnaRot);
+        vec2 relR = vec2(cA * rel.x - sA * rel.y, sA * rel.x + cA * rel.y);
+        vec2 relC = vec2(cA * rel.x + sA * rel.y, -sA * rel.x + cA * rel.y);
+        uvR = relR * uTexel + 0.5 + a;
+        uvC = relC * uTexel + 0.5 - a;
+      }
+      col = vec3(s3(uvR - d).r, s3(uvC).g, s3(uvC + d).b);
     } else {
       col = s3(vUv);
     }
@@ -827,7 +925,7 @@ const FRAG_FINAL = /* glsl */ `
       col *= 1.0 - a;
     }
 
-    gl_FragColor = vec4(col, 1.0);
+    fragColor = vec4(col, 1.0);
   }`;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -846,7 +944,7 @@ const TIERS = {
  * NaN HYGIENE, not defensive noise. `io` is a shared object the engine mutates
  * in place, so a band that has not been written yet reads back `undefined`, and
  * `undefined * undefined * undefined` is NaN. That NaN would reach uZoom, which
- * the geometry shader DIVIDES by, and one NaN in gl_FragColor blanks the whole
+ * the geometry shader DIVIDES by, and one NaN in fragColor blanks the whole
  * frame. The comparison form is deliberate: `v > 0` is false for both NaN and
  * undefined, so either falls to 0 instead of propagating. The clamp to 1 is
  * free here and matches the 0..1 range the scene contract documents.
@@ -916,7 +1014,8 @@ export function createFxRack(THREE, renderer, width, height, opts) {
   quad.frustumCulled = false;          // clip-space quad, skip culling
   passScene.add(quad);
 
-  const MAT_OPTS = { depthTest: false, depthWrite: false };
+  // GLSL ES 3.00 for every pass — see SHADERS above.
+  const MAT_OPTS = { depthTest: false, depthWrite: false, glslVersion: THREE.GLSL3 };
 
   const copyMat = new THREE.ShaderMaterial({
     ...MAT_OPTS,
@@ -940,6 +1039,8 @@ export function createFxRack(THREE, renderer, width, height, opts) {
       uZoom: { value: 1 }, uTiles: { value: 1 }, uKaleido: { value: 0 },
       uMirror: { value: new THREE.Vector2(0, 0) }, uSoft: { value: 0 },
       uPixCells: { value: new THREE.Vector2(0, 0) },
+      uMosCells: { value: new THREE.Vector2(0, 0) },
+      uMosGrout: { value: 0 }, uMosTint: { value: 0 },
       uFbGeo: { value: 1 }, uFbPrev: { value: 0 },
     },
     vertexShader: VERT,
@@ -986,6 +1087,8 @@ export function createFxRack(THREE, renderer, width, height, opts) {
       uSplitPx: { value: new THREE.Vector2(0, 0) },
       uChromaPx: { value: new THREE.Vector2(0, 0) },
       uChromaRadial: { value: 0 },
+      uAnaPx: { value: new THREE.Vector2(0, 0) },
+      uAnaRot: { value: 0 },
       uScan: { value: 1 }, uCrt: { value: 1 }, uCrtAlpha: { value: 0.1 },
       uCrtBar: { value: new THREE.Vector3(0, 0, 0) },
       uVig: { value: 1 },
@@ -1189,6 +1292,8 @@ export function createFxRack(THREE, renderer, width, height, opts) {
       let cGhost = p.rgbGhost;
       let cSplit = p.rgbSplit;
       let cWave = p.waveWarp;
+      let cAnaglyph = p.anaglyph;   // [SwayCommand] rack-native, see ANAGLYPH
+      let cMosaic = p.mosaic;       // [SwayCommand] rack-native, see MOSAIC
       let cBackskip = p.backskip;
       let zoomScale = 1.0;
       let isAudioStrobe = false;
@@ -1196,7 +1301,7 @@ export function createFxRack(THREE, renderer, width, height, opts) {
       if (p.audioReactive) {
         // Bass-driven sweetening of the corruption effects. The pushed VALUES
         // are VideoOutput.tsx verbatim: max(fader, powBass * K) with K = 0.9 /
-        // 0.7 / 0.5 / 0.4. [AKSWAYJ] only the `p.X > 0` ARM GATE is added, so a
+        // 0.7 / 0.5 / 0.4. [SwayCommand] only the `p.X > 0` ARM GATE is added, so a
         // deck the VJ has parked at zero stays fully off instead of autoplaying
         // with the beat.
         //
@@ -1208,13 +1313,17 @@ export function createFxRack(THREE, renderer, width, height, opts) {
         if (p.rgbGhost > 0) cGhost = Math.max(cGhost, powBass * 0.7);
         if (p.rgbSplit > 0) cSplit = Math.max(cSplit, powBass * 0.5);
         if (p.waveWarp > 0) cWave = Math.max(cWave, powBass * 0.4);
+        // [SwayCommand] the two rack-native decks join the same arm-gated
+        // pattern: anaglyph rides with split's 0.5, mosaic with warp's 0.4.
+        if (p.anaglyph > 0) cAnaglyph = Math.max(cAnaglyph, powBass * 0.5);
+        if (p.mosaic > 0) cMosaic = Math.max(cMosaic, powBass * 0.4);
 
         // Pulse-zoom only when feedback/geometry are actually in play.
         if (p.feedback > 0 || p.kaleidoscope || p.tiling > 1 || p.radialSpokes >= 2) {
           zoomScale = 1.0 + powBass * 0.25;
         }
         if (p.strobe > 0 && powBass > 0.5) isAudioStrobe = true;
-        // [AKSWAYJ] upstream had no beat detector or gesture rig; AKSWAYJ does,
+        // [SwayCommand] upstream had no beat detector or gesture rig; SwayCommand does,
         // and a strobe deck that ignores them would feel dead on this hardware.
         if (p.strobe > 0 && (beat > 0.6 || pulse > 0.6)) isAudioStrobe = true;
         if (cBackskip > 0 && powBass > 0.8) cBackskip = Math.max(cBackskip, 0.8);
@@ -1283,7 +1392,7 @@ export function createFxRack(THREE, renderer, width, height, opts) {
       const pixScale = 1.0 - p.pixelate * 0.96;        // 1.0 down to 0.04
       const needGeo =
         p.feedback > 0 || tiles > 1 || p.kaleidoscope || p.mirrorX || p.mirrorY ||
-        p.softEdges || p.pixelate > 0 || zoomScale !== 1.0;
+        p.softEdges || p.pixelate > 0 || p.mosaic > 0 || zoomScale !== 1.0;
       if (needGeo) {
         const gu = geoMat.uniforms;
         gu.tSrc.value = src;
@@ -1300,6 +1409,19 @@ export function createFxRack(THREE, renderer, width, height, opts) {
           );
         } else {
           gu.uPixCells.value.set(0, 0);
+        }
+        // [SwayCommand] mosaic: square tiles ramp 4..64 px with the (bass-
+        // sweetened) fader; grout is 1..2 px a side, tint a subtle ±8%.
+        if (p.mosaic > 0) {
+          const mosCellPx = 4 + cMosaic * 60;
+          gu.uMosCells.value.set(
+            Math.max(2, Math.floor(W / mosCellPx)),
+            Math.max(2, Math.floor(H / mosCellPx)),
+          );
+          gu.uMosGrout.value = (1 + cMosaic) / mosCellPx;
+          gu.uMosTint.value = 0.16;
+        } else {
+          gu.uMosCells.value.set(0, 0);
         }
         gu.uFbGeo.value = 1 - 0.95 * p.feedback;
         gu.uFbPrev.value = 0.95 * p.feedback * p.feedback;
@@ -1341,10 +1463,12 @@ export function createFxRack(THREE, renderer, width, height, opts) {
         const cu = corruptMat.uniforms;
         cu.tSrc.value = src;
         cu.uSpokes.value = spokes >= 2 ? spokes : 0;
-        // baseRotation = (timestamp/1000)*0.15, plus (mid+high)*PI when reactive
-        let baseRotation = (clockMs / 1000) * 0.15;
-        if (p.audioReactive) baseRotation += (mid + high) * Math.PI;
-        cu.uSpokeRot.value = baseRotation % TAU;
+        // Upstream: baseRotation = (timestamp/1000)*0.15, plus (mid+high)*PI
+        // when reactive. SwayCommand holds the wheel still — nothing in the
+        // rack auto-rotates (user rule) — so the spoke pattern is static and
+        // only the spoke count moves.
+        const baseRotation = 0;
+        cu.uSpokeRot.value = baseRotation;
         cu.uSliceCount.value = sliceCount;
         cu.uGhost.value = cGhost;
         cu.uGhostShift.value.set(cGhost * W * 0.08, cGhost * H * 0.02);
@@ -1364,7 +1488,7 @@ export function createFxRack(THREE, renderer, width, height, opts) {
         au.u_grid.value.set(cols, rows);
         au.u_source.value = src;
         au.u_mono.value = p.asciiMono ? 1 : 0;
-        // [AKSWAYJ] the mono accent is the one colour this rack injects rather
+        // [SwayCommand] the mono accent is the one colour this rack injects rather
         // than grades, so it is the one place io.palette can drive it. With
         // asciiPalette off it falls back to the upstream constant #00ff41.
         if (p.asciiPalette && io && io.palette && io.palette[4]) {
@@ -1401,6 +1525,10 @@ export function createFxRack(THREE, renderer, width, height, opts) {
       fu.uSplitPx.value.set(cSplit * 100, 0);
       fu.uChromaPx.value.set(p.chromaAb * 20, p.chromaAb * 15);
       fu.uChromaRadial.value = p.chromaAbRadial ? 1 : 0;
+      // [SwayCommand] anaglyph drive: (x,y) parallax in canvas px at full
+      // depth, plus the counter-rotation — cubic so it only wakes near 1.
+      fu.uAnaPx.value.set(cAnaglyph * 30, cAnaglyph * 10);
+      fu.uAnaRot.value = cAnaglyph * cAnaglyph * cAnaglyph * 0.05;
       fu.uScan.value = p.scanlines ? 1 : 0;
       fu.uCrt.value = p.crt ? 1 : 0;
       fu.uVig.value = p.vignette ? 1 : 0;

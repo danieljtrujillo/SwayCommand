@@ -1,4 +1,4 @@
-// AKSWAYJ synth — a Vital-class wavetable synthesizer in Web Audio.
+// SwayCommand synth — a Vital-class wavetable synthesizer in Web Audio.
 //
 // WHY VITAL: Audima's downloads page recommends Vital to first-timers ("Vital
 // Synth Pack Free · Best for Beginners") and ships a Sway project for it. This

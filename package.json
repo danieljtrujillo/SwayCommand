@@ -1,6 +1,6 @@
 {
   "name": "swaycommand",
-  "productName": "AKSWAYJ",
+  "productName": "SwayCommand",
   "version": "0.1.0",
   "description": "SwayCommand — gesture VJ instrument and performance surface for the Audima Labs Sway.",
   "author": "dtrujillostyle@gmail.com",
@@ -15,9 +15,9 @@
     "dist:linux": "npm run build:icon && npm run build:renderer && electron-builder --linux"
   },
   "devDependencies": {
-    "electron": "^38.0.0",
+    "electron": "^43.4.1",
     "electron-builder": "^26.0.0",
-    "esbuild": "^0.25.0",
-    "three": "^0.180.0"
+    "esbuild": "^0.28.2",
+    "three": "^0.185.1"
   }
 }

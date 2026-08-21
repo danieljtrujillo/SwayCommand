@@ -1,0 +1,213 @@
+{
+  "format": "sway",
+  "format_version": 1,
+  "app_version": "",
+  "audio_mode": "linked",
+  "created_at": null,
+  "modified_at": null,
+  "project": {
+    "meta": {
+      "id": "beam-sixteen",
+      "name": "Beam Sixteen",
+      "description": "A love letter to the hardware: sixteen light columns, one per Sway IR sensor. Sweep your hand along the surface and watch the row answer; strike pads to detonate single beams.",
+      "author": "",
+      "vibe": "anthemic",
+      "bpmHint": 0,
+      "pairsWith": null,
+      "template": true
+    },
+    "palette": [
+      "#dbe9ff",
+      "#9fc5ff",
+      "#5e8fce",
+      "#2de1fc",
+      "#f4f9ff"
+    ],
+    "engine": {
+      "quality": "med",
+      "fxEnabled": false,
+      "autoVJ": {
+        "enabled": false,
+        "pool": [
+          "beams",
+          "nebula"
+        ],
+        "minHold": 30,
+        "maxHold": 60,
+        "fadeTime": 6
+      },
+      "start": {
+        "scene": "beams"
+      }
+    },
+    "fx": {
+      "params": {}
+    },
+    "synth": {
+      "enabled": true,
+      "preset": "Init",
+      "patch": null
+    },
+    "media": [],
+    "sampler": {
+      "kit": {
+        "version": 1,
+        "pads": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      "knobs": {
+        "master": 0.5,
+        "cutoff": 0.5,
+        "rate": 0.5,
+        "send": 0.5
+      }
+    },
+    "timeline": {
+      "loop": {
+        "enabled": false,
+        "start": 0,
+        "end": 0
+      },
+      "locators": [],
+      "tracks": [
+        {
+          "id": "audio-1",
+          "type": "audio",
+          "name": "Audio",
+          "gain": 1,
+          "muted": false,
+          "clips": []
+        },
+        {
+          "id": "visual-1",
+          "type": "visual",
+          "name": "Scenes",
+          "clips": []
+        }
+      ]
+    },
+    "assignments": {
+      "version": 1,
+      "noteRouting": {
+        "synth": "unassigned"
+      },
+      "pads": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        {
+          "type": "scene",
+          "scene": "beams",
+          "transition": {
+            "type": "cut",
+            "duration": 0
+          }
+        },
+        {
+          "type": "scene",
+          "scene": "nebula",
+          "transition": {
+            "type": "cut",
+            "duration": 0
+          }
+        },
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "knobs": [
+        {
+          "target": "engine:hue",
+          "min": 0,
+          "max": 1,
+          "curve": "detent"
+        },
+        {
+          "target": "engine:fadeTime",
+          "min": 1,
+          "max": 8,
+          "curve": "linear"
+        },
+        null,
+        null,
+        null,
+        null,
+        null,
+        {
+          "target": "sampler:master",
+          "min": 0,
+          "max": 1,
+          "curve": "linear"
+        }
+      ],
+      "buttons": [
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        }
+      ],
+      "gestures": []
+    },
+    "midiOverrides": {}
+  }
+}

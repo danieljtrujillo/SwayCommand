@@ -1,4 +1,4 @@
-// AKSWAYJ main process — window lifecycle, permissions, IPC surface.
+// SwayCommand main process — window lifecycle, permissions, IPC surface.
 
 'use strict';
 
@@ -9,6 +9,7 @@ const { app, BrowserWindow, desktopCapturer, dialog, ipcMain, session, shell } =
 const doctor = require('./doctor');
 const audima = require('./audima');
 const driver = require('./driver-install');
+const projectfile = require('./projectfile');
 const { APP } = require('../shared/constants');
 
 let win = null;
@@ -64,26 +65,6 @@ function writeSettings(patch) {
   fs.mkdirSync(app.getPath('userData'), { recursive: true });
   fs.writeFileSync(settingsPath(), JSON.stringify(merged, null, 2));
   return merged;
-}
-
-function projectsDir() {
-  // package root in dev; resources/app.asar root when packaged
-  return path.join(__dirname, '..', '..', 'projects');
-}
-
-function listProjects() {
-  const dir = projectsDir();
-  const index = JSON.parse(fs.readFileSync(path.join(dir, 'index.json'), 'utf8'));
-  return index.order
-    .map((id) => {
-      try {
-        return JSON.parse(fs.readFileSync(path.join(dir, `${id}.json`), 'utf8'));
-      } catch (err) {
-        console.error(`[projects] failed to load ${id}:`, err.message);
-        return null;
-      }
-    })
-    .filter(Boolean);
 }
 
 // --- audio files ------------------------------------------------------------
@@ -170,9 +151,12 @@ function readDoc(id) {
 }
 
 function createWindow() {
+  // Verification hook: SWAYCOMMAND_WINDOW=960x600 forces an initial size so the
+  // narrow-window layout can be screenshot-tested headlessly.
+  const sizeOverride = /^(\d+)x(\d+)$/.exec(process.env.SWAYCOMMAND_WINDOW || '');
   win = new BrowserWindow({
-    width: 1440,
-    height: 900,
+    width: sizeOverride ? Number(sizeOverride[1]) : 1440,
+    height: sizeOverride ? Number(sizeOverride[2]) : 900,
     minWidth: 960,
     minHeight: 600,
     backgroundColor: '#05060a',
@@ -190,16 +174,16 @@ function createWindow() {
   win.once('ready-to-show', () => win.show());
 
   const query = {};
-  if (process.env.AKSWAYJ_AUTOPLAY) query.autoplay = process.env.AKSWAYJ_AUTOPLAY;
-  if (process.env.AKSWAYJ_SCENE) query.scene = process.env.AKSWAYJ_SCENE;
+  if (process.env.SWAYCOMMAND_AUTOPLAY) query.autoplay = process.env.SWAYCOMMAND_AUTOPLAY;
+  if (process.env.SWAYCOMMAND_SCENE) query.scene = process.env.SWAYCOMMAND_SCENE;
   win.loadFile(path.join(__dirname, '..', '..', 'dist', 'index.html'), { query });
 
-  // DOM probe for automated verification: AKSWAYJ_PROBE=<js expression>
-  if (process.env.AKSWAYJ_PROBE) {
+  // DOM probe for automated verification: SWAYCOMMAND_PROBE=<js expression>
+  if (process.env.SWAYCOMMAND_PROBE) {
     win.webContents.once('did-finish-load', () => {
       setTimeout(async () => {
         try {
-          const r = await win.webContents.executeJavaScript(process.env.AKSWAYJ_PROBE);
+          const r = await win.webContents.executeJavaScript(process.env.SWAYCOMMAND_PROBE);
           console.log('[probe]', typeof r === 'string' ? r : JSON.stringify(r));
         } catch (err) {
           console.error('[probe] failed:', err.message);
@@ -208,15 +192,15 @@ function createWindow() {
     });
   }
 
-  // Screenshot mode for automated verification: AKSWAYJ_SHOT=<out.png>
-  if (process.env.AKSWAYJ_SHOT) {
-    const delay = Number(process.env.AKSWAYJ_SHOT_DELAY || 5000);
+  // Screenshot mode for automated verification: SWAYCOMMAND_SHOT=<out.png>
+  if (process.env.SWAYCOMMAND_SHOT) {
+    const delay = Number(process.env.SWAYCOMMAND_SHOT_DELAY || 5000);
     win.webContents.once('did-finish-load', () => {
       setTimeout(async () => {
         try {
           const img = await win.webContents.capturePage();
-          fs.writeFileSync(process.env.AKSWAYJ_SHOT, img.toPNG());
-          console.log(`[shot] saved ${process.env.AKSWAYJ_SHOT}`);
+          fs.writeFileSync(process.env.SWAYCOMMAND_SHOT, img.toPNG());
+          console.log(`[shot] saved ${process.env.SWAYCOMMAND_SHOT}`);
         } catch (err) {
           console.error('[shot] failed:', err);
         }
@@ -292,7 +276,71 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.handle('projects:list', () => listProjects());
+  // --- .sway project files ---
+  ipcMain.handle('project:openDialog', async () => {
+    const settings = readSettings();
+    const result = await dialog.showOpenDialog(win, {
+      title: 'Open project',
+      defaultPath: settings.lastProjectDir || projectfile.defaultProjectsDir(),
+      properties: ['openFile'],
+      filters: [{ name: 'Sway Project', extensions: ['sway'] }],
+    });
+    if (result.canceled || !result.filePaths.length) return null;
+    writeSettings({ lastProjectDir: path.dirname(result.filePaths[0]) });
+    return { path: result.filePaths[0] };
+  });
+
+  ipcMain.handle('project:saveDialog', async (_e, suggestedName) => {
+    const settings = readSettings();
+    const dir = settings.lastProjectDir || projectfile.defaultProjectsDir();
+    fs.mkdirSync(dir, { recursive: true });
+    const base = String(suggestedName || 'Untitled').replace(/[<>:"/\\|?*]/g, '');
+    const result = await dialog.showSaveDialog(win, {
+      title: 'Save project',
+      defaultPath: path.join(dir, `${base}.sway`),
+      filters: [{ name: 'Sway Project', extensions: ['sway'] }],
+    });
+    if (result.canceled || !result.filePath) return null;
+    const filePath = result.filePath.toLowerCase().endsWith('.sway') ? result.filePath : `${result.filePath}.sway`;
+    writeSettings({ lastProjectDir: path.dirname(filePath) });
+    return { path: filePath };
+  });
+
+  ipcMain.handle('project:read', (_e, filePath) => {
+    const result = projectfile.readProject(filePath);
+    const settings = readSettings();
+    writeSettings({
+      recentProjects: projectfile.pushRecent(settings.recentProjects, {
+        path: result.path,
+        name: result.doc.project.meta.name,
+      }),
+    });
+    return result;
+  });
+
+  ipcMain.handle('project:write', (_e, filePath, doc) => {
+    const result = projectfile.writeProject(filePath, doc);
+    const settings = readSettings();
+    writeSettings({
+      recentProjects: projectfile.pushRecent(settings.recentProjects, {
+        path: result.path,
+        name: (doc && doc.project && doc.project.meta && doc.project.meta.name) || path.basename(result.path, '.sway'),
+      }),
+    });
+    return result;
+  });
+
+  ipcMain.handle('project:recent', () => {
+    const settings = readSettings();
+    const pruned = projectfile.pruneRecents(settings.recentProjects);
+    if ((settings.recentProjects || []).length !== pruned.length) writeSettings({ recentProjects: pruned });
+    return pruned;
+  });
+
+  ipcMain.handle('project:templates', () => projectfile.listTemplates());
+  ipcMain.handle('project:readTemplate', (_e, id) => projectfile.readTemplate(id));
+  ipcMain.handle('files:statAudio', (_e, filePath) => projectfile.statAudio(filePath, MAX_AUDIO_BYTES));
+
   ipcMain.handle('docs:list', () => listDocs());
   ipcMain.handle('docs:read', (_e, id) => readDoc(id));
   ipcMain.handle('files:pickAudio', () => pickAudioFiles());

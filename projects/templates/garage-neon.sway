@@ -1,0 +1,237 @@
+{
+  "format": "sway",
+  "format_version": 1,
+  "app_version": "",
+  "audio_mode": "linked",
+  "created_at": null,
+  "modified_at": null,
+  "project": {
+    "meta": {
+      "id": "garage-neon",
+      "name": "Garage Neon",
+      "description": "Built to run alongside Audima's official Ableton Garage demo pack. Skippy two-step energy: ribbons chase your hand, beams answer the kick, hot pink on deep violet.",
+      "author": "",
+      "vibe": "club",
+      "bpmHint": 132,
+      "pairsWith": "Audima Ableton Garage demo pack",
+      "template": true
+    },
+    "palette": [
+      "#ff2d95",
+      "#7a0bc0",
+      "#2de1fc",
+      "#ff6b35",
+      "#f9f871"
+    ],
+    "engine": {
+      "quality": "med",
+      "fxEnabled": false,
+      "autoVJ": {
+        "enabled": true,
+        "pool": [
+          "ribbons",
+          "valley",
+          "lattice",
+          "beams",
+          "swarm"
+        ],
+        "minHold": 16,
+        "maxHold": 32,
+        "fadeTime": 3
+      },
+      "start": {
+        "scene": "ribbons"
+      }
+    },
+    "fx": {
+      "params": {}
+    },
+    "synth": {
+      "enabled": true,
+      "preset": "Init",
+      "patch": null
+    },
+    "media": [],
+    "sampler": {
+      "kit": {
+        "version": 1,
+        "pads": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      "knobs": {
+        "master": 0.5,
+        "cutoff": 0.5,
+        "rate": 0.5,
+        "send": 0.5
+      }
+    },
+    "timeline": {
+      "loop": {
+        "enabled": false,
+        "start": 0,
+        "end": 0
+      },
+      "locators": [],
+      "tracks": [
+        {
+          "id": "audio-1",
+          "type": "audio",
+          "name": "Audio",
+          "gain": 1,
+          "muted": false,
+          "clips": []
+        },
+        {
+          "id": "visual-1",
+          "type": "visual",
+          "name": "Scenes",
+          "clips": []
+        }
+      ]
+    },
+    "assignments": {
+      "version": 1,
+      "noteRouting": {
+        "synth": "unassigned"
+      },
+      "pads": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        {
+          "type": "scene",
+          "scene": "ribbons",
+          "transition": {
+            "type": "cut",
+            "duration": 0
+          }
+        },
+        {
+          "type": "scene",
+          "scene": "valley",
+          "transition": {
+            "type": "cut",
+            "duration": 0
+          }
+        },
+        {
+          "type": "scene",
+          "scene": "lattice",
+          "transition": {
+            "type": "cut",
+            "duration": 0
+          }
+        },
+        {
+          "type": "scene",
+          "scene": "beams",
+          "transition": {
+            "type": "cut",
+            "duration": 0
+          }
+        },
+        {
+          "type": "scene",
+          "scene": "swarm",
+          "transition": {
+            "type": "cut",
+            "duration": 0
+          }
+        },
+        null,
+        null,
+        null
+      ],
+      "knobs": [
+        {
+          "target": "engine:hue",
+          "min": 0,
+          "max": 1,
+          "curve": "detent"
+        },
+        {
+          "target": "engine:fadeTime",
+          "min": 1,
+          "max": 8,
+          "curve": "linear"
+        },
+        null,
+        null,
+        null,
+        null,
+        null,
+        {
+          "target": "sampler:master",
+          "min": 0,
+          "max": 1,
+          "curve": "linear"
+        }
+      ],
+      "buttons": [
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        },
+        {
+          "cc": null,
+          "channel": null,
+          "action": null
+        }
+      ],
+      "gestures": []
+    },
+    "midiOverrides": {}
+  }
+}
