@@ -1,10 +1,12 @@
-// Nature's Tomb — four organisms under dark-field light on one plate: a CELL
-// LINE that cleaves from a zygote to a blastula and then morphs on through the
-// single-celled protists into primitive multicellular colonies, a SLIME MOLD
-// foraging across its dish, a MYCELIUM growing out from a spore, and a DOUBLE
-// HELIX of B-form DNA. One knob picks the organism, one knob and the strikes
-// drive its development, one knob picks the species, sway morphs whichever
-// generator is on screen.
+// Nature's Tomb — seven organisms under dark-field light on one plate, in the
+// order of life and then its end: a DOUBLE HELIX of B-form DNA, a CELL LINE
+// that cleaves from a zygote to a blastula and then morphs on through the
+// single-celled protists into primitive multicellular colonies, a MYCELIUM
+// growing out from a spore, a SLIME MOLD foraging across its dish — and then
+// the TOXIN wrecking the molecule, PHAGOCYTOSIS consuming the cell, and
+// DECOMPOSITION taking the body. One knob picks the organism, one knob and the
+// strikes drive its development, one knob picks the species, sway morphs
+// whichever generator is on screen.
 //
 //   COLD OPEN   The plate is DARK until the show starts — the first beat the
 //               analyser hears, the transport playing, or any pad — and then
@@ -13,8 +15,9 @@
 //               the opening element; from there the performer develops it
 //               onward (the knob or the strikes), and the next organism on the
 //               knob is the cell.
-//   ORGANISM    KNOB 6 (io.knobs[5]) picks it in quarter turns, IN THE ORDER
-//               OF LIFE — DOUBLE HELIX, CELL LINE, MYCELIUM, SLIME MOLD — with
+//   ORGANISM    KNOB 6 (io.knobs[5]) picks it in seven bands, IN THE ORDER OF
+//               LIFE AND THEN ITS END — DOUBLE HELIX, CELL LINE, MYCELIUM,
+//               SLIME MOLD, TOXIN, PHAGOCYTOSIS, DECOMPOSITION — with
 //               a little hysteresis at the band edges. The selection is
 //               smoothed with a 0.15 s time constant, so the dissolve runs
 //               exactly as fast as the knob is turned: a flick cuts, a slow
@@ -26,8 +29,8 @@
 //               eases over ~1.3 s so every stage plays out. Driving it DOWN
 //               reverses the development. The stage count is the organism's
 //               own — sixteen for the cell line, three for the helix, six for
-//               each simulation — so one strike always means one step of what
-//               you are looking at.
+//               each simulation and for each of the three end stages — so one
+//               strike always means one step of what you are looking at.
 //   SPECIES     KNOB 7 (io.knobs[6]) picks one of eight seeded parameter sets
 //               for the organism on screen (quantized with hysteresis, so the
 //               knob is a selector, not a smear). It is the "no two runs look
@@ -207,6 +210,74 @@
 //               overwound, writhing supercoil. NOTHING SPINS: the geometry is
 //               static and the hand's X turns the molecule about its own axis,
 //               so the apparent rotation is always the performer's.
+//   TOXIN       The same B-form helix, and seven real molecules built from
+//               their own atom positions: four of 2,3,7,8-TCDD (dibenzo-p-
+//               dioxin — three fused rings with two oxygens bridging the
+//               middle one, chlorinated at the four outer positions, planar)
+//               and three of DDT (a tetrahedral carbon carrying a
+//               trichloromethyl group, a hydrogen and two para-chlorophenyl
+//               rings twisted against each other). Bond lengths are the real
+//               ones — aromatic C-C 1.40 Å, C-O 1.38, C-Cl 1.74, sp3 C-C 1.54
+//               — drawn at the MOLECULE'S OWN SCALE against the helix, so a
+//               dioxin is the width of a base pair because that is what it is.
+//               Atoms are ball impostors shaded off their own normal, coloured
+//               by element from the palette; bonds are sticks. The molecules
+//               drift in from the dark on a slow wander and TUMBLE ONLY UNDER
+//               THE HAND AND THE SWAY — nothing here turns on a clock. The
+//               development is the attack, and every stage is a real lesion:
+//               ADDUCTS dock onto the bases and the backbone; the two dioxins
+//               INTERCALATE, wedging their step of the base stack open by a
+//               full rise and unwinding the duplex locally by 26°, eased over
+//               the neighbouring pairs so the backbones bend round the wedge
+//               rather than kink; three NICKS cut one backbone each (a cut
+//               segment's ends draw into its middle, so the strand frays and
+//               parts instead of vanishing in a frame); then two DOUBLE-STRAND
+//               BREAKS at the intercalation sites, and the three fragments
+//               carry apart — each is displaced and tilted about its own fixed
+//               axis by the development, with a slow wander once loose, and
+//               whatever molecule docked on a fragment rides it. Through all
+//               of it the molecule SICKENS: a per-base damage level, carried in
+//               the segment's own attribute, tints the backbone and the bases
+//               toward the palette's cold end and dims them, so the wreckage
+//               is worst where the molecules struck. Sway is the torsion, as on
+//               the clean helix; the hand's X is the azimuth.
+//   PHAGOCYTOSIS  A macrophage consuming a smaller cell. One smooth union
+//               marched on the quad: an amoeboid body under slow streaming
+//               bulges (a translation through the noise domain, not a turn),
+//               up to seven PSEUDOPODS — each a chain of three tapered
+//               capsules, bounded by its own sphere so the march tests it only
+//               where it might matter — and the phagosome. The development
+//               runs the sequence: the prey drifts in from the dark, the
+//               pseudopods reach out and WRAP round it (their tips travel
+//               along an arc about the prey), the membrane SEALS behind it —
+//               the phagosome is a sphere grown from nothing and blended into
+//               the body, so the prey is enclosed rather than covered — the
+//               pseudopods draw back, the vacuole is pulled INSIDE, the prey
+//               is compressed, and then DIGESTED: it fades inside the vacuole
+//               and the vacuole shrinks. Sway grows the last three pseudopods
+//               from nothing and winds tortuosity into all of them; press
+//               squeezes the whole cell. The macrophage's nucleus is hit
+//               analytically and seen through the cytoplasm, like the cell
+//               line's nuclei.
+//   DECOMPOSITION  A dead tissue mass on the plate — fifty-four cells in two
+//               layers, mounded, marched by the SAME culled cell machinery the
+//               embryo uses. The development takes it apart: the turgor goes
+//               and it SLUMPS (the cells sink and spread, and the smooth-min
+//               neck swells so the junctions blur into one mass), the colour
+//               DRAINS to the palette's ash end — the least saturated stop
+//               relative to its own brightness, so a dark violet is never
+//               mistaken for ash — the surface PITS on a noise the sway moves
+//               through, BACTERIA colonise it in patches (a coarse noise sets
+//               where a colony has taken, a fine one its cells), the MOULD
+//               germinates on the body itself (the hyphal simulation, run from
+//               a strain of its own, its germ tubes starting from the mass's
+//               own cells and every segment lifted onto the top of the tissue
+//               beneath it, so the network follows the body as it slumps), it
+//               BREAKS into five pieces that drift apart as the neck lets go
+//               again, and they SINK into the substrate and dissolve, leaving
+//               the fungal network and a mottled ashen STAIN on the plate.
+//               Sway morphs the decay pattern and the network; press squeezes
+//               the mass; a strike steps it.
 //   GESTURES    SWAY is each organism's morph: the cell line's membrane
 //               tension (a noise displacement that jiggles and softens the
 //               membranes, damped on the mineral forms), the slime mold's
@@ -219,20 +290,26 @@
 //               the beat pulses them, treble shimmers the granules, the level
 //               lifts the plate's rim glow.
 //   ASSIGNMENT  meta.controls exposes the whole surface to the assignment
-//               panel: actions to pick each organism, step the development up
-//               or down and re-seed the simulations; params for development,
-//               organism, species, morph and squeeze. The raw knob reads above
+//               panel: actions to pick each of the seven organisms, step the
+//               development up or down and re-seed the simulations; params for
+//               development, organism (0..6), species, morph and squeeze.
+//               The raw knob reads above
 //               stay as the no-assignment fallback — whichever moved last
 //               wins — and morph/squeeze take the larger of the gesture and
 //               the assigned control, so assigning one never kills the other.
 //
 // Three draw calls: the quad (the cell-line raymarch, the plasmodium's plate,
-// the mycelium's plate and spore, the helix's dark-field column — whichever
-// organisms have weight, blended by it), the hyphae mesh and the helix mesh.
-// GLSL3. Colour: cytoplasm and plasmodium from palette 3/4 lifted toward
-// white, nuclei and organelles from palette 1, membranes and fans palette 0,
-// plate, hyphae and backbones from palette 2 lifted toward white, the four
-// bases from palette 0/1/3/4.
+// the mycelium's plate and spore, the helix's dark-field column, the
+// macrophage, the dead mass and its plate — whichever organisms have weight,
+// blended by it), the hyphae mesh (the fungus, or the mould on the corpse) and
+// the helix mesh (the molecule, and the toxin's molecules with it). GLSL3.
+// Colour: cytoplasm and plasmodium from palette 3/4 lifted toward white,
+// nuclei and organelles from palette 1, membranes and fans palette 0, plate,
+// hyphae and backbones from palette 2 lifted toward white, the four bases from
+// palette 0/1/3/4, the toxin's atoms by element (carbon off palette 2 darkened,
+// oxygen palette 0, chlorine palette 4, hydrogen near white), the sickening
+// and the ash picked from the palette itself — the coldest stop and the least
+// saturated one, followed smoothly so a hue rotation never flicks them.
 
 export const meta = {
   id: 'naturestomb',
@@ -244,13 +321,16 @@ export const meta = {
       { key: 'slimeMold', label: 'slime mold' },
       { key: 'mycelium', label: 'mycelium' },
       { key: 'doubleHelix', label: 'double helix' },
+      { key: 'toxin', label: 'toxin' },
+      { key: 'phagocytosis', label: 'phagocytosis' },
+      { key: 'decomposition', label: 'decomposition' },
       { key: 'developUp', label: 'develop up' },
       { key: 'developDown', label: 'develop down' },
       { key: 'reseed', label: 're-seed' },
     ],
     params: [
       { key: 'development', label: 'development', min: 0, max: 1, default: 0 },
-      { key: 'organism', label: 'organism', min: 0, max: 3, default: 0 },
+      { key: 'organism', label: 'organism', min: 0, max: 6, default: 0 },
       { key: 'species', label: 'species', min: 0, max: 7, default: 0 },
       { key: 'morph', label: 'morph', min: 0, max: 1, default: 0 },
       { key: 'squeeze', label: 'squeeze', min: 0, max: 1, default: 0 },
@@ -318,13 +398,26 @@ const GW = 96; // density / occupancy grid side, over the plate
 // --- the double helix ------------------------------------------------------------
 const BP = 42; // base pairs built — about four turns, running off frame at both ends
 const SUB = 3; // backbone segments per base pair, so the strands read as curves
-const HELIX_SEGS = 1400;
+const HELIX_SEGS = 2400; // the helix, and the toxin's molecules with it
 const RISE = 0.163; // world units per base pair
 const HRAD = 0.50; // backbone helix radius: pitch / diameter = 1.71, B-form's own ratio
 const TWIST0 = 0.5984; // 2π / 10.5 base pairs per turn
 const GROOVE = 2.4435; // 140° between the strands — this is what makes the grooves unequal
 const NUC = 3; // histone cores on the chromatin fibre
 const COILR = 0.55; // nucleosome superhelix radius
+const ANG = 0.048; // world units per ångström — the helix's own scale (3.4 Å rise, 20 Å across)
+
+// --- the toxin ------------------------------------------------------------------
+const NMOL = 7; // molecules on the plate: four TCDD, three DDT
+const NBREAK = 2; // double-strand breaks, so three fragments at the end
+
+// --- phagocytosis -----------------------------------------------------------------
+const NPOD = 7; // pseudopods the macrophage can throw (sway grows the last three)
+const PODPTS = 4; // points per pseudopod: the base on the body and three along it
+
+// --- decomposition ------------------------------------------------------------------
+const TIS_N = 54; // cells in the dead tissue mass
+const TIS_CLUST = 5; // the pieces it breaks into
 
 const GLSL = /* glsl */ `
   #define PI 3.14159265359
@@ -346,6 +439,22 @@ const GLSL = /* glsl */ `
   uniform sampler2D uTrail;    // the plasmodium's trail map, 0..1
   uniform float uTexel;        // one trail texel in uv
   uniform float uDish, uFlow, uTintA, uTintB;
+  uniform vec3 uOrg2;          // organism weights: x toxin, y phagocytosis, z decomposition
+  // phagocytosis: the macrophage's pseudopods as chains of capsules, the prey,
+  // the phagosome closing round it, and the digestion
+  uniform vec4 uPods[NPOD * PODPTS]; // per pseudopod: base, then three points out along it; w radius
+  uniform vec4 uPodB[NPOD];    // per pseudopod: its bounding sphere
+  uniform vec4 uPrey;          // xyz centre, w radius
+  uniform vec4 uMacro;         // xyz the macrophage's centre, w the phagosome's blend radius
+  uniform vec4 uPhA;           // x prey squash, y digestion 0..1, z vacuole radius, w phagosome radius
+  uniform vec4 uPhB;           // xyz nucleus centre, w its radius
+  uniform vec4 uPhC;           // the whole cell's bounding sphere: xyz centre, w radius
+  // decomposition: the slump, the pits, the bacteria, the colour draining
+  uniform vec4 uDec;           // x slump, y pits, z specks, w drain
+  uniform vec4 uDec2;          // x stain radius, y stain strength, z dissolve, w bound radius
+  uniform vec3 uAsh;           // the palette's ash end, and its cold end
+  uniform vec3 uCold;
+  uniform float uSick;         // the helix's sickening, 0..1
   in vec2 vUv;
   out vec4 fragColor;
 
@@ -1089,9 +1198,296 @@ const GLSL = /* glsl */ `
     vec3 nn = cross(rd, ax);
     float ln = length(nn);
     float dl = ln > 1e-4 ? abs(dot(oc, nn / ln)) : length(cross(oc, ax));
-    vec3 tint = mix(uPal2, vec3(1.0), 0.55);
+    // the column sickens with the molecule under the toxin
+    vec3 tint = mix(mix(uPal2, vec3(1.0), 0.55), uCold, uSick * 0.7);
     float haze = noise3(vec3(oc.xy * 3.0, uTime * 0.05));
     return tint * (0.11 * exp(-dl * 3.0) + 0.012 * haze) * (0.55 + 0.45 * uLevelA) * (1.0 + uBeat * 0.25);
+  }
+
+  // ---- phagocytosis: a macrophage throwing pseudopods round a smaller cell,
+  // sealing it into a phagosome, drawing it in and digesting it. One smooth
+  // union: the amoeboid body (an ellipsoid under slow streaming bulges — a
+  // translation through the noise domain, never a turn), up to seven
+  // pseudopods as chains of three tapered capsules each, and the phagosome, a
+  // sphere round the prey that grows from nothing as the membrane seals. The
+  // prey is a second field, taken as the min with the body's: while it is
+  // outside, the ray hits it directly; once the membrane has closed over it
+  // the body's surface is hit first and the prey is seen through it.
+  float sdCone(vec3 p, vec3 a, vec3 b, float r1, float r2) {
+    vec3 pa = p - a, ba = b - a;
+    float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
+    return length(pa - ba * h) - mix(r1, r2, h);
+  }
+  // The pseudopods, smooth-united into a body already at distance dBody. A
+  // bounding sphere per pseudopod skips the three capsule tests — but ONLY
+  // when the sphere is further from this point than the blend can reach
+  // (db > dBody + k), because there smin() is exactly min() and dropping the
+  // pod changes nothing. Blending against the BOUNDING SPHERE instead, which
+  // is what a plain early-out does, welds a phantom skin between the body and
+  // each sphere and prints concentric rings round every pseudopod's base.
+  float podsInto(vec3 p, float dBody, float k) {
+    for (int i = 0; i < NPOD; i++) {
+      vec4 b = uPods[i * PODPTS];
+      if (b.w <= 0.0) continue;
+      vec4 pb = uPodB[i];
+      if (length(p - pb.xyz) - pb.w > dBody + k) continue;
+      vec4 p1 = uPods[i * PODPTS + 1], p2 = uPods[i * PODPTS + 2], p3 = uPods[i * PODPTS + 3];
+      float dp = sdCone(p, b.xyz, p1.xyz, b.w, p1.w);
+      dp = min(dp, sdCone(p, p1.xyz, p2.xyz, p1.w, p2.w));
+      dp = min(dp, sdCone(p, p2.xyz, p3.xyz, p2.w, p3.w));
+      dBody = smin(dBody, dp, k);
+    }
+    return dBody;
+  }
+  float dMacro(vec3 p) {
+    vec3 q = p - uMacro.xyz;
+    float d = sdEll(q, vec3(0.84, 0.70, 0.66));
+    // the streaming bulge is a noise on the membrane; far from it the noise
+    // cannot change the sign, so a conservative bound saves the eight hashes
+    // at every step of the march that is still crossing empty water
+    if (abs(d) < 0.26) {
+      // faded out across the window, so the bound and the true field agree at
+      // the seam — switching between them hard left a straight shading band
+      // across the cell where the two iso-surfaces met
+      float w = 1.0 - smoothstep(0.14, 0.26, abs(d));
+      d += 0.07 * w * (noise3(q * 2.4 + vec3(uTime * 0.11, -uTime * 0.06, 0.0)) - 0.5) - 0.035 * (1.0 - w);
+    } else d -= 0.035;
+    d = podsInto(p, d, 0.17);
+    if (uPhA.w > 0.001) d = smin(d, length(p - uPrey.xyz) - uPhA.w, uMacro.w);
+    return d;
+  }
+  float dPreyF(vec3 p) {
+    return sdEll(p - uPrey.xyz, vec3(uPrey.w, uPrey.w * uPhA.x, uPrey.w));
+  }
+  float mapPhago(vec3 p) {
+    p.y *= 1.0 + uPress * 0.22;
+    return min(dMacro(p), dPreyF(p));
+  }
+  vec3 normalPhago(vec3 p) {
+    const vec2 e = vec2(0.0025, 0.0);
+    return normalize(vec3(
+      mapPhago(p + e.xyy) - mapPhago(p - e.xyy),
+      mapPhago(p + e.yxy) - mapPhago(p - e.yxy),
+      mapPhago(p + e.yyx) - mapPhago(p - e.yyx)));
+  }
+  // a ray against an ellipsoid, through a scaled space
+  float iEll(vec3 ro, vec3 rd, vec3 c, vec3 r, out vec3 n, out float edge) {
+    vec3 o = (ro - c) / r;
+    vec3 d = rd / r;
+    float dl = length(d);
+    d /= dl;
+    float t = iSphere(o, d, vec3(0.0), 1.0, edge);
+    if (t < 0.0) return -1.0;
+    n = normalize((o + d * t) / r);
+    return t / dl;
+  }
+  vec3 phago(vec3 ro, vec3 rd, vec3 E) {
+    vec3 col = vec3(0.0);
+    vec3 roL = ro - E;
+    float bnd = uPhC.w;
+    roL -= uPhC.xyz;
+    float dC = length(cross(roL, rd));
+    col += mix(uPal2, vec3(1.0), 0.6) * 0.03 * exp(-max(dC - 1.1, 0.0) * 2.5) * (0.6 + 0.4 * uLevelA);
+    float eb;
+    float tb = iSphere(roL, rd, vec3(0.0), bnd, eb);
+    bool inS = dot(roL, roL) < bnd * bnd;
+    if (tb <= 0.0 && !inS) return col;
+    if (inS) tb = 0.0;
+    vec3 pb = roL + uPhC.xyz + rd * tb;
+    vec3 p = pb;
+    float t = 0.0;
+    bool hit = false;
+    float tExit = 2.0 * bnd + 0.2;
+    for (int i = 0; i < SPEC_STEPS; i++) {
+      float d = mapPhago(p);
+      if (d < 0.002) { hit = true; break; }
+      t += d * 0.85;
+      if (t > tExit) break;
+      p = pb + rd * t;
+    }
+    if (!hit) return col;
+    vec3 n = normalPhago(p);
+    vec3 sqv = vec3(1.0, 1.0 + uPress * 0.22, 1.0);
+    vec3 ps = p * sqv;                       // the hit in the field's own space
+    vec3 rds = normalize(rd * sqv);
+    vec3 L = normalize(vec3(-0.55, 0.7, 0.5));
+    vec3 L2 = normalize(vec3(0.7, -0.3, 0.4));
+    float wrap = dot(n, L) * 0.5 + 0.5;
+    float lit = wrap * wrap;
+    float rim = pow(1.0 - max(dot(n, -rd), 0.0), 2.0);
+    float spec = pow(max(dot(reflect(-L, n), -rd), 0.0), 60.0) * 0.45
+      + pow(max(dot(reflect(-L2, n), -rd), 0.0), 30.0) * 0.12;
+    vec3 preyTint = mix(mix(uPal0, uPal2, 0.45), vec3(1.0), 0.42);
+    vec3 inner;
+    if (dPreyF(ps) < dMacro(ps)) {
+      // the prey, still outside: a smaller cell of its own tint
+      float gr = noise3(ps * 30.0 + uTime * 0.05);
+      vec3 alb = preyTint * (0.85 + 0.25 * gr);
+      inner = alb * (0.12 + 0.88 * lit) + mix(uPal0, uPal2, 0.5) * 0.3 * rim + vec3(spec) + uPal0 * rim * 0.2;
+      float en;
+      float tn = iSphere(ps, rds, uPrey.xyz, uPrey.w * 0.40, en);
+      if (tn > 0.0) {
+        vec3 nn = normalize(ps + rds * tn - uPrey.xyz);
+        float nl = dot(nn, L) * 0.5 + 0.5;
+        vec3 nt = mix(uPal1, uPal0, 0.35);
+        vec3 oc = nt * (0.18 + 0.82 * nl * nl) * (0.8 + 0.3 * noise3(ps * 9.0));
+        oc += nt * pow(1.0 - max(dot(nn, -rds), 0.0), 2.0) * 0.4;
+        float aaN = smoothstep(0.0, max(fwidth(en) * 1.5, 0.0001), en);
+        inner = mix(inner, oc, aaN * exp(-tn * 2.6) * 0.7);
+      }
+    } else {
+      // the macrophage: granular cytoplasm under the same two-light rig as the cells
+      float gr = noise3(ps * 14.0 + vec3(0.0, uTime * 0.05, 0.0));
+      float gr2 = noise3(ps * 42.0 + uTime * 0.02);
+      vec3 alb = mix(mix(uPal3, uPal4, 0.35), vec3(1.0), 0.28) * (0.85 + 0.22 * gr + 0.10 * gr2 * (1.0 + uHigh * 1.5));
+      vec3 sss = mix(uPal4, uPal3, 0.5) * (0.35 * rim + 0.25 * pow(max(dot(rd, L), 0.0), 3.0));
+      inner = alb * (0.12 + 0.88 * lit) + sss + vec3(spec) + uPal0 * rim * 0.25;
+      // seen through the body: the prey in its phagosome, dissolving as it is
+      // digested; the phagosome's wall; the nucleus pushed aside
+      if (uPhA.y < 0.995) {
+        float tn = 0.02, depth = 0.02, minD = 1e9;
+        vec3 qb = ps;
+        for (int j = 0; j < NSTEPS; j++) {
+          vec3 q = ps + rds * tn;
+          float dn = dPreyF(q);
+          if (dn < minD) { minD = dn; qb = q; depth = tn; }
+          if (dn < 0.0025) break;
+          if (dMacro(q) > 0.02) break;
+          tn += max(dn * 0.9, 0.012);
+        }
+        float cover = (1.0 - smoothstep(0.0, 0.04, minD)) * (1.0 - uPhA.y);
+        if (cover > 0.002) {
+          vec3 no = normalize(qb - uPrey.xyz);
+          float nl = dot(no, L) * 0.5 + 0.5;
+          vec3 nt = mix(preyTint, mix(uPal2, vec3(1.0), 0.5), uPhA.y);
+          vec3 oc = nt * (0.2 + 0.8 * nl * nl) * (0.8 + 0.3 * noise3(qb * 12.0));
+          oc += nt * pow(1.0 - max(dot(no, -rds), 0.0), 2.0) * 0.38;
+          inner = mix(inner, oc, cover * exp(-depth * 2.2) * 0.7);
+        }
+      }
+      if (uPhA.z > 0.002) {
+        float ev;
+        float tv = iSphere(ps, rds, uPrey.xyz, uPhA.z, ev);
+        if (tv > 0.0) {
+          vec3 nv = normalize(ps + rds * tv - uPrey.xyz);
+          float fr = pow(1.0 - max(dot(nv, -rds), 0.0), 3.0);
+          float aaV = smoothstep(0.0, max(fwidth(ev) * 1.5, 0.0001), ev);
+          inner += mix(uPal2, vec3(1.0), 0.5) * (fr * 0.4 + 0.05) * aaV * exp(-tv * 1.8) * 0.8;
+        }
+      }
+      {
+        vec3 nn; float en;
+        float tn = iEll(ps, rds, uPhB.xyz, vec3(uPhB.w * 1.25, uPhB.w, uPhB.w * 0.9), nn, en);
+        if (tn > 0.0) {
+          float nl = dot(nn, L) * 0.5 + 0.5;
+          vec3 nt = mix(uPal1, uPal0, 0.2);
+          vec3 oc = nt * (0.18 + 0.82 * nl * nl) * (0.78 + 0.32 * noise3((ps + rds * tn) * 9.0));
+          oc += nt * pow(1.0 - max(dot(nn, -rds), 0.0), 2.0) * 0.42;
+          oc = mix(oc, uPal1 * 0.45, smoothstep(0.55, 0.9, noise3((ps + rds * tn) * 18.0 + 3.0)) * 0.55);
+          float aaN = smoothstep(0.0, max(fwidth(en) * 1.5, 0.0001), en);
+          inner = mix(inner, oc, aaN * exp(-tn * 2.4) * 0.62);
+        }
+      }
+    }
+    inner *= 1.0 + uBeat * 0.12;
+    col += inner;
+    return col;
+  }
+
+  // ---- decomposition: the dead tissue on its plate. The cell machinery
+  // marches the mass exactly as it marches the embryo (culled per ray); pits
+  // eat into the surface on a noise the sway moves through; bacteria speckle
+  // it; the plate takes the stain; whatever has sunk below the plate is gone.
+  float mapDec(vec3 p) {
+    float d = dCells(p);
+    // the pits are a noise on the surface; away from it the same conservative
+    // bound as the macrophage's membrane keeps the march honest and cheap
+    if (uDec.y > 0.002 && d < 0.22) {
+      float w = 1.0 - smoothstep(0.10, 0.22, d);   // faded out across the window, as the macrophage's is
+      d += w * uDec.y * 0.10 * smoothstep(0.40, 0.80, noise3(p * 8.0 + vec3(uJig * 3.0, 1.7, uJig * 2.0)));
+    }
+    return d;
+  }
+  vec3 normalDec(vec3 p) {
+    const vec2 e = vec2(0.0025, 0.0);
+    return normalize(vec3(
+      mapDec(p + e.xyy) - mapDec(p - e.xyy),
+      mapDec(p + e.yxy) - mapDec(p - e.yxy),
+      mapDec(p + e.yyx) - mapDec(p - e.yyx)));
+  }
+  vec3 decomp(vec3 ro, vec3 rd, vec3 E) {
+    vec3 base = vec3(0.0);
+    float tp = (E.z - ro.z) / rd.z;
+    if (tp > 0.0) {
+      vec2 q = (ro + rd * tp).xy - E.xy;
+      float r = length(q);
+      base += plate(r);
+      if (uDec2.y > 0.002) {
+        // the stain the body leaves on the substrate: an ashen splotch under
+        // where it lay, ragged at its edge, mottled, with a second lobe
+        // spreading off it where the fragments went
+        float sn = noise3(vec3(q * 2.6, 4.2));
+        float R = uDec2.x * (0.82 + 0.4 * sn);
+        float sm = smoothstep(R, R * 0.22, r);
+        vec2 q2 = q - vec2(0.42, -0.26);
+        sm = max(sm, smoothstep(R * 0.72, R * 0.16, length(q2)) * 0.75);
+        // two octaves: one sample of a value noise this soft shows its lattice
+        // as squares across a stain this wide
+        float mott = 0.45 + 0.85 * (0.62 * noise3(vec3(q * 6.3, 1.0)) + 0.38 * noise3(vec3(q * 15.7 + 2.7, 4.1)));
+        base += mix(uAsh, uPal2, 0.3) * uDec2.y * sm * 0.30 * mott;
+      }
+    }
+    vec3 roL = ro - E;
+    float bnd = uDec2.w;
+    float eb;
+    float tb = iSphere(roL, rd, vec3(0.0), bnd, eb);
+    bool inS = dot(roL, roL) < bnd * bnd;
+    if (tb <= 0.0 && !inS) return base;
+    if (inS) tb = 0.0;
+    vec3 pb = roL + rd * tb;
+    cullCells(pb, rd);
+    if (gN == 0) return base;
+    vec3 p = pb;
+    float t = 0.0;
+    bool hit = false;
+    float tExit = 2.0 * bnd + 0.2;
+    for (int i = 0; i < SPEC_STEPS; i++) {
+      float d = mapDec(p);
+      if (d < 0.002) { hit = true; break; }
+      t += d * 0.85;
+      if (t > tExit || p.z < -0.02) break;
+      p = pb + rd * t;
+    }
+    if (!hit || p.z < 0.0) return base;
+    vec3 n = normalDec(p);
+    float wall;
+    float sd = cellSeed(p, wall);
+    vec3 L = normalize(vec3(-0.55, 0.7, 0.5));
+    float nz = noise3(p * 8.0 + vec3(uJig * 3.0, 1.7, uJig * 2.0));
+    float pit = smoothstep(0.40, 0.80, nz) * uDec.y;
+    float gr = noise3(p * 13.0);
+    float gr2 = noise3(p * 40.0);
+    float tint = h11(sd * 3.17 + 1.0);
+    vec3 cyto = mix(mix(uPal3, uPal4, 0.15 + 0.45 * tint), vec3(1.0), 0.25) * (0.85 + 0.22 * gr + 0.10 * gr2);
+    vec3 ash = mix(uAsh, vec3(0.34), 0.55);
+    vec3 alb = mix(cyto, ash * (0.80 + 0.3 * gr), uDec.w);
+    alb *= 0.55 + 0.45 * wall;               // the cell junctions still show on the fresh corpse
+    alb *= 1.0 - 0.45 * pit;                 // the pits are dark
+    float gloss = 1.0 - 0.8 * uDec.x;        // wet and glossy fresh, matte once the turgor is gone
+    float wrap = dot(n, L) * 0.5 + 0.5;
+    float lit = wrap * wrap;
+    float rim = pow(1.0 - max(dot(n, -rd), 0.0), 2.0);
+    vec3 sss = mix(uPal4, uPal3, 0.5) * (0.3 * rim) * (1.0 - 0.8 * uDec.w);
+    float spec = pow(max(dot(reflect(-L, n), -rd), 0.0), 50.0) * 0.4 * gloss;
+    vec3 inner = alb * (0.12 + 0.88 * lit) + sss + vec3(spec) + mix(uPal0, ash, uDec.w) * rim * 0.2;
+    // bacteria: fine specks in colonies — a coarse noise sets where a patch has
+    // taken hold, a fine one the individual cells inside it, thickest in the pits
+    float colony = smoothstep(0.42, 0.72, noise3(p * 5.5 + 11.0));
+    float sp = noise3(p * 120.0 + 7.0);
+    float speck = smoothstep(0.74, 0.86, sp) * uDec.z * colony * (0.5 + 0.7 * pit);
+    inner += mix(uPal1, vec3(1.0), 0.5) * speck * 0.55 * (1.0 + uBeat * 0.4);
+    inner *= 1.0 + uBeat * 0.1;
+    return inner;
   }
 
   void main() {
@@ -1113,6 +1509,9 @@ const GLSL = /* glsl */ `
       col += sp * uOrg.z;
     }
     if (uOrg.w > 0.002) col += helixField(ro, rd, E) * uOrg.w;
+    if (uOrg2.x > 0.002) col += helixField(ro, rd, E) * uOrg2.x;
+    if (uOrg2.y > 0.002) col += phago(ro, rd, E) * uOrg2.y;
+    if (uOrg2.z > 0.002) col += decomp(ro, rd, E) * uOrg2.z;
     fragColor = vec4(col * uIntensity, 1.0);
   }
 `;
@@ -1126,13 +1525,30 @@ const GLSL = /* glsl */ `
 const MYC_VERT = /* glsl */ `
   uniform vec2 uRes, uPan;
   uniform float uDist, uPress, uBass, uCount, uTotal, uWeight, uThick;
+  // under decomposition the hyphae climb the dead mass: every endpoint is
+  // lifted to the top of the tissue's cells beneath it (the same cell list the
+  // quad marches), so the network follows the body as it slumps and sinks
+  uniform vec4 uBody[MAXC];
+  uniform float uBodyN, uLift;
   in vec2 aQuad;  // per vertex: side -1..1, along 0 (start) .. 1 (end)
   in vec3 aP0;
   in vec3 aP1;
   in vec4 aInfo;
   out vec2 vQ;
   out float vLenR, vTip, vA, vGen, vRnd, vKind;
+  float lift(vec2 xy) {
+    float h = 0.0;
+    for (int i = 0; i < MAXC; i++) {
+      if (float(i) >= uBodyN) break;
+      vec4 c = uBody[i];
+      vec2 d = xy - c.xy;
+      float hh = c.w * c.w - dot(d, d);
+      if (hh > 0.0) h = max(h, c.z + sqrt(hh) + 0.012);
+    }
+    return h;
+  }
   vec2 toUv(vec3 p) {
+    if (uLift > 0.5) p.z = max(p.z, lift(p.xy));
     p.y /= 1.0 + uPress * 0.22; // press squashes the colony like the embryo
     float d = max(uDist - p.z, 0.3);
     return (p.xy + uPan) / (1.05 * d);
@@ -1253,8 +1669,11 @@ const HX_VERT = /* glsl */ `
     if (role > 0.5 && role < 1.5) radW = 0.024;
     else if (role > 1.5 && role < 2.5) radW = 0.012;
     else if (role > 2.5 && role < 4.5) radW = max(aInfo.w, 0.0001);
-    else if (role > 4.5) radW = 0.022;
-    float rad = max(radW * (1.0 + uBass * 0.25) / (1.05 * depth), 0.8 * pxH);
+    else if (role > 4.5 && role < 5.5) radW = 0.022;
+    else if (role > 5.5 && role < 6.5) radW = max(aInfo.w, 0.0001);   // an atom: its own ball
+    else if (role > 6.5) radW = 0.009;                                // a bond: a thin stick
+    float bassF = role > 5.5 ? 1.0 : 1.0 + uBass * 0.25;               // a molecule does not breathe
+    float rad = max(radW * bassF / (1.05 * depth), 0.8 * pxH);
     vLenR = len / rad;
     // round caps at BOTH ends: a molecule is tubes and beads, and a bead is a
     // zero-length segment that has to come out a disc, not a half-disc
@@ -1275,10 +1694,18 @@ const HX_VERT = /* glsl */ `
 
 const HX_FRAG = /* glsl */ `
   uniform vec3 uPalA[5];
-  uniform float uIntensity, uBeat, uHigh, uTime;
+  uniform vec3 uCold;          // the palette's cold end: what the poisoned molecule sickens toward
+  uniform float uIntensity, uBeat, uHigh, uTime, uSick;
   in vec2 vQ;
   in float vLenR, vA, vRole, vSlot, vRnd, vStrand, vDepth;
   out vec4 fragColor;
+  // the toxin's molecules: atoms coloured by element, off the palette
+  vec3 elementTint(int e) {
+    if (e == 0) return mix(uPalA[2], vec3(0.45), 0.55);          // carbon: a dark grey off the backbone's stop
+    if (e == 1) return mix(uPalA[0], vec3(1.0), 0.15);           // oxygen
+    if (e == 2) return mix(uPalA[4], vec3(1.0), 0.25);           // chlorine
+    return vec3(0.92);                                           // hydrogen
+  }
   void main() {
     float along = vQ.y;
     float u = clamp(along, 0.0, vLenR);
@@ -1288,9 +1715,26 @@ const HX_FRAG = /* glsl */ `
     float core = exp(-d2 * 4.5);
     float body = 1.0 - d2;
     float wall = smoothstep(0.35, 0.9, d2) * (1.0 - smoothstep(0.9, 1.0, d2));
-    vec3 tint = uPalA[int(vSlot + 0.5)];
+    // aInfo.z packs a per-segment sickness in its integer part (0..255) over
+    // the random in its fraction, so the damage can sit where the molecules
+    // struck instead of everywhere at once
+    float sick = clamp(floor(vRnd) / 255.0 + uSick * 0.35, 0.0, 1.0);
+    float rnd = fract(vRnd);
+    int si = int(vSlot + 0.5);
+    vec3 tint = si < 5 ? uPalA[si] : elementTint(si - 10);
+    if (vRole < 5.5) tint = mix(tint, uCold, sick * 0.85);
     vec3 col;
-    if (vRole < 0.5) {
+    if (vRole > 5.5 && vRole < 6.5) {
+      // an atom: a lit ball — the impostor's own normal under one light
+      vec3 nn = normalize(vec3(vQ.x, dx, sqrt(max(1.0 - d2, 0.0))));
+      vec3 L = normalize(vec3(-0.45, 0.55, 0.7));
+      float nl = max(dot(nn, L), 0.0);
+      float sp = pow(max(dot(reflect(-L, nn), vec3(0.0, 0.0, 1.0)), 0.0), 40.0);
+      col = tint * (0.28 + 0.82 * nl) + vec3(sp * 0.55) + tint * 0.25 * pow(1.0 - nn.z, 2.0);
+      col *= 1.35;
+    } else if (vRole > 6.5) {
+      col = mix(uPalA[2], vec3(1.0), 0.7) * (0.35 * body + 0.5 * core);
+    } else if (vRole < 0.5) {
       // The sugar-phosphate backbone, with a phosphate bead at each nucleotide.
       // The bead sits OFF CENTRE, and to the other side on the other strand —
       // the two strands are laid in opposite senses, so the beads march 5'->3'
@@ -1314,7 +1758,9 @@ const HX_FRAG = /* glsl */ `
     } else {
       col = mix(tint, vec3(1.0), 0.65) * (0.28 * body + 0.60 * core + 0.3 * wall);
     }
-    col *= 1.0 + uHigh * 0.18 * sin(uTime * 5.0 + vRnd * 37.0);
+    col *= 1.0 + uHigh * 0.18 * sin(uTime * 5.0 + rnd * 37.0);
+    // the poisoned molecule dims as it sickens
+    if (vRole < 5.5) col *= 1.0 - 0.35 * sick;
     fragColor = vec4(col * vA * uIntensity, 1.0);
   }
 `;
@@ -1341,6 +1787,8 @@ export function createScene(ctx) {
   const pseudo = new Float32Array(6 * 4);
   const daugh = new Float32Array(4 * 4);
   const foodU = new Float32Array(FOOD_N * 4);
+  const pods = new Float32Array(NPOD * PODPTS * 4); // the macrophage's pseudopods
+  const podB = new Float32Array(NPOD * 4);          // and a bounding sphere each
   const pal = Array.from({ length: 5 }, () => ({ value: new THREE.Color(1, 1, 1) }));
   const SCELLS = SW * SW;
   const trailBytes = new Uint8Array(SCELLS);
@@ -1397,11 +1845,25 @@ export function createScene(ctx) {
     uTintA: { value: 0.3 },
     uTintB: { value: 0.5 },
     uPal0: pal[0], uPal1: pal[1], uPal2: pal[2], uPal3: pal[3], uPal4: pal[4],
+    // the end of life: the toxin's column, the macrophage, the dead mass
+    uOrg2: { value: new THREE.Vector3(0, 0, 0) },
+    uPods: { value: pods },
+    uPodB: { value: podB },
+    uPrey: { value: new THREE.Vector4(1.6, 0.2, 0.1, 0.3) },
+    uMacro: { value: new THREE.Vector4(-0.42, -0.02, 0, 0.2) },
+    uPhA: { value: new THREE.Vector4(1, 0, 0, 0) },
+    uPhB: { value: new THREE.Vector4(-0.7, 0.08, 0, 0.24) },
+    uPhC: { value: new THREE.Vector4(0, 0, 0, 2.1) },
+    uDec: { value: new THREE.Vector4(0, 0, 0, 0) },
+    uDec2: { value: new THREE.Vector4(1, 0, 0, 1.5) },
+    uAsh: { value: new THREE.Color(0.5, 0.5, 0.5) },
+    uCold: { value: new THREE.Color(0.5, 0.6, 0.8) },
+    uSick: { value: 0 },
   };
   const mat = new THREE.ShaderMaterial({
     glslVersion: THREE.GLSL3,
     uniforms: U,
-    defines: { SPEC_STEPS, NSTEPS, MAXC, LOCAL },
+    defines: { SPEC_STEPS, NSTEPS, MAXC, LOCAL, NPOD, PODPTS },
     vertexShader: /* glsl */ `
       out vec2 vUv;
       void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
@@ -1454,10 +1916,14 @@ export function createScene(ctx) {
     uHigh: { value: 0 },
     uTime: { value: 0 },
     uPal0: mpal[0], uPal1: mpal[1], uPal2: mpal[2],
+    uBody: { value: cells },   // the same packed cell list the quad marches
+    uBodyN: { value: 0 },
+    uLift: { value: 0 },
   };
   const mycMat = new THREE.ShaderMaterial({
     glslVersion: THREE.GLSL3,
     uniforms: MU,
+    defines: { MAXC },
     vertexShader: MYC_VERT,
     fragmentShader: MYC_FRAG,
     transparent: true,
@@ -1489,6 +1955,8 @@ export function createScene(ctx) {
     uHigh: { value: 0 },
     uTime: { value: 0 },
     uPalA: { value: hxPal },
+    uCold: { value: new THREE.Color(0.5, 0.6, 0.8) },
+    uSick: { value: 0 },
   };
   const hxMat = new THREE.ShaderMaterial({
     glslVersion: THREE.GLSL3,
@@ -2286,21 +2754,35 @@ export function createScene(ctx) {
     myc.info[o4 + 3] = st;
     mSeg++;
   }
-  function growMycelium(swayV, seedOff) {
+  // the mould on the dead mass: a fixed strain — thin, dense, quick to branch,
+  // germinating at several points on the body rather than from one spore
+  const MYD = {
+    germ: 10, angle: 0.72, prob: 0.22, gap: 2, step: 0.022, tort: 0.55,
+    radial: 0.02, grav: 0.5, auto: 0.3, anas: 0.3, cord: 0.0, spor: 0.5, thick: 1.6, maxGen: 7,
+  };
+  // P is the strain (MYP the fungus, MYD the mould); germAt, when given, is a
+  // cell layout the germ tubes start from instead of the spore at the centre
+  function growMycelium(swayV, seedOff, P, germAt) {
     let rc = seedOff | 0;
     dens.fill(0);
     mark.fill(0);
     markStep.fill(0);
-    const branchAngle = MYP.angle + swayV * 0.62;
-    const tort = MYP.tort + swayV * 0.55;
-    const stepLen = MYP.step;
-    const GERM = MYP.germ;
+    const branchAngle = P.angle + swayV * 0.62;
+    const tort = P.tort + swayV * 0.55;
+    const stepLen = P.step;
+    const GERM = P.germ;
     for (let k = 0; k < GERM; k++) {
       const a = (k / GERM) * 6.2831853 + RND[rc++ & (RND_LEN - 1)] * 0.6;
-      tipX[k] = Math.cos(a) * 0.06; tipY[k] = Math.sin(a) * 0.06; tipZ[k] = (RND[rc++ & (RND_LEN - 1)] - 0.5) * 0.05;
+      if (germAt) {
+        const gi = ((k * 7 + 3) % TIS_N) * 4;
+        tipX[k] = germAt[gi] * 0.9; tipY[k] = germAt[gi + 1] * 0.9;
+      } else {
+        tipX[k] = Math.cos(a) * 0.06; tipY[k] = Math.sin(a) * 0.06;
+      }
+      tipZ[k] = (RND[rc++ & (RND_LEN - 1)] - 0.5) * 0.05;
       tipHx[k] = Math.cos(a); tipHy[k] = Math.sin(a); tipHz[k] = (RND[rc++ & (RND_LEN - 1)] - 0.5) * 0.3;
       tipGen[k] = 0; tipAlive[k] = 1; tipGap[k] = 0; tipSeg[k] = -1;
-      tipCord[k] = RND[rc++ & (RND_LEN - 1)] < MYP.cord ? 1 : 0;
+      tipCord[k] = RND[rc++ & (RND_LEN - 1)] < P.cord ? 1 : 0;
     }
     let nTips = GERM;
     mSeg = 0;
@@ -2322,26 +2804,26 @@ export function createScene(ctx) {
         const c = Math.cos((r0 - 0.5) * tort), s = Math.sin((r0 - 0.5) * tort);
         const nhx = hx * c - hy * s, nhy = hx * s + hy * c;
         const rl = Math.sqrt(x * x + y * y) + 1e-5;
-        hx = nhx + (x / rl) * MYP.radial;
-        hy = nhy + (y / rl) * MYP.radial;
+        hx = nhx + (x / rl) * P.radial;
+        hy = nhy + (y / rl) * P.radial;
         // negative autotropism: read the colony's own density and turn away
-        if (MYP.auto > 0.01) {
+        if (P.auto > 0.01) {
           const gx = ((x + DISH) / (2 * DISH) * GW) | 0;
           const gy = ((y + DISH) / (2 * DISH) * GW) | 0;
           if (gx > 0 && gy > 0 && gx < GW - 1 && gy < GW - 1) {
             const b = gy * GW + gx;
-            hx -= (dens[b + 1] - dens[b - 1]) * MYP.auto * 0.020;
-            hy -= (dens[b + GW] - dens[b - GW]) * MYP.auto * 0.020;
+            hx -= (dens[b + 1] - dens[b - 1]) * P.auto * 0.020;
+            hy -= (dens[b + GW] - dens[b - GW]) * P.auto * 0.020;
           }
         }
-        hz = hz * 0.7 + (r1 - 0.5) * 0.12 - z * MYP.grav; // gravitropism into the slab
+        hz = hz * 0.7 + (r1 - 0.5) * 0.12 - z * P.grav; // gravitropism into the slab
         const hl = Math.sqrt(hx * hx + hy * hy + hz * hz);
         hx /= hl; hy /= hl; hz /= hl;
         const nx = x + hx * stepLen, ny = y + hy * stepLen, nz = z + hz * stepLen;
         const cell = gIdx(nx, ny);
         // anastomosis: a tip that meets an older hypha fuses to it and stops
         const other = mark[cell];
-        const fuse = other !== 0 && other !== i + 1 && step - markStep[cell] > 5 && r3 < MYP.anas;
+        const fuse = other !== 0 && other !== i + 1 && step - markStep[cell] > 5 && r3 < P.anas;
         const cord = tipCord[i] === 1;
         mput(x, y, z, nx, ny, nz, tipGen[i], cord, fuse ? 3 : 1, r2, step);
         const mine = mSeg - 1;
@@ -2363,18 +2845,18 @@ export function createScene(ctx) {
         if (fuse) { tipAlive[i] = 0; continue; }
         if (nx * nx + ny * ny > rim * rim) {
           tipAlive[i] = 0;
-          if (late && r0 < MYP.spor) INFO[mine * 4 + 1] = 2; // a sporangium at the rim
+          if (late && r0 < P.spor) INFO[mine * 4 + 1] = 2; // a sporangium at the rim
           continue;
         }
-        if (late && r1 < MYP.spor * 0.02) { tipAlive[i] = 0; INFO[mine * 4 + 1] = 2; continue; }
-        if (tipGap[i] >= MYP.gap && r2 < MYP.prob && nTips < MAX_TIPS && tipGen[i] < MYP.maxGen) {
+        if (late && r1 < P.spor * 0.02) { tipAlive[i] = 0; INFO[mine * 4 + 1] = 2; continue; }
+        if (tipGap[i] >= P.gap && r2 < P.prob && nTips < MAX_TIPS && tipGen[i] < P.maxGen) {
           const side = r1 < 0.5 ? 1 : -1;
           const ca = Math.cos(branchAngle * side), sa = Math.sin(branchAngle * side);
           const j = nTips++;
           tipX[j] = nx; tipY[j] = ny; tipZ[j] = nz;
           tipHx[j] = hx * ca - hy * sa; tipHy[j] = hx * sa + hy * ca; tipHz[j] = hz * 0.5 + (r0 - 0.5) * 0.2;
           tipGen[j] = tipGen[i] + 1; tipAlive[j] = 1; tipGap[j] = 0; tipSeg[j] = -1;
-          tipCord[j] = r3 < MYP.cord ? 1 : 0;
+          tipCord[j] = r3 < P.cord ? 1 : 0;
           tipGap[i] = 0;
         }
       }
@@ -2387,7 +2869,7 @@ export function createScene(ctx) {
     myc.a1.needsUpdate = true;
     myc.ai.needsUpdate = true;
     MU.uTotal.value = Math.max(1, mSeg);
-    MU.uThick.value = MYP.thick;
+    MU.uThick.value = P.thick;
   }
   // the visible prefix for a development level, linear in growth time
   function mycCount(devel) {
@@ -2439,8 +2921,64 @@ export function createScene(ctx) {
   const coreZ = (i) => 0.18 * Math.sin(i * 2.1);
   const WRAP = 0.70; // of each nucleosome's span the duplex spends wrapped
   const hFa = new Float32Array(3), hFb = new Float32Array(3);
+  // ---- the toxin's damage to the molecule, all zero for the clean helix:
+  // intercalation sites wedge the stack open (extra rise) and unwind it
+  // locally; nicks cut one backbone; double-strand breaks cut both and the
+  // fragments either side are carried apart; a per-base sickness tints it
+  const hOpenK = new Float32Array(NMOL);   // the base index below each opened step
+  const hOpen = new Float32Array(NMOL);    // the extra rise there, world units
+  const hUnw = new Float32Array(NMOL);     // and the unwinding, radians
+  let hOpenN = 0;
+  const hNickK = new Float32Array(NMOL), hNickS = new Float32Array(NMOL), hNickP = new Float32Array(NMOL);
+  let hNickN = 0;
+  const hBrkK = new Float32Array(NBREAK), hBrkP = new Float32Array(NBREAK);
+  let hBrkN = 0;
+  // per break: the pivot (the axis at the break), the offset carried across
+  // it, and the rotation (Rodrigues, about a fixed per-break axis, by an angle
+  // the development sets — the performer's, not a clock's)
+  const hBrkPiv = new Float32Array(NBREAK * 3), hBrkOff = new Float32Array(NBREAK * 3), hBrkRot = new Float32Array(NBREAK * 9);
+  const hSickK = new Float32Array(NMOL), hSickA = new Float32Array(NMOL);
+  let hSickN = 0;
+  function clearDamage() { hOpenN = 0; hNickN = 0; hBrkN = 0; hSickN = 0; }
+  // the wedge is centred on the opened step and eased over the neighbouring
+  // base pairs, so the backbones bend round it instead of kinking
+  function riseExtra(kf) {
+    let e = 0;
+    for (let i = 0; i < hOpenN; i++) e += hOpen[i] * (smooth01((kf - hOpenK[i] + 0.5) / 2) - 0.5);
+    return e;
+  }
+  function twistOf(kf) {
+    let th = kf * hTwist;
+    for (let i = 0; i < hOpenN; i++) th -= hUnw[i] * (smooth01((kf - hOpenK[i] + 1.5) / 4) - 0.5);
+    return th;
+  }
+  // how far a backbone sub-segment centred on kc, on strand w, has been cut
+  function cutAt(kc, w) {
+    let c = 0;
+    for (let i = 0; i < hNickN; i++) if (hNickS[i] === w && Math.abs(kc - hNickK[i]) < 0.5) c = Math.max(c, hNickP[i]);
+    for (let b = 0; b < hBrkN; b++) if (Math.abs(kc - hBrkK[b] - 0.5) < 0.5) c = Math.max(c, hBrkP[b]);
+    return c;
+  }
+  // the per-base sickness, packed into aInfo.z's integer part
+  function sickAt(kf) {
+    let s = 0;
+    for (let i = 0; i < hSickN; i++) s += hSickA[i] * Math.exp(-Math.abs(kf - hSickK[i]) / 3.5);
+    return Math.floor(clamp(s, 0, 1) * 255);
+  }
+  // carry a point at base index kf with its fragment: across every break
+  // below it, the pivot's rotation then the offset
+  function fragXf(kf, p) {
+    for (let b = 0; b < hBrkN; b++) {
+      if (kf <= hBrkK[b] + 0.5 || hBrkP[b] < 0.002) continue;
+      const o3 = b * 3, o9 = b * 9;
+      const x = p[0] - hBrkPiv[o3], y = p[1] - hBrkPiv[o3 + 1], z = p[2] - hBrkPiv[o3 + 2];
+      p[0] = hBrkPiv[o3] + hBrkRot[o9] * x + hBrkRot[o9 + 1] * y + hBrkRot[o9 + 2] * z + hBrkOff[o3];
+      p[1] = hBrkPiv[o3 + 1] + hBrkRot[o9 + 3] * x + hBrkRot[o9 + 4] * y + hBrkRot[o9 + 5] * z + hBrkOff[o3 + 1];
+      p[2] = hBrkPiv[o3 + 2] + hBrkRot[o9 + 6] * x + hBrkRot[o9 + 7] * y + hBrkRot[o9 + 8] * z + hBrkOff[o3 + 2];
+    }
+  }
   function axisAt(kf, out) {
-    const y0 = (kf - (BP - 1) / 2) * hRise;
+    const y0 = (kf - (BP - 1) / 2) * hRise + riseExtra(kf);
     let x = hWrithe * Math.cos(WK * y0);
     let y = y0;
     let z = hWrithe * Math.sin(WK * y0);
@@ -2513,16 +3051,21 @@ export function createScene(ctx) {
     bx /= bl; by /= bl; bz /= bl;
     const sep = kf <= hKf ? 0 : ((kf - hKf) / (BP - 1 - hKf)) * hWF;
     const R = hRad * (1 + 2.3 * sep) * frac;
+    const tw = twistOf(kf);
     const th = which === 0
-      ? (1 - sep) * (kf * hTwist) + sep * 1.5708
-      : (1 - sep) * (kf * hTwist + GROOVE) - sep * 1.5708;
+      ? (1 - sep) * tw + sep * 1.5708
+      : (1 - sep) * (tw + GROOVE) - sep * 1.5708;
     const c = Math.cos(th), sn = Math.sin(th);
-    out[0] = hFa[0] + R * (c * nx + sn * bx);
-    out[1] = hFa[1] + R * (c * ny + sn * by);
-    out[2] = hFa[2] + R * (c * nz + sn * bz);
+    // the radial is kept for whatever docks on this point (the toxin's adducts)
+    hRadial[0] = c * nx + sn * bx; hRadial[1] = c * ny + sn * by; hRadial[2] = c * nz + sn * bz;
+    out[0] = hFa[0] + R * hRadial[0];
+    out[1] = hFa[1] + R * hRadial[1];
+    out[2] = hFa[2] + R * hRadial[2];
   }
-  function buildHelix(devH, swayV) {
-    hn = 0;
+  const hRadial = new Float32Array(3);
+  // the molecule itself, built under whatever damage state is set (none for
+  // the clean helix; the toxin sets sites, nicks and breaks before calling)
+  function helixCore(devH, swayV) {
     // sway sweeps the torsion: B-form unwinds toward an open ladder, then
     // winds back through B-form into an overwound, writhing supercoil
     const twistF = swayV < 0.45 ? 1 - (swayV / 0.45) * 0.80 : 0.20 + ((swayV - 0.45) / 0.55) * 1.12;
@@ -2548,14 +3091,27 @@ export function createScene(ctx) {
     // off aInfo.w, the strand, so the beads sit off centre in opposite
     // directions and the two backbones read as running against each other
     const steps = (BP - 1) * SUB;
+    const damaged = hNickN + hBrkN + hSickN > 0;
     for (let s = 0; s < steps; s++) {
       const ka = s / SUB, kb = (s + 1) / SUB;
-      pointAt(ka, 0, 1, hPa);
-      pointAt(kb, 0, 1, hPb);
-      hput(hPa[0], hPa[1], hPa[2], hPb[0], hPb[1], hPb[2], 0, 2, hash1(s * 1.7), 0);
-      pointAt(ka, 1, 1, hPc);
-      pointAt(kb, 1, 1, hPd);
-      hput(hPd[0], hPd[1], hPd[2], hPc[0], hPc[1], hPc[2], 0, 2, hash1(s * 2.3), 1);
+      const sk = damaged ? sickAt(ka) : 0;
+      for (let w = 0; w < 2; w++) {
+        // a cut segment's ends retreat to its middle and it is gone — the
+        // backbone frays into beads and parts, it never vanishes in a frame
+        const cut = damaged ? cutAt((ka + kb) * 0.5, w) : 0;
+        if (cut > 0.98) continue;
+        pointAt(ka, w, 1, hPa);
+        pointAt(kb, w, 1, hPb);
+        if (damaged) { fragXf(ka, hPa); fragXf(kb, hPb); }
+        if (cut > 0) {
+          const mx = (hPa[0] + hPb[0]) * 0.5, my = (hPa[1] + hPb[1]) * 0.5, mz = (hPa[2] + hPb[2]) * 0.5;
+          hPa[0] += (mx - hPa[0]) * cut; hPa[1] += (my - hPa[1]) * cut; hPa[2] += (mz - hPa[2]) * cut;
+          hPb[0] += (mx - hPb[0]) * cut; hPb[1] += (my - hPb[1]) * cut; hPb[2] += (mz - hPb[2]) * cut;
+        }
+        const rnd = sk + hash1(s * (w === 0 ? 1.7 : 2.3)) * 0.999;
+        if (w === 0) hput(hPa[0], hPa[1], hPa[2], hPb[0], hPb[1], hPb[2], 0, 2, rnd, 0);
+        else hput(hPb[0], hPb[1], hPb[2], hPa[0], hPa[1], hPa[2], 0, 2, rnd, 1);
+      }
     }
     // the base pairs: two bases reaching in, joined by their hydrogen bonds;
     // past the fork they are unpaired and stand as stubs on their own strand
@@ -2563,13 +3119,15 @@ export function createScene(ctx) {
       const sepF = k <= hKf ? 0 : ((k - hKf) / (BP - 1 - hKf)) * wF;
       const bA = seq[k];
       const bB = bA ^ 1; // A pairs with T, G with C
+      const sk = damaged ? sickAt(k) : 0;
       pointAt(k, 0, 1, hPa);
       pointAt(k, 1, 1, hPb);
       const inner = sepF < 0.92 ? 0.34 : 0.72;
       pointAt(k, 0, inner, hPc);
       pointAt(k, 1, inner, hPd);
-      hput(hPa[0], hPa[1], hPa[2], hPc[0], hPc[1], hPc[2], 1, SLOT[bA], hash1(k * 3.1), 0);
-      hput(hPb[0], hPb[1], hPb[2], hPd[0], hPd[1], hPd[2], 1, SLOT[bB], hash1(k * 4.9), 1);
+      if (damaged) { fragXf(k, hPa); fragXf(k, hPb); fragXf(k, hPc); fragXf(k, hPd); }
+      hput(hPa[0], hPa[1], hPa[2], hPc[0], hPc[1], hPc[2], 1, SLOT[bA], sk + hash1(k * 3.1) * 0.999, 0);
+      hput(hPb[0], hPb[1], hPb[2], hPd[0], hPd[1], hPd[2], 1, SLOT[bB], sk + hash1(k * 4.9) * 0.999, 1);
       if (sepF < 0.35) {
         const nb = bA >= 2 ? 3 : 2; // G-C holds with three bonds, A-T with two
         const o = k * 3;
@@ -2577,7 +3135,7 @@ export function createScene(ctx) {
         for (let j = 0; j < nb; j++) {
           const off = (j - (nb - 1) / 2) * 0.032;
           hput(hPc[0] + ux * off, hPc[1] + uy * off, hPc[2] + uz * off,
-            hPd[0] + ux * off, hPd[1] + uy * off, hPd[2] + uz * off, 2, SLOT[bA], hash1(k * 5.3 + j), 0);
+            hPd[0] + ux * off, hPd[1] + uy * off, hPd[2] + uz * off, 2, SLOT[bA], sk + hash1(k * 5.3 + j) * 0.999, 0);
         }
       }
     }
@@ -2609,6 +3167,8 @@ export function createScene(ctx) {
         hput(coreX(i), coreY(i), coreZ(i), coreX(i) + 0.001, coreY(i), coreZ(i), 3, 1, 0.5, 0.44 * wN);
       }
     }
+  }
+  function finishHelix() {
     hxCount = hn;
     hx.g.instanceCount = Math.max(1, hn);
     hx.a0.needsUpdate = true;
@@ -2616,12 +3176,465 @@ export function createScene(ctx) {
     hx.ai.needsUpdate = true;
     HU.uCount.value = hn;
   }
+  function buildHelix(devH, swayV) {
+    clearDamage();
+    hn = 0;
+    helixCore(devH, swayV);
+    finishHelix();
+  }
+
+  // --- the toxin ---------------------------------------------------------------------
+  // 2,3,7,8-TCDD is dibenzo-p-dioxin — anthracene's three fused rings with the
+  // middle ring's 9 and 10 carbons replaced by oxygen — planar, chlorinated at
+  // 2,3,7,8, the four outermost positions. DDT is a CH carbon carrying a
+  // trichloromethyl group, a hydrogen and two para-chlorophenyl rings,
+  // tetrahedral at the centre, the rings twisted against each other.
+  // Coordinates in ångströms from standard bond lengths (aromatic C–C 1.40,
+  // C–O 1.38, C–Cl 1.74, C–H 1.08, single C–C 1.54, C–Cl on sp3 carbon 1.77),
+  // drawn at the helix's own scale, ANG world units per ångström — so a dioxin
+  // is the width of a base pair, as it is. Atoms: x, y, z, element (0 C, 1 O,
+  // 2 Cl, 3 H); bonds: pairs of atom indices.
+  function molTCDD() {
+    const A = [], B = [];
+    const add = (x, y, z, e) => { A.push(x, y, z, e); return A.length / 4 - 1; };
+    const bond = (i, j) => { B.push(i, j); };
+    const s3 = 1.2124; // 1.40 · cos 30°
+    const O1 = add(0, 1.4, 0, 1), O2 = add(0, -1.4, 0, 1);
+    const Cf = [add(-s3, 0.7, 0, 0), add(-s3, -0.7, 0, 0), add(s3, 0.7, 0, 0), add(s3, -0.7, 0, 0)];
+    bond(O1, Cf[0]); bond(O1, Cf[2]); bond(O2, Cf[1]); bond(O2, Cf[3]); bond(Cf[0], Cf[1]); bond(Cf[2], Cf[3]);
+    for (let side = 0; side < 2; side++) {
+      const sgn = side === 0 ? -1 : 1;
+      const cx = sgn * 2 * s3;                 // the outer ring's centre
+      const c1 = add(cx, 1.4, 0, 0), c2 = add(cx + sgn * s3, 0.7, 0, 0);
+      const c3 = add(cx + sgn * s3, -0.7, 0, 0), c4 = add(cx, -1.4, 0, 0);
+      const fa = sgn < 0 ? Cf[0] : Cf[2], fb = sgn < 0 ? Cf[1] : Cf[3];
+      bond(fa, c1); bond(c1, c2); bond(c2, c3); bond(c3, c4); bond(c4, fb);
+      bond(c1, add(cx, 2.48, 0, 3)); bond(c4, add(cx, -2.48, 0, 3));
+      // the chlorines at 2,3 (7,8), out along the radial from the ring's centre
+      bond(c2, add(cx + sgn * (s3 + 1.507), 0.7 + 0.87, 0, 2));
+      bond(c3, add(cx + sgn * (s3 + 1.507), -0.7 - 0.87, 0, 2));
+    }
+    return { atoms: new Float32Array(A), bonds: new Int16Array(B) };
+  }
+  function molDDT() {
+    const A = [], B = [];
+    const add = (x, y, z, e) => { A.push(x, y, z, e); return A.length / 4 - 1; };
+    const bond = (i, j) => { B.push(i, j); };
+    const k = 0.57735;
+    const D = [[k, k, k], [k, -k, -k], [-k, k, -k], [-k, -k, k]]; // the tetrahedral directions
+    const Cc = add(0, 0, 0, 0);
+    const c1 = [1.54 * D[0][0], 1.54 * D[0][1], 1.54 * D[0][2]];
+    const C1 = add(c1[0], c1[1], c1[2], 0);
+    bond(Cc, C1);
+    {
+      // the three chlorines stand tetrahedrally round the CCl3 carbon, 109.5° off its bond back to the centre
+      const b = D[0];
+      let ux = -b[1], uy = b[0], uz = 0;
+      const ul = Math.hypot(ux, uy, uz); ux /= ul; uy /= ul; uz /= ul;
+      const vx = b[1] * uz - b[2] * uy, vy = b[2] * ux - b[0] * uz, vz = b[0] * uy - b[1] * ux;
+      for (let j = 0; j < 3; j++) {
+        const th = j * 2.0944 + 0.5236;
+        const px = Math.cos(th) * ux + Math.sin(th) * vx, py = Math.cos(th) * uy + Math.sin(th) * vy, pz = Math.cos(th) * uz + Math.sin(th) * vz;
+        const dx = b[0] / 3 + 0.9428 * px, dy = b[1] / 3 + 0.9428 * py, dz = b[2] / 3 + 0.9428 * pz;
+        bond(C1, add(c1[0] + 1.77 * dx, c1[1] + 1.77 * dy, c1[2] + 1.77 * dz, 2));
+      }
+    }
+    bond(Cc, add(1.09 * D[3][0], 1.09 * D[3][1], 1.09 * D[3][2], 3));
+    // the two para-chlorophenyl rings, each a planar hexagon on its own tetrahedral arm
+    for (let ri = 1; ri <= 2; ri++) {
+      const d = D[ri];
+      const o = ri === 1 ? D[0] : D[3];        // the plane's tilt: the rings twist against each other
+      let px = d[1] * o[2] - d[2] * o[1], py = d[2] * o[0] - d[0] * o[2], pz = d[0] * o[1] - d[1] * o[0];
+      const pl = Math.hypot(px, py, pz); px /= pl; py /= pl; pz /= pl;
+      const cx = 2.91 * d[0], cy = 2.91 * d[1], cz = 2.91 * d[2];   // ipso at 1.51, the ring's centre 1.40 beyond
+      const idx = [];
+      for (let j = 0; j < 6; j++) {
+        const a = j * 1.0472;
+        const rx = -Math.cos(a) * d[0] + Math.sin(a) * px;
+        const ry = -Math.cos(a) * d[1] + Math.sin(a) * py;
+        const rz = -Math.cos(a) * d[2] + Math.sin(a) * pz;
+        idx.push(add(cx + 1.40 * rx, cy + 1.40 * ry, cz + 1.40 * rz, 0));
+        if (j === 3) bond(idx[j], add(cx + 3.14 * rx, cy + 3.14 * ry, cz + 3.14 * rz, 2));        // the para chlorine
+        else if (j !== 0) bond(idx[j], add(cx + 2.48 * rx, cy + 2.48 * ry, cz + 2.48 * rz, 3));   // the ring hydrogens
+      }
+      for (let j = 0; j < 6; j++) bond(idx[j], idx[(j + 1) % 6]);
+      bond(Cc, idx[0]);
+    }
+    return { atoms: new Float32Array(A), bonds: new Int16Array(B) };
+  }
+  const MOLS = [molTCDD(), molDDT()];
+  const ATOM_R = [0.50, 0.48, 0.62, 0.30]; // ball radii, ångströms: C, O, Cl, H
+  // The seven molecules on the plate: kind (0 TCDD, 1 DDT), how it strikes
+  // (0 an adduct on a base, 1 intercalation between two), the base index, the
+  // strand, where it waits in the dark, and when in the development it sets
+  // off. The two intercalators are the dioxins — it is the planar molecule
+  // that slips between base pairs — and their sites are where the stack
+  // breaks later.
+  const MOLDEF = [
+    [0, 1, 13, 0, -1.9, 0.9, 0.6, 0.10],
+    [0, 1, 27, 0, 1.8, -0.4, -0.7, 0.16],
+    [0, 0, 7, 0, -1.5, -1.05, 0.7, 0.02],
+    [0, 0, 35, 1, 1.6, 1.25, -0.5, 0.22],
+    [1, 0, 19, 0, 2.1, 0.2, 0.8, 0.06],
+    [1, 0, 31, 1, -2.0, -0.2, -0.9, 0.27],
+    [1, 0, 10, 1, 1.5, -1.0, 0.6, 0.31],
+  ];
+  // the nicks fall on three adduct sites, the breaks on the two intercalations
+  const NICKS = [2, 4, 3];
+  const BREAKS = [0, 1];
+  const molA = new Float32Array(NMOL);     // each molecule's approach, 0 waiting .. 1 docked
+  const mFree = new Float32Array(9), mDock = new Float32Array(9); // orientation scratch
+  const mO = new Float32Array(3), mOd = new Float32Array(3), mAt = new Float32Array(3), mBt = new Float32Array(3);
+  const mTan = new Float32Array(3), mAx = new Float32Array(3);
+  // a rotation matrix from three angles (about x, then y, then z), into out
+  function rotXYZ(out, ax, ay, az) {
+    const cx = Math.cos(ax), sx = Math.sin(ax), cy = Math.cos(ay), sy = Math.sin(ay), cz = Math.cos(az), sz = Math.sin(az);
+    out[0] = cy * cz; out[1] = sx * sy * cz - cx * sz; out[2] = cx * sy * cz + sx * sz;
+    out[3] = cy * sz; out[4] = sx * sy * sz + cx * cz; out[5] = cx * sy * sz - sx * cz;
+    out[6] = -sy; out[7] = sx * cy; out[8] = cx * cy;
+  }
+  // a rotation about a unit axis by an angle (Rodrigues), into out at offset o
+  function rotAxis(out, o, ux, uy, uz, a) {
+    const c = Math.cos(a), s = Math.sin(a), t = 1 - c;
+    out[o] = t * ux * ux + c; out[o + 1] = t * ux * uy - s * uz; out[o + 2] = t * ux * uz + s * uy;
+    out[o + 3] = t * ux * uy + s * uz; out[o + 4] = t * uy * uy + c; out[o + 5] = t * uy * uz - s * ux;
+    out[o + 6] = t * ux * uz - s * uy; out[o + 7] = t * uy * uz + s * ux; out[o + 8] = t * uz * uz + c;
+  }
+  // a frame from three orthonormal columns into out
+  function frameCols(out, x0, x1, x2, y0, y1, y2, z0, z1, z2) {
+    out[0] = x0; out[1] = y0; out[2] = z0;
+    out[3] = x1; out[4] = y1; out[5] = z1;
+    out[6] = x2; out[7] = y2; out[8] = z2;
+  }
+  // the damage with the development: every window is the performer's level,
+  // nothing here runs on the clock except the free molecules' drift and the
+  // loose fragments' wander, both translations
+  function buildToxin(d, swayV, handY, t) {
+    clearDamage();
+    hn = 0;
+    // the molecules' progress toward their sites
+    for (let m = 0; m < NMOL; m++) {
+      const M = MOLDEF[m];
+      const a = smooth01((d - M[7]) / 0.22);
+      molA[m] = a;
+      if (M[1] === 1 && a > 0.002) {
+        // intercalation: the step below the molecule opens by one rise and
+        // unwinds by 26° as the molecule slides in
+        hOpenK[hOpenN] = M[2];
+        hOpen[hOpenN] = a * RISE;
+        hUnw[hOpenN] = a * 0.45;
+        hOpenN++;
+      }
+      if (a > 0.002) { hSickK[hSickN] = M[2]; hSickA[hSickN] = a * 0.9; hSickN++; }
+    }
+    // nicks, then the breaks, then the fragments drift
+    for (let i = 0; i < NICKS.length; i++) {
+      const M = MOLDEF[NICKS[i]];
+      const p = smooth01((d - (0.42 + i * 0.05)) / 0.12);
+      if (p > 0.002) { hNickK[hNickN] = M[2]; hNickS[hNickN] = M[3]; hNickP[hNickN] = p; hNickN++; }
+    }
+    const fragP = smooth01((d - 0.74) / 0.26);
+    hBrkN = 0;
+    for (let b = 0; b < NBREAK; b++) {
+      const M = MOLDEF[BREAKS[b]];
+      const p = smooth01((d - (0.58 + b * 0.08)) / 0.14);
+      if (p < 0.002) continue;
+      const o3 = hBrkN * 3;
+      hBrkK[hBrkN] = M[2];
+      hBrkP[hBrkN] = p;
+      // the offset across the break: the gap opening, then the drift apart
+      // (the upper pieces come down and sideways, so they stay in the frame),
+      // with a slow wander once loose (translation, never a spin)
+      const wob = fragP * 0.035;
+      if (b === 0) {
+        hBrkOff[o3] = p * 0.05 + fragP * 0.30 + wob * Math.sin(t * 0.61);
+        hBrkOff[o3 + 1] = p * 0.06 - fragP * 0.08 + wob * Math.cos(t * 0.47);
+        hBrkOff[o3 + 2] = -fragP * 0.22 + wob * Math.sin(t * 0.39);
+      } else {
+        hBrkOff[o3] = -p * 0.05 - fragP * 0.50 + wob * Math.sin(t * 0.61 + 2.1);
+        hBrkOff[o3 + 1] = p * 0.06 - fragP * 0.34 + wob * Math.cos(t * 0.47 + 1.0);
+        hBrkOff[o3 + 2] = fragP * 0.26 + wob * Math.sin(t * 0.39 + 3.3);
+      }
+      hBrkN++;
+    }
+    // the helix's geometry first (the breaks' pivots need the damaged axis),
+    // then the pivots and tilts, then the molecule
+    const twistF = swayV < 0.45 ? 1 - (swayV / 0.45) * 0.80 : 0.20 + ((swayV - 0.45) / 0.55) * 1.12;
+    hTwist = TWIST0 * twistF;
+    hWF = 0; hWN = 0; hWrithe = smooth01((swayV - 0.55) / 0.45) * 0.40;
+    hRad = HRAD; hRise = RISE; hSpace = (BP * hRise) / NUC; hKf = BP;
+    for (let b = 0; b < hBrkN; b++) {
+      const o3 = b * 3;
+      axisAt(hBrkK[b] + 0.5, hFa);
+      hBrkPiv[o3] = hFa[0]; hBrkPiv[o3 + 1] = hFa[1]; hBrkPiv[o3 + 2] = hFa[2];
+      // the tilt of the fragment above the break: about a fixed oblique axis,
+      // by an angle the drift sets
+      const ax = b === 0 ? 0.80 : -0.55, az = b === 0 ? 0.45 : 0.72;
+      const al = Math.hypot(ax, 0.2, az);
+      rotAxis(hBrkRot, b * 9, ax / al, 0.2 / al, az / al, fragP * hBrkP[b] * (b === 0 ? 0.30 : -0.40));
+    }
+    helixCore(0, swayV);
+    // the molecules: each drifts in from the dark on a slow wander, tumbling
+    // only as the sway and the hand turn it, and settles onto its site as its
+    // approach completes; a docked molecule rides its fragment
+    for (let m = 0; m < NMOL; m++) {
+      const M = MOLDEF[m];
+      const mol = MOLS[M[0]];
+      const a = molA[m];
+      const k = M[2], w = M[3];
+      // free pose: the waiting point plus the wander, under the sway's tumble
+      const ph = m * 1.37;
+      const wander = 1 - a;
+      mO[0] = M[4] + wander * 0.14 * Math.sin(t * 0.37 + ph);
+      mO[1] = M[5] + wander * 0.12 * Math.sin(t * 0.29 + ph * 2.0);
+      mO[2] = M[6] + wander * 0.14 * Math.cos(t * 0.33 + ph);
+      rotXYZ(mFree, ph * 2.3 + swayV * (2.6 + 0.4 * (m % 3)) + handY * 1.1, ph * 1.1 + swayV * 1.7, ph * 0.7 + handY * (m % 2 ? 1.0 : -0.8));
+      // docked pose
+      if (M[1] === 1) {
+        // flat in the opened step, its long axis across the base pair
+        const kf = k + 0.5;
+        axisAt(kf, mOd);
+        axisAt(kf - 0.15, hFa); axisAt(kf + 0.15, hFb);
+        let tx = hFb[0] - hFa[0], ty = hFb[1] - hFa[1], tz = hFb[2] - hFa[2];
+        const tl = Math.hypot(tx, ty, tz) || 1; tx /= tl; ty /= tl; tz /= tl;
+        pointAt(kf, 0, 1, hPa);               // sets hRadial to strand 0's radial here
+        const th = GROOVE * 0.5;              // the base pair's own direction lies between the strands
+        const c = Math.cos(th), s = Math.sin(th);
+        let rx = hRadial[0], ry = hRadial[1], rz = hRadial[2];
+        // rotate the radial half way round toward strand 1 about the tangent
+        const cx = ty * rz - tz * ry, cy = tz * rx - tx * rz, cz = tx * ry - ty * rx;
+        rx = rx * c + cx * s; ry = ry * c + cy * s; rz = rz * c + cz * s;
+        const bx = ty * rz - tz * ry, by = tz * rx - tx * rz, bz = tx * ry - ty * rx;
+        frameCols(mDock, rx, ry, rz, bx, by, bz, tx, ty, tz);
+      } else {
+        // on the backbone, standing a little off it, the plane tangent to the helix
+        pointAt(k, w, 1, mOd);
+        axisAt(k - 0.15, hFa); axisAt(k + 0.15, hFb);
+        let tx = hFb[0] - hFa[0], ty = hFb[1] - hFa[1], tz = hFb[2] - hFa[2];
+        const tl = Math.hypot(tx, ty, tz) || 1; tx /= tl; ty /= tl; tz /= tl;
+        const rx = hRadial[0], ry = hRadial[1], rz = hRadial[2];
+        mOd[0] += rx * 0.13; mOd[1] += ry * 0.13; mOd[2] += rz * 0.13;
+        const bx = ty * rz - tz * ry, by = tz * rx - tx * rz, bz = tx * ry - ty * rx;
+        frameCols(mDock, tx, ty, tz, bx, by, bz, rx, ry, rz);
+      }
+      const n = mol.atoms.length / 4;
+      const bright = 0.35 + 0.65 * a;
+      molK = k;
+      for (let i = 0; i < n; i++) {
+        molAtom(mol, i, a, mAt);
+        hput(mAt[0], mAt[1], mAt[2], mAt[0], mAt[1], mAt[2], 6, 10 + mol.atoms[i * 4 + 3], bright, ATOM_R[mol.atoms[i * 4 + 3]] * ANG);
+      }
+      const nb = mol.bonds.length / 2;
+      for (let i = 0; i < nb; i++) {
+        molAtom(mol, mol.bonds[i * 2], a, mAt);
+        molAtom(mol, mol.bonds[i * 2 + 1], a, mBt);
+        hput(mAt[0], mAt[1], mAt[2], mBt[0], mBt[1], mBt[2], 7, 2, bright, 0);
+      }
+    }
+    finishHelix();
+  }
+  // atom i of a molecule in the world: its free pose and its docked pose
+  // (the docked one carried with its fragment), blended by the approach
+  let molK = 0;
+  function molAtom(mol, i, a, out) {
+    const x = mol.atoms[i * 4] * ANG, y = mol.atoms[i * 4 + 1] * ANG, z = mol.atoms[i * 4 + 2] * ANG;
+    const fx = mO[0] + mFree[0] * x + mFree[1] * y + mFree[2] * z;
+    const fy = mO[1] + mFree[3] * x + mFree[4] * y + mFree[5] * z;
+    const fz = mO[2] + mFree[6] * x + mFree[7] * y + mFree[8] * z;
+    if (a <= 0.0001) { out[0] = fx; out[1] = fy; out[2] = fz; return; }
+    out[0] = mOd[0] + mDock[0] * x + mDock[1] * y + mDock[2] * z;
+    out[1] = mOd[1] + mDock[3] * x + mDock[4] * y + mDock[5] * z;
+    out[2] = mOd[2] + mDock[6] * x + mDock[7] * y + mDock[8] * z;
+    fragXf(molK, out);
+    out[0] = fx + (out[0] - fx) * a;
+    out[1] = fy + (out[1] - fy) * a;
+    out[2] = fz + (out[2] - fz) * a;
+  }
+
+  // --- phagocytosis ---------------------------------------------------------------------
+  // The macrophage sits left of centre; the prey waits out to the right and
+  // drifts in. The sequence is the development's: the pseudopods reach, wrap
+  // round the prey, the membrane seals behind it into a phagosome (a sphere
+  // grown from nothing, blended into the body), the pseudopods draw back, the
+  // phagosome is pulled inside, the prey is compressed and digested, the
+  // vacuole shrinks. Sway grows the last three pseudopods from nothing and
+  // winds tortuosity into all of them; press squeezes the whole cell.
+  const PH_M = [-0.42, -0.02, 0.0];
+  const PH_FAR = [1.62, 0.24, 0.14];
+  const PREY_R = 0.30;
+  const phU = new Float32Array(3), phE1 = new Float32Array(3), phE2 = new Float32Array(3);
+  let phFarD = 1;
+  {
+    let ux = PH_FAR[0] - PH_M[0], uy = PH_FAR[1] - PH_M[1], uz = PH_FAR[2] - PH_M[2];
+    phFarD = Math.hypot(ux, uy, uz);
+    ux /= phFarD; uy /= phFarD; uz /= phFarD;
+    phU[0] = ux; phU[1] = uy; phU[2] = uz;
+    // e1 = normalize(u × z), e2 = u × e1
+    let ex = uy, ey = -ux, ez = 0;
+    const el = Math.hypot(ex, ey, ez) || 1; ex /= el; ey /= el; ez /= el;
+    phE1[0] = ex; phE1[1] = ey; phE1[2] = ez;
+    phE2[0] = uy * ez - uz * ey; phE2[1] = uz * ex - ux * ez; phE2[2] = ux * ey - uy * ex;
+  }
+  // the radius of the macrophage's ellipsoid in a direction
+  const ellR = (dx, dy, dz) => 1 / Math.sqrt((dx * dx) / (0.84 * 0.84) + (dy * dy) / (0.70 * 0.70) + (dz * dz) / (0.66 * 0.66));
+  function updatePhago(d, swayV, t) {
+    const a = smooth01(d / 0.18);              // the prey drifts in
+    const e = smooth01((d - 0.06) / 0.24);     // the pseudopods reach
+    const w = smooth01((d - 0.22) / 0.26);     // and wrap round it
+    const s = smooth01((d - 0.44) / 0.14);     // the membrane seals
+    const g = smooth01((d - 0.52) / 0.22);     // the phagosome is drawn in
+    const dg = smooth01((d - 0.72) / 0.28);    // and digested
+    const ux = phU[0], uy = phU[1], uz = phU[2];
+    const touch = 0.84 + PREY_R + 0.03;
+    const along = (phFarD + (touch - phFarD) * a) * (1 - g) + 0.16 * g;
+    const preyR = PREY_R * (1 - 0.22 * g) * (1 - 0.72 * dg);
+    const bob = 0.025 * Math.sin(t * 0.5) * (1 - g);
+    const px = PH_M[0] + ux * along, py = PH_M[1] + uy * along + bob, pz = PH_M[2] + uz * along;
+    U.uPrey.value.set(px, py, pz, preyR);
+    U.uMacro.value.set(PH_M[0], PH_M[1], PH_M[2], 0.22);
+    const squash = 1 - 0.35 * g;
+    const vacR = s * (preyR + 0.05 * (1 - dg));
+    const bulgeR = s * (preyR + 0.07);
+    U.uPhA.value.set(squash, dg, vacR, bulgeR);
+    U.uPhB.value.set(PH_M[0] - ux * (0.30 + 0.12 * g), PH_M[1] + 0.10 - uy * 0.3, PH_M[2] - uz * 0.3, 0.24);
+    // the pseudopods
+    const ext = e * (1 - s);
+    const L = Math.max(0.3, along - 0.45);
+    const podR0 = 0.135, podR1 = 0.07;
+    for (let i = 0; i < NPOD; i++) {
+      const live = i < 4 ? 1 : smooth01((swayV - (0.12 + 0.28 * (i - 4))) / 0.22);
+      const o = i * PODPTS * 4;
+      if (live <= 0) { pods[o + 3] = 0; podB[i * 4 + 3] = -1; continue; }
+      const ph = (i / NPOD) * 6.2831853 + 0.4 + 0.25 * swayV * i;
+      const c = Math.cos(ph), sn = Math.sin(ph);
+      const vx = c * phE1[0] + sn * phE2[0], vy = c * phE1[1] + sn * phE2[1], vz = c * phE1[2] + sn * phE2[2];
+      let dx = ux * 0.85 + vx * 0.55, dy = uy * 0.85 + vy * 0.55, dz = uz * 0.85 + vz * 0.55;
+      let dl = Math.hypot(dx, dy, dz); dx /= dl; dy /= dl; dz /= dl;
+      const er = ellR(dx, dy, dz) * 0.92;
+      const bx = PH_M[0] + dx * er, by = PH_M[1] + dy * er, bz = PH_M[2] + dz * er;
+      let fx = ux + vx * 0.30, fy = uy + vy * 0.30, fz = uz + vz * 0.30;
+      dl = Math.hypot(fx, fy, fz); fx /= dl; fy /= dl; fz /= dl;
+      // the binormal the tortuosity wanders along
+      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      pods[o] = bx; pods[o + 1] = by; pods[o + 2] = bz; pods[o + 3] = podR0 * live;
+      for (let k = 1; k <= 3; k++) {
+        const sk = k / 3;
+        const sx = bx + fx * L * sk, sy = by + fy * L * sk, sz = bz + fz * L * sk;
+        const th = sk * w * 3.1415927 * 0.95;
+        const ar = preyR + podR1 + 0.02;
+        const ax = px + ar * (-Math.cos(th) * ux + Math.sin(th) * vx);
+        const ay = py + ar * (-Math.cos(th) * uy + Math.sin(th) * vy);
+        const az = pz + ar * (-Math.cos(th) * uz + Math.sin(th) * vz);
+        const tw = swayV * 0.11 * Math.sin(sk * 5.0 + i * 1.7 + t * 0.6) * ext;
+        const ox = o + k * 4;
+        pods[ox] = bx + ((sx + (ax - sx) * w) - bx) * ext + nx * tw;
+        pods[ox + 1] = by + ((sy + (ay - sy) * w) - by) * ext + ny * tw;
+        pods[ox + 2] = bz + ((sz + (az - sz) * w) - bz) * ext + nz * tw;
+        pods[ox + 3] = (podR0 + (podR1 - podR0) * sk) * live * (0.35 + 0.65 * ext);
+      }
+      // its bounding sphere: the centroid of the four points, and the farthest
+      // of them plus its radius
+      let cx = 0, cy = 0, cz = 0;
+      for (let k = 0; k < PODPTS; k++) { cx += pods[o + k * 4]; cy += pods[o + k * 4 + 1]; cz += pods[o + k * 4 + 2]; }
+      cx /= PODPTS; cy /= PODPTS; cz /= PODPTS;
+      let br = 0;
+      for (let k = 0; k < PODPTS; k++) {
+        const dd = Math.hypot(pods[o + k * 4] - cx, pods[o + k * 4 + 1] - cy, pods[o + k * 4 + 2] - cz) + pods[o + k * 4 + 3];
+        if (dd > br) br = dd;
+      }
+      podB[i * 4] = cx; podB[i * 4 + 1] = cy; podB[i * 4 + 2] = cz; podB[i * 4 + 3] = br;
+    }
+    // one bounding sphere over the whole cell — the body, every live
+    // pseudopod, the prey — centred between the macrophage and the prey, so
+    // the march's entry is as tight as the scene allows and every ray that
+    // misses it costs one sphere test
+    const bx = (PH_M[0] + px) * 0.5, by = (PH_M[1] + py) * 0.5, bz = (PH_M[2] + pz) * 0.5;
+    let R = Math.hypot(PH_M[0] - bx, PH_M[1] - by, PH_M[2] - bz) + 0.90;
+    R = Math.max(R, Math.hypot(px - bx, py - by, pz - bz) + preyR + 0.06);
+    for (let i = 0; i < NPOD; i++) {
+      if (podB[i * 4 + 3] < 0) continue;
+      const dd = Math.hypot(podB[i * 4] - bx, podB[i * 4 + 1] - by, podB[i * 4 + 2] - bz) + podB[i * 4 + 3];
+      if (dd > R) R = dd;
+    }
+    U.uPhC.value.set(bx, by, bz, R + 0.20);
+  }
+
+  // --- decomposition ------------------------------------------------------------------------
+  // The dead mass: a mound of tissue on the plate — a lower layer of cells on
+  // a disc and an upper layer riding on it, drawn by the same culled cell
+  // march as the embryo. The development runs it down: the turgor goes and it
+  // slumps (the cells sink and spread, their junctions blur into one mass),
+  // the colour drains to the palette's ash end, pits eat into the surface,
+  // bacteria speckle it, the hyphae germinate on it and spread over it and out
+  // across the plate, it breaks into pieces that sink into the substrate and
+  // dissolve, and the plate keeps the stain under the network.
+  const TIS = new Float32Array(TIS_N * 4);
+  const TIS_C = new Uint8Array(TIS_N);
+  const CL_DIR = new Float32Array(TIS_CLUST * 2);
+  {
+    let n = 0;
+    for (let layer = 0; layer < 2; layer++) {
+      const cnt = layer === 0 ? 36 : 18, R = layer === 0 ? 0.82 : 0.44;
+      for (let i = 0; i < cnt; i++, n++) {
+        const rr = R * Math.sqrt((i + 0.5) / cnt), th = i * 2.39996 + layer * 1.3;
+        const r = 0.20 + 0.06 * hash1(n * 3.3);
+        const x = Math.cos(th) * rr + (hash1(n * 1.1) - 0.5) * 0.05;
+        const y = Math.sin(th) * rr + (hash1(n * 2.7) - 0.5) * 0.05;
+        TIS[n * 4] = x;
+        TIS[n * 4 + 1] = y;
+        // a mound, not two discs: the lower layer's cells ride a little
+        // higher toward the middle and the upper layer settles into them
+        TIS[n * 4 + 2] = layer === 0
+          ? r * (0.88 + 0.30 * (1 - rr / R))
+          : r + 0.20 + 0.06 * (1 - rr / R);
+        TIS[n * 4 + 3] = r;
+        TIS_C[n] = Math.floor(((Math.atan2(y, x) + 3.1415927) / 6.2831853) * TIS_CLUST) % TIS_CLUST;
+      }
+    }
+    for (let c = 0; c < TIS_CLUST; c++) {
+      const a = ((c + 0.5) / TIS_CLUST) * 6.2831853 - 3.1415927;
+      CL_DIR[c * 2] = Math.cos(a);
+      CL_DIR[c * 2 + 1] = Math.sin(a);
+    }
+  }
+  function updateDecomp(d, pressV) {
+    const slump = smooth01(d / 0.30);
+    const pit = smooth01((d - 0.26) / 0.52);
+    const drain = smooth01((d - 0.10) / 0.78);
+    const speck = smooth01((d - 0.30) / 0.25) * (1 - smooth01((d - 0.80) / 0.2));
+    const frag = smooth01((d - 0.58) / 0.25);
+    const sink = smooth01((d - 0.72) / 0.28);
+    const stain = smooth01((d - 0.45) / 0.4);
+    for (let i = 0; i < TIS_N; i++) {
+      const o = i * 4, c = TIS_C[i];
+      const spread = 1 + 0.22 * slump;
+      let x = TIS[o] * spread + CL_DIR[c * 2] * 0.40 * frag;
+      let y = TIS[o + 1] * spread + CL_DIR[c * 2 + 1] * 0.40 * frag;
+      let z = TIS[o + 2] * (1 - 0.40 * slump) * (1 - 0.30 * pressV) - sink * (0.40 + 0.25 * hash1(i * 5.1));
+      const r = TIS[o + 3] * (1 - 0.10 * slump) * (1 - 0.9 * sink * sink);
+      raw[o] = x; raw[o + 1] = y; raw[o + 2] = z; raw[o + 3] = r;
+    }
+    packCells(TIS_N);
+    // the junctions blur into one mass as the turgor goes, and the neck lets
+    // go again as the mass breaks up, so the pieces separate instead of
+    // stretching one skin between them
+    // capped: the cull inflates its test spheres by the neck, so a neck as
+    // wide as a cell puts far more of the mound into every ray's local list
+    // than the list can hold, and the cells at the back are dropped in patches
+    cellNeck = clamp(0.09 + 0.16 * slump - 0.20 * frag, 0.03, 0.17);
+    cellCap = 3.0;
+    U.uDec.value.set(slump, pit, speck, drain);
+    U.uDec2.value.set(0.95 + 0.3 * stain, stain * (0.6 + 0.4 * sink), sink, Math.max(cellBound * 1.05 + 0.05, 0.6));
+  }
 
   // --- state ------------------------------------------------------------------------
-  // The organisms sit on the knob in the ORDER OF LIFE: the molecule first,
-  // then the cell and what it becomes, then the fungus, then the mold.
-  const ORG_HELIX = 0, ORG_CELL = 1, ORG_MYC = 2, ORG_SLIME = 3;
-  const ORG_STAGES = [3, STAGES, 6, 6]; // helix, cell line, mycelium, slime mold
+  // The organisms sit on the knob in the ORDER OF LIFE, and then its end: the
+  // molecule first, then the cell and what it becomes, then the fungus, then
+  // the mold; then the toxin at the molecule, the cell consumed, the body
+  // decomposed.
+  const ORG_HELIX = 0, ORG_CELL = 1, ORG_MYC = 2, ORG_SLIME = 3, ORG_TOXIN = 4, ORG_PHAGO = 5, ORG_DECOMP = 6;
+  const ORG_N = 7;
+  const ORG_STAGES = [3, STAGES, 6, 6, 6, 6, 6]; // helix, cell line, mycelium, slime mold, toxin, phagocytosis, decomposition
 
   let level = 0, target = 0, dir = 1;
   let knobLvlPrev = null, knobOrgPrev = null, knobSpcPrev = null, strikePrev = 0;
@@ -2639,9 +3652,10 @@ export function createScene(ctx) {
   let paramMorph = null, paramSqueeze = null;
   let jig = 0, press = 0, bass = 0, high = 0, lvl = 0, dist = 3.4;
   let panX = 0, panY = 0, azim = 0, pulse = 0, beatPrev = 0, flow = 0;
-  let mycSway = -1, mycDirty = true;
+  let mycSway = -1, mycDirty = true, mycMode = 0; // the mode the hyphae buffer holds: 0 the fungus, 1 the mould
   let hxSway = -1, hxLevel = -1, hxDirty = true;
   let seedOff = 0;
+  let sickG = 0; // the toxin's sickening of the helix, smoothed
 
   function applySpecies() {
     const seed = speciesIdx * 13.37 + reseedN * 3.77 + 1.0;
@@ -2655,7 +3669,7 @@ export function createScene(ctx) {
     hxDirty = true;
   }
   function stepLevel(s) {
-    const org = clamp(Math.round(orgPos), 0, 3);
+    const org = clamp(Math.round(orgPos), 0, ORG_N - 1);
     const n = ORG_STAGES[org] - 1;
     const q = Math.round(target * n) + s;
     target = clamp(q, 0, n) / n;
@@ -2667,7 +3681,7 @@ export function createScene(ctx) {
 
   applySpecies();
   computeCells(0);
-  growMycelium(0, seedOff);
+  growMycelium(0, seedOff, MYP, null);
   mycSway = 0;
   buildHelix(0, 0);
   hxSway = 0; hxLevel = 0;
@@ -2694,19 +3708,23 @@ export function createScene(ctx) {
       openS = approach(openS, opened ? 1 : 0, 0.6, dt);
       const openDim = Math.max(openS, 0.05 + 0.04 * io.level); // dark, not dead
 
-      // ---- the organism: KNOB 6 in quarter turns, with hysteresis at the edges
+      // ---- the organism: KNOB 6 in sevenths of a turn, with hysteresis at the edges
       const k6 = io.knobs[5];
       if (knobOrgPrev === null) knobOrgPrev = k6;
       if (Math.abs(k6 - knobOrgPrev) > 1 / 256) {
         knobOrgPrev = k6;
-        const b = clamp(Math.floor(k6 * 4), 0, 3);
-        if (b !== orgTarget && (k6 < orgTarget * 0.25 - 0.02 || k6 > (orgTarget + 1) * 0.25 + 0.02)) orgTarget = b;
+        const band = 1 / ORG_N;
+        const b = clamp(Math.floor(k6 * ORG_N), 0, ORG_N - 1);
+        if (b !== orgTarget && (k6 < orgTarget * band - 0.015 || k6 > (orgTarget + 1) * band + 0.015)) orgTarget = b;
       }
       orgPos = approach(orgPos, orgTarget, 0.15, dt);
       const wMyc = Math.max(0, 1 - Math.abs(orgPos - ORG_MYC));
       const wSlime = Math.max(0, 1 - Math.abs(orgPos - ORG_SLIME));
       const wCell = Math.max(0, 1 - Math.abs(orgPos - ORG_CELL));
       const wHelix = Math.max(0, 1 - Math.abs(orgPos - ORG_HELIX));
+      const wToxin = Math.max(0, 1 - Math.abs(orgPos - ORG_TOXIN));
+      const wPhago = Math.max(0, 1 - Math.abs(orgPos - ORG_PHAGO));
+      const wDecomp = Math.max(0, 1 - Math.abs(orgPos - ORG_DECOMP));
 
       // ---- the species: KNOB 7, quantized to the eight seeded parameter sets
       const k7 = io.knobs[6];
@@ -2745,7 +3763,7 @@ export function createScene(ctx) {
       const pressIn = paramSqueeze === null ? io.gestures.press : Math.max(io.gestures.press, paramSqueeze);
       jig = approach(jig, swayIn, 0.4, dt);
       press = approach(press, pressIn, 0.15, dt);
-      panX = approach(panX, (io.xy.x - 0.5) * 1.6 * (1 - wHelix), 0.3, dt);
+      panX = approach(panX, (io.xy.x - 0.5) * 1.6 * (1 - wHelix - wToxin), 0.3, dt);
       panY = approach(panY, (io.xy.y - 0.5) * 0.9, 0.3, dt);
       azim = approach(azim, (io.xy.x - 0.5) * 6.2831853, 0.25, dt);
       dist = approach(dist, 4.3 - io.xy.y * 1.9, 0.35, dt);
@@ -2846,17 +3864,55 @@ export function createScene(ctx) {
         U.uTintB.value = SP.tintB;
         U.uFoodN.value = SP.foodN;
       }
-      if (wMyc > 0.002) {
-        if (mycDirty || Math.abs(jig - mycSway) > 0.004) {
-          growMycelium(jig, seedOff);
+      // The hyphae buffer holds ONE network — the fungus, or the mould on the
+      // corpse — so the heavier weight owns it. The two organisms are four
+      // bands apart and their weights cannot overlap, but the buffer is shared
+      // state and a claim on it belongs to one of them explicitly: two claims
+      // in a frame would re-grow the colony twice and flicker between networks.
+      const mycWant = wDecomp > wMyc ? 1 : 0;
+      if (wMyc > 0.002 && mycWant === 0) {
+        if (mycDirty || mycMode !== 0 || Math.abs(jig - mycSway) > 0.004) {
+          growMycelium(jig, seedOff, MYP, null);
           mycSway = jig;
+          mycMode = 0;
           mycDirty = false;
         }
         const n = mycCount(level);
         myc.g.instanceCount = n;
         MU.uCount.value = n;
       }
-      hyphae.visible = wMyc > 0.002;
+
+      // ---- the toxin: the helix rebuilt every frame under its damage (the
+      // free molecules wander, the loose fragments drift), the clean helix
+      // marked to rebuild when it comes back
+      if (wToxin > 0.002) {
+        buildToxin(level, jig, io.xy.y - 0.5, t);
+        hxLevel = -1;
+      }
+      sickG = approach(sickG, wToxin > 0.002 ? smooth01((level - 0.1) / 0.8) : 0, 0.3, dt);
+
+      // ---- phagocytosis
+      if (wPhago > 0.002) updatePhago(level, jig, t);
+
+      // ---- decomposition: the mass, and the mould on it
+      if (wDecomp > 0.002) {
+        updateDecomp(level, press);
+        if (mycWant === 1 && (mycDirty || mycMode !== 1 || Math.abs(jig - mycSway) > 0.004)) {
+          growMycelium(jig, seedOff, MYD, TIS);
+          mycSway = jig;
+          mycMode = 1;
+          mycDirty = false;
+        }
+        if (mycWant === 1) {
+          const n = mycCount(smooth01((level - 0.32) / 0.5));
+          myc.g.instanceCount = n;
+          MU.uCount.value = n;
+        }
+        U.uNeck.value = cellNeck;
+        U.uCap.value = cellCap;
+        U.uCilia.value = 0;
+      }
+      hyphae.visible = wMyc > 0.002 || wDecomp > 0.002;
 
       // ---- the helix
       if (wHelix > 0.002) {
@@ -2868,10 +3924,30 @@ export function createScene(ctx) {
           hxDirty = false;
         }
       }
-      helix.visible = wHelix > 0.002;
+      helix.visible = wHelix > 0.002 || wToxin > 0.002;
+
+      // ---- the palette's cold end (what the poisoned molecule sickens toward)
+      // and its ash end (what the dead mass drains to), followed smoothly so a
+      // hue rotation never flicks them
+      const pl = io.palette;
+      let ci = 0, cs = -9, ai = 0, as = -9;
+      for (let i = 0; i < 5; i++) {
+        const c = pl[i];
+        const mx = Math.max(c.r, c.g, c.b), mn = Math.min(c.r, c.g, c.b);
+        const cold = c.b - c.r;
+        if (cold > cs) { cs = cold; ci = i; }
+        // ash is the LEAST SATURATED stop, measured relative to its own
+        // brightness — an absolute chroma test picks whichever stop is merely
+        // darkest, and a dark violet is not ash
+        const ash = -(mx - mn) / Math.max(mx, 1e-3);
+        if (ash > as) { as = ash; ai = i; }
+      }
+      const kTint = 1 - Math.exp(-dt / 0.4);
+      U.uCold.value.lerp(pl[ci], kTint);
+      HU.uCold.value.copy(U.uCold.value);
+      U.uAsh.value.lerp(pl[ai], kTint);
 
       // ---- uniforms
-      const pl = io.palette;
       for (let i = 0; i < 5; i++) {
         pal[i].value.copy(pl[i]);
         hxPal[i * 3] = pl[i].r; hxPal[i * 3 + 1] = pl[i].g; hxPal[i * 3 + 2] = pl[i].b;
@@ -2888,12 +3964,18 @@ export function createScene(ctx) {
       U.uIntensity.value = io.intensity * openDim;
       U.uPan.value.set(panX, panY);
       U.uOrg.value.set(wMyc, wSlime, wCell, wHelix);
+      U.uOrg2.value.set(wToxin, wPhago, wDecomp);
+      U.uSick.value = sickG;
       U.uFlow.value = flow;
       MU.uPan.value.set(panX, panY);
       MU.uDist.value = dist;
-      MU.uPress.value = press;
+      // under decomposition the squeeze is in the mass itself (the cells are
+      // flattened on the CPU and the hyphae ride them), not in the projection
+      MU.uPress.value = mycWant === 1 ? 0 : press;
       MU.uBass.value = bass;
-      MU.uWeight.value = wMyc;
+      MU.uWeight.value = mycWant === 1 ? wDecomp : wMyc;
+      MU.uLift.value = mycWant;
+      MU.uBodyN.value = mycWant === 1 ? cellCount : 0;
       MU.uIntensity.value = io.intensity * openDim;
       MU.uBeat.value = pulse;
       MU.uHigh.value = high;
@@ -2902,7 +3984,8 @@ export function createScene(ctx) {
       HU.uDist.value = dist;
       HU.uPress.value = press;
       HU.uBass.value = bass;
-      HU.uWeight.value = wHelix;
+      HU.uWeight.value = wHelix + wToxin;
+      HU.uSick.value = sickG;
       HU.uAzim.value = azim;
       HU.uIntensity.value = io.intensity * openDim;
       HU.uBeat.value = pulse;
@@ -2915,6 +3998,9 @@ export function createScene(ctx) {
       else if (key === 'slimeMold') orgTarget = ORG_SLIME;
       else if (key === 'cellLine') orgTarget = ORG_CELL;
       else if (key === 'doubleHelix') orgTarget = ORG_HELIX;
+      else if (key === 'toxin') orgTarget = ORG_TOXIN;
+      else if (key === 'phagocytosis') orgTarget = ORG_PHAGO;
+      else if (key === 'decomposition') orgTarget = ORG_DECOMP;
       else if (key === 'developUp') { dir = 1; stepLevel(1); }
       else if (key === 'developDown') { dir = -1; stepLevel(-1); }
       else if (key === 'reseed') { reseedN++; applySpecies(); }
@@ -2923,7 +4009,7 @@ export function createScene(ctx) {
     // moved last winning, and morph / squeeze ride alongside their gestures
     setParam(key, value) {
       if (key === 'development') { const v = clamp(value, 0, 1); dir = v >= level ? 1 : -1; target = v; }
-      else if (key === 'organism') orgTarget = clamp(Math.round(value), 0, 3);
+      else if (key === 'organism') orgTarget = clamp(Math.round(value), 0, ORG_N - 1);
       else if (key === 'species') {
         const s = clamp(Math.round(value), 0, 7);
         if (s !== speciesIdx) { speciesIdx = s; applySpecies(); }
