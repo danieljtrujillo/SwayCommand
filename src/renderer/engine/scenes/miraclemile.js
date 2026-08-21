@@ -84,49 +84,101 @@
 //               any step count. The clouds thin out as the move starts and
 //               stand again as it lands, ageing all the way through; ground
 //               zero, five hundred metres beyond where the move ends, stays.
-//   CITY        One noir city serves both city acts; the act weight only moves
-//               the eye. It is a raymarched block grid — a DDA across thirty-
-//               metre lots, avenues every fourth lot and cross streets every
-//               fifth, the boulevard on the centre line — with four
-//               architectural families drawn from the lot's hash: a DECO
-//               SETBACK TOWER (three stacked masses, cornices and a banded
-//               crown at each setback, vertical piers), a BRICK LOW-RISE (fire
-//               escape down the street face, water tank on the roof), a GLASS
-//               SLAB (thin plan, dense grid, one hard specular sliver,
-//               mechanical penthouse and an aerial mast) and a WAREHOUSE BLOCK
-//               (long, low, a ghost sign painted across the flank, roof
-//               vents). Footprint, setback, height, cornice, window pitch, the
-//               lit fraction of the grid and its colour temperature are all
-//               per building. The light is noir: near-black material, one hard
-//               key from a low angle squared so the shadow side goes black,
-//               venetian bars barred across the facades, and saturation held
-//               back for the windows and the signs. Wet asphalt takes a
-//               second, shorter trace of the reflected ray, torn up vertically
-//               so the reflection smears the way a wet street smears; lamp
-//               rows down the boulevard throw long streaks in it and stand
-//               light shafts in the air (the closed form of the 1/r² integral
-//               along the ray); low fog banks sit in an exponential height
-//               layer; rain falls in two slanted layers; steam stands off four
-//               gratings. Window grids fold into their own average as a pane
-//               falls under a pixel, so the skyline never crawls.
-//   DETONATION  The eye is seventy metres up on the boulevard's axis, the city
-//               running away under it to ground zero at the far end. At rest
-//               the cloud there stands mature and churns — the cap's
-//               convective roll and the stem's updraft are flows of the noise
-//               domain, not rotation of anything. Ground zero detonates on
-//               'detonate' (or a clenched strike): flash, fireball, stem, cap
-//               broadening and cooling through orange to ash, and the front
-//               out across the city. SWAY morphs the build (squat and broad ↔
-//               tall and turbulent); PRESS flattens the cap; the hand dollies
-//               and lifts the eye.
+//   CITY        One city serves both city acts; the act weight only moves the
+//               eye. A raymarched block grid — a DDA across thirty-metre lots,
+//               avenues every fourth lot and cross streets every fifth, the
+//               boulevard on the centre line, a river three lots wide bridged
+//               by the boulevard, a rail yard — of SIX families drawn from the
+//               lot's hash, a sea of four-to-twenty-five-storey blocks with a
+//               few towers: a DECO SETBACK TOWER (three stacked masses, the
+//               tall ones), a BRICK PAIR (two walk-ups side by side, a water
+//               tank on the taller, a fire escape), a GLASS SLAB (curtain wall,
+//               plant room, mast), a SHED (corrugated, a ghost sign, an LED
+//               billboard on the roof), a CONCRETE MID-RISE (balconies every
+//               floor, a plant box) and a PODIUM + SLAB (a two-storey retail
+//               base under a narrower slab). Per lot: footprint, heights,
+//               window pitch, lit fraction, colour temperature, a palette tint
+//               for the material, signage. Materials carry micro-variation,
+//               grime running down from the sills, a wet sheen of the dome;
+//               brick courses and panel joints resolve at the pavement's range.
+//               Every lit pane is a ROOM: the view ray is carried into a box a
+//               cell wide, a floor high, five metres deep — lit ceiling with a
+//               fixture, dark floor, furniture silhouetted against the back
+//               wall, a screen on some, a figure at the glass in one in seven,
+//               blinds, the odd flicker — so the interiors slide against the
+//               facade as the eye moves. Panes and curtain walls reflect the
+//               dome (the sun as one hard glint where a wall catches it) and
+//               rain runs down the glass. Light is the sunset: one hard low
+//               sun whose shadow is two height lookups along its bearing (at
+//               three degrees every shadow is hundreds of metres long, so what
+//               decides it is whether the next blocks clear the ray), the dome
+//               as ambient, occlusion at the canyon floor, the bases and the
+//               setbacks. Signage keeps the palette's colour: neon tubes (a
+//               rectangle tube and glyph strokes) on the podium fronts and the
+//               walk-ups, LED boards (dot-matrix glyph columns, a third of
+//               them scrolling) up the mid-rises and slabs, the billboards on
+//               the sheds. Past the DDA's reach the MEGALOPOLIS goes on: two
+//               bands of blocky skyline on the horizon with a scatter of
+//               lights, each fading into the haze. Aerial perspective hazes the
+//               distance; low fog banks, rain, steam off the gratings, lamp
+//               streaks in the wet asphalt (the dome and the sun in it where
+//               the trace misses), window grids folding to their average under
+//               a pixel — as before.
+//   SKY         A pretty sunset, interrupted. The sun low on the left of the
+//               look axis (28°, 3.5° up), a warm gradient, a cirrus veil lit
+//               from beneath, a cumulus deck on the horizon, a storm cell on
+//               the right, the first stars as the dusk deepens. The bursts
+//               interrupt it: each adds to a WRECK level that decays over
+//               minutes — the ash overcast creeps in, the sun reddens and dims
+//               through the dust, the haze goes grey and thickens, the lamps
+//               come up. LIGHTNING: the storm cell throws a forked bolt every
+//               so often (a ten-segment random walk in azimuth/elevation with a
+//               branch, a return stroke in the flash envelope), lighting the
+//               cloud bellies and the city faintly; 'lightning' fires one. The
+//               bolt is light, not an object: it may appear at full length.
+//   THE WRECK   The fronts leave damage. Every burst is a CRATER the scene
+//               remembers (up to MAX_DMG, merged when close; the damage at a
+//               point is the max over them of a falloff from each ground zero,
+//               plus a low plateau out to four and a half radii — the front's
+//               wake) until 'rebuild'. The JS lot mirror runs the same rule,
+//               so the window gather matches against the wrecked city. Inside
+//               the heavy radius the blocks are knocked down to STUMPS (heights
+//               scaled, exposed floor slabs across the ragged top, rubble at
+//               the foot); a pane past its own threshold is BLOWN OUT — a dark
+//               hole, lit no more; one in five of those BURNS (an orange
+//               flicker from the room); FIRE SITES (lots inside the crater and
+//               round a point ahead of the eye, one in five by hash, the few
+//               nearest kept) catch as the front reaches them and stand SMOKE
+//               COLUMNS — leaning noise columns rising nine metres a second
+//               from the roof, dust-grey as the front passes, black as the
+//               fire takes, lit from the fire at the foot, burning out over
+//               minutes — the big readable cue behind the front; signage
+//               dims; the lamp posts are knocked over by the front and stay
+//               down; a DEBRIS SHOWER rides every front — dark chunks waiting
+//               on the front at radii round the eye's distance, thrown out
+//               along it with gravity and drag as it reaches them.
+//   DETONATION  The eye is eighty-odd metres up on the boulevard's axis, the
+//               city running away under it to ground zero at the far end,
+//               above most of the skyline so the bursts tower over it. At rest
+//               the cloud there stands mature and churns — the cap's roll and
+//               the stem's updraft are flows of the noise domain, not rotation
+//               of anything (the roll fades out on the axis, where its mapping
+//               flips). Ground zero detonates on 'detonate' (or a clenched
+//               strike): flash, fireball, stem, cap broadening and cooling
+//               through orange to ash, the front out across the city, the
+//               wreck behind it. SWAY morphs the build (squat and broad ↔ tall
+//               and turbulent); PRESS flattens the cap; the hand dollies and
+//               lifts the eye.
 //   SHOCKWAVE   The same city from the pavement, looking down the boulevard.
 //               When ground zero goes, the front comes down the road — a shell
 //               that refracts what lies behind it, a condensation band just
 //               inside it, a dust wall where it meets the ground, lamps
 //               flaring and dying as it passes — then arrival: the eye shakes,
-//               dust sweeps the view, embers fall, and the boulevard relights.
-//               SWAY morphs hemisphere ↔ Mach stem; PRESS ducks; the hand sets
-//               the position across the road and the eye's height.
+//               dust sweeps the view, debris and embers fly, the posts go
+//               over, the blocks ahead catch and their smoke climbs, and the
+//               boulevard relights from the outside in. SWAY morphs hemisphere
+//               ↔ Mach stem; PRESS ducks; the hand sets the position across the
+//               road and the eye's height.
 //
 //   MIRV        In the two city acts every pad is an independent re-entry
 //               vehicle with its own place, its own yield and its own cloud;
@@ -277,6 +329,7 @@ export const meta = {
       { key: 'strike', label: 'launch vehicle' },
       { key: 'salvo', label: 'full salvo' },
       { key: 'rebuild', label: 're-seed city' },
+      { key: 'lightning', label: 'lightning' },
     ],
     params: [
       { key: 'act', label: 'act', min: 0, max: 3, default: 0 },
@@ -318,7 +371,7 @@ const MAX_NEUTRONS = 48;
 const CELL = 30;      // lot pitch
 const AV = 4;         // an avenue every fourth lot (lot 0 is the boulevard)
 const ST = 5;         // a cross street every fifth lot
-const H_MAX = 168;    // the DDA's ceiling: nothing stands taller
+const H_MAX = 112;    // the DDA's ceiling: nothing stands taller (the deco towers top out here)
 const CITY_FAR = 1700;
 const LAMPS = 46;
 const LAMP_DZ = 30;
@@ -326,6 +379,17 @@ const LAMP_Z0 = 60;
 const LAMP_X = 19;
 const LAMP_H = 8.5;
 const EMBERS = 220;
+const DEBRIS = 140;   // the debris shower in the front: dark chunks thrown out along it
+// open ground across the grid: the river (three lots wide, the boulevard bridged
+// over it) and the rail yard, both in lot rows (cz)
+const RIVER_C0 = -15, RIVER_C1 = -17;
+const YARD_C0 = -27, YARD_C1 = -28;
+// the sun, low on the left of the look axis — 28° off it, three and a half
+// degrees up — and the storm cell on the right horizon; the wind the smoke leans in
+const SUN_AZ = -0.49, SUN_EL = 0.061;
+const STORM_AZ = 0.62;
+const WIND_X = 0.20, WIND_Z = 0.09;
+
 
 // the atom hangs in the boulevard; the city eye is 520 m straight back from it
 const ATOM_X = 0, ATOM_Y = 46, ATOM_Z = -360;
@@ -441,6 +505,19 @@ const WORLD_FRAG = /* glsl */ `
   uniform float uGammaA[4];      // the four shells' brightness
   // the city
   uniform float uCitySeed, uCityFade, uWinFade, uRain, uFogD, uStreet;
+  // the sunset and what interrupts it: the sun's direction, the wind the smoke
+  // leans in, the ash dusk (uWreck), the haze density, the lamps' level, the
+  // lightning's flash and the bolt it draws
+  uniform vec3 uSun;
+  uniform vec2 uWind;
+  uniform float uWreck, uHaze, uLamps, uLtn, uBoltSeed;
+  // the wreck: craters (x, z, 1/R², strength), the box round their heavy radii
+  // (min x, min z, max x, max z), and the fires the fronts lit (x, z, y, age)
+  uniform int uNDmg;
+  uniform vec4 uDmg[MAX_DMG];
+  uniform vec4 uDmgBox;
+  uniform int uNFire;
+  uniform vec4 uFire[MAX_FIRE];
   // The clouds. The standing ones are packed at the front of these arrays and
   // uNCloud says how many there are, so an idle slot costs the frame nothing —
   // a uniform loop bound is coherent across the whole draw where a per-slot
@@ -506,64 +583,135 @@ const WORLD_FRAG = /* glsl */ `
   uint hu(uint x) { x ^= x >> 16u; x *= 0x7feb352du; x ^= x >> 15u; x *= 0x846ca68bu; x ^= x >> 16u; return x; }
   float hf(uint x) { return float(hu(x) & 0xffffffu) / 16777216.0; }
   uint lotKey(ivec2 c) { return uint(c.x + 1024) * 4096u + uint(c.y + 1024) + uint(uCitySeed) * 7919u; }
+  // the river and the rail yard: bands of open ground across the grid
+  bool lotRiver(ivec2 c) { return c.y <= (${RIVER_C0}) && c.y >= (${RIVER_C1}); }
+  bool lotYard(ivec2 c) { return c.y <= (${YARD_C0}) && c.y >= (${YARD_C1}); }
   bool lotStreet(ivec2 c) {
     // the offsets are multiples of both spacings, so the fraction of the scaled
     // index is the modulo — and no integer division reaches the DDA's inner loop
     return fract((float(c.x) + 4100.0) * ${(1 / AV).toFixed(6)}) < 0.05
-        || fract((float(c.y) + 4100.0) * ${(1 / ST).toFixed(6)}) < 0.05;
+        || fract((float(c.y) + 4100.0) * ${(1 / ST).toFixed(6)}) < 0.05
+        || lotRiver(c) || lotYard(c);
+  }
+  // ---- the wreck: the max over every burst of a falloff from its ground zero,
+  // plus the front's wake past it (a fifth of the panes out to four and a half
+  // radii). Persistent (the bursts' clouds come and go; the damage stays until
+  // the city is rebuilt). D = (x, z, 1/R², strength); no sqrt. A texture of
+  // the field, one texel a lot, was tried: a fetch in the DDA's inner loop
+  // measured six milliseconds slower than this loop, with nothing standing.
+  float damageAt(vec2 q) {
+    float d = 0.0;
+    for (int i = 0; i < MAX_DMG; i++) {
+      if (i >= uNDmg) break;
+      vec4 D = uDmg[i];
+      vec2 dv = q - D.xy;
+      float d2 = dot(dv, dv);
+      d = max(d, D.w * max(clamp((1.0 - d2 * D.z) * 1.6, 0.0, 1.0), 0.22 * clamp((1.0 - d2 * D.z * 0.05) * 4.0, 0.0, 1.0)));
+    }
+    return d;
+  }
+  // the crater term alone, for the geometry, over the STUMPS biggest craters
+  // (the list is kept sorted): the wake's plateau never reaches the height a
+  // block starts to fall at, and a lot outside the box round the heavy radii
+  // never enters the loop — which is what keeps the DDA cheap
+  float craterAt(vec2 q) {
+    if (uNDmg == 0 || q.x < uDmgBox.x || q.y < uDmgBox.y || q.x > uDmgBox.z || q.y > uDmgBox.w) return 0.0;
+    float d = 0.0;
+    for (int i = 0; i < STUMPS; i++) {
+      if (i >= uNDmg || d >= 1.0) break;
+      vec4 D = uDmg[i];
+      vec2 dv = q - D.xy;
+      d = max(d, D.w * clamp((1.0 - dot(dv, dv) * D.z) * 1.6, 0.0, 1.0));
+    }
+    return d;
   }
 
-  // one lot: family, plan centre, and the up-to-three masses it stands as.
-  // b* = (half x, half z, y base, y top); off = (mass 1 offset, mass 2 offset)
-  void lotOf(ivec2 c, out int fam, out vec2 ctr, out vec4 b0, out vec4 b1, out vec4 b2, out vec4 off, out vec4 rnd, out float top) {
+  // one lot: family, plan centre, the up-to-three masses it stands as, its
+  // random words. b* = (half x, half z, y base, y top); off = (mass 1 offset,
+  // mass 2 offset) off the centre; rnd = plan bits, rnd2 = colour / material /
+  // furniture / signage bits. Six families: DECO TOWER (three setback masses —
+  // the few towers), BRICK PAIR (two walk-ups side by side, a water tank on the
+  // taller), GLASS SLAB (plant room, mast), SHED (a billboard on the roof),
+  // CONCRETE MID-RISE (balconies, a plant box), PODIUM + SLAB (a two-storey
+  // retail base under a narrower slab). Inside a burst's heavy radius the block
+  // is knocked down to a stump. The JS mirror (lotOfJS) runs every number here.
+  void lotOf(ivec2 c, out int fam, out vec2 ctr, out vec4 b0, out vec4 b1, out vec4 b2, out vec4 off, out vec4 rnd, out vec4 rnd2, out float top) {
     uint k = lotKey(c);
-    uint a = hu(k), b = hu(k ^ 0x9e3779b9u);
+    uint a = hu(k), b = hu(k ^ 0x9e3779b9u), e = hu(k ^ 0x3c6ef372u);
     rnd = vec4(float(a & 255u), float((a >> 8) & 255u), float((a >> 16) & 255u), float(a >> 24)) * (1.0 / 255.0);
+    rnd2 = vec4(float(e & 255u), float((e >> 8) & 255u), float((e >> 16) & 255u), float(e >> 24)) * (1.0 / 255.0);
     float f = float(b & 4095u) * (1.0 / 4096.0);
     float g = float((b >> 12) & 4095u) * (1.0 / 4096.0);
-    fam = f < 0.17 ? 0 : (f < 0.55 ? 1 : (f < 0.73 ? 2 : 3));
+    float g2 = float(b >> 24) * (1.0 / 255.0);
+    fam = f < 0.06 ? 0 : (f < 0.36 ? 1 : (f < 0.50 ? 2 : (f < 0.62 ? 3 : (f < 0.85 ? 4 : 5))));
     float hx = CELLF * 0.5 - (3.0 + rnd.x * 4.0);
     float hz = CELLF * 0.5 - (3.0 + rnd.y * 4.0);
     vec2 o = vec2((rnd.z - 0.5) * 3.0, (rnd.w - 0.5) * 3.0);
     if (abs(c.x) == 1) { hx -= 4.0; o.x += c.x > 0 ? 4.0 : -4.0; } // the boulevard is set back
     ctr = vec2(c) * CELLF + o;
+    float fall = 1.0 - 0.72 * smoothstep(0.55, 1.0, craterAt(ctr) + (rnd2.x - 0.5) * 0.2);
     off = vec4(0.0);
     b1 = vec4(0.0); b2 = vec4(0.0);
     if (fam == 0) {          // deco setback tower
-      float H = 62.0 + g * 74.0;
+      float H = (64.0 + g * 48.0) * fall;
       b0 = vec4(hx, hz, 0.0, H * 0.42);
       b1 = vec4(hx * 0.74, hz * 0.74, H * 0.42, H * 0.76);
       b2 = vec4(hx * 0.46, hz * 0.46, H * 0.76, H);
-    } else if (fam == 1) {   // brick low-rise, water tank on the roof
-      float H = 13.0 + g * 23.0;
-      b0 = vec4(hx, hz, 0.0, H);
-      b1 = vec4(3.2, 3.2, H, H + 6.5);
-      off.xy = vec2(hx * 0.45, -hz * 0.4);
+    } else if (fam == 1) {   // two brick walk-ups side by side, a water tank on the taller
+      float hxa = hx * (0.36 + rnd2.y * 0.28), hxb = hx - 0.4 - hxa;
+      ctr.x -= hx - hxa;
+      float H0 = (12.0 + g * 16.0) * fall, H1 = (12.0 + g2 * 16.0) * fall;
+      b0 = vec4(hxa, hz, 0.0, H0);
+      b1 = vec4(hxb, hz * 0.9, 0.0, H1);
+      off.xy = vec2(hxa + 0.4 + hxb, 0.0);
+      float Ht = max(H0, H1);
+      b2 = vec4(2.6, 2.6, Ht, Ht + 5.5);
+      off.zw = (H1 > H0 ? off.xy : vec2(0.0)) + vec2((H1 > H0 ? hxb : hxa) * 0.4 * (rnd.z > 0.5 ? 1.0 : -1.0), -hz * 0.45);
     } else if (fam == 2) {   // glass slab, plant room and a mast
       hx *= 1.06; hz *= 0.60;
-      float H = 44.0 + g * 58.0;
+      float H = (30.0 + g * 46.0) * fall;
       b0 = vec4(hx, hz, 0.0, H);
-      b1 = vec4(hx * 0.55, hz * 0.75, H, H + 5.5);
-      b2 = vec4(0.55, 0.55, H + 5.5, H + 22.0);
+      b1 = vec4(hx * 0.55, hz * 0.75, H, H + 4.5);
+      b2 = vec4(0.5, 0.5, H + 4.5, H + 18.0);
       off.zw = vec2(hx * 0.32, 0.0);
-    } else {                 // warehouse block, roof vents
-      float H = 9.0 + g * 13.0;
+    } else if (fam == 3) {   // shed: long and low, a billboard standing on the roof, vents
+      float H = (7.0 + g * 9.0) * fall;
       b0 = vec4(hx, hz, 0.0, H);
-      b1 = vec4(hx * 0.4, hz * 0.34, H, H + 4.0);
-      off.xy = vec2(-hx * 0.3, hz * 0.22);
+      b1 = vec4(min(hx * 0.8, 7.5), 0.25, H, H + 5.5);
+      off.xy = vec2(0.0, (rnd2.z > 0.5 ? 1.0 : -1.0) * (hz - 1.0));
+      b2 = vec4(hx * 0.3, hz * 0.3, H, H + 2.5);
+      off.zw = vec2(-hx * 0.4, -hz * 0.2 * (rnd2.z > 0.5 ? 1.0 : -1.0));
+    } else if (fam == 4) {   // concrete mid-rise, a plant box on the roof
+      float H = (18.0 + g * 34.0) * fall;
+      b0 = vec4(hx, hz, 0.0, H);
+      b1 = vec4(hx * 0.4, hz * 0.45, H, H + 3.2);
+      off.xy = vec2(hx * 0.25, -hz * 0.2);
+    } else {                 // podium and slab: a two-storey retail base, a narrower slab on it
+      float H0 = 7.0 + g2 * 3.5;
+      float H = max((H0 + 22.0 + g * 40.0) * fall, H0 + 2.0);
+      b0 = vec4(hx, hz, 0.0, H0);
+      b1 = vec4(hx * 0.55, hz * 0.62, H0, H);
+      off.xy = vec2((rnd2.w - 0.5) * hx * 0.6, (rnd.z - 0.5) * hz * 0.4);
+      b2 = vec4(hx * 0.2475, hz * 0.31, H, H + 3.0);
+      off.zw = off.xy;
     }
     top = max(max(b0.w, b1.w), b2.w);
   }
 
+  // the ceiling of a lot, undamaged — a bound for the DDA's reach test, so it
+  // stays conservative (a stump is never taller than its block was)
   float lotTop(uint k, out int fam, out float g) {
     uint b = hu(k ^ 0x9e3779b9u);
     float f = float(b & 4095u) * (1.0 / 4096.0);
     g = float((b >> 12) & 4095u) * (1.0 / 4096.0);
-    fam = f < 0.17 ? 0 : (f < 0.55 ? 1 : (f < 0.73 ? 2 : 3));
-    if (fam == 0) return 62.0 + g * 74.0;
-    if (fam == 1) return 19.5 + g * 23.0;
-    if (fam == 2) return 66.0 + g * 58.0;
-    return 13.0 + g * 13.0;
+    float g2 = float(b >> 24) * (1.0 / 255.0);
+    fam = f < 0.06 ? 0 : (f < 0.36 ? 1 : (f < 0.50 ? 2 : (f < 0.62 ? 3 : (f < 0.85 ? 4 : 5))));
+    if (fam == 0) return 64.0 + g * 48.0;
+    if (fam == 1) return 17.5 + max(g, g2) * 16.0;
+    if (fam == 2) return 48.0 + g * 46.0;
+    if (fam == 3) return 12.5 + g * 9.0;
+    if (fam == 4) return 21.2 + g * 34.0;
+    return 32.0 + g2 * 3.5 + g * 40.0;
   }
 
   vec3 safeInv(vec3 v) {
@@ -572,6 +720,7 @@ const WORLD_FRAG = /* glsl */ `
   }
   // slab test; the normal comes from whichever slab produced the entry
   float boxT(vec3 ro, vec3 ird, vec3 bmn, vec3 bmx, out vec3 n) {
+    n = vec3(0.0, 1.0, 0.0);
     vec3 t1 = (bmn - ro) * ird, t2 = (bmx - ro) * ird;
     vec3 tn = min(t1, t2), tf = max(t1, t2);
     float tN = max(max(tn.x, tn.y), tn.z);
@@ -583,10 +732,12 @@ const WORLD_FRAG = /* glsl */ `
   }
 
   // A DDA across the lot grid. Street lots cost nothing; a built lot tests its
-  // masses only while the ray's height band could reach them.
-  float traceCity(vec3 ro, vec3 rd, float tMax, int steps, out vec3 nrm, out ivec2 hc, out int hlvl) {
-    nrm = vec3(0.0, 1.0, 0.0); hc = ivec2(0); hlvl = -1;
-    if (ro.y > HMAXF && rd.y >= 0.0) return -1.0;
+  // masses only while the ray's height band could reach them. tEnd hands back
+  // how far the walk got, so the caller knows where the drawn city ends and the
+  // megalopolis impostor takes over.
+  float traceCity(vec3 ro, vec3 rd, float tMax, int steps, out vec3 nrm, out ivec2 hc, out int hlvl, out float tEnd) {
+    nrm = vec3(0.0, 1.0, 0.0); hc = ivec2(0); hlvl = -1; tEnd = 0.0;
+    if (ro.y > HMAXF && rd.y >= 0.0) { tEnd = tMax; return -1.0; }
     vec3 ird = safeInv(rd);
     vec2 g = ro.xz / CELLF + 0.5;
     vec2 rg = rd.xz / CELLF;
@@ -597,15 +748,15 @@ const WORLD_FRAG = /* glsl */ `
       ((float(c.x) + (st.x > 0 ? 1.0 : 0.0)) - g.x) / (abs(rg.x) < 1e-7 ? 1e-7 * float(st.x) : rg.x),
       ((float(c.y) + (st.y > 0 ? 1.0 : 0.0)) - g.y) / (abs(rg.y) < 1e-7 ? 1e-7 * float(st.y) : rg.y));
     float t0 = 0.0;
-    int famQ; float gQ;
+    int famQ = 0; float gQ = 0.0;
     for (int i = 0; i < steps; i++) {
       float tc = min(nx.x, nx.y);
       float t1 = min(tc, tMax);
       float ya = ro.y + rd.y * t0, yb = ro.y + rd.y * t1;
       float ylo = min(ya, yb), yhi = max(ya, yb);
       if (ylo < HMAXF && !lotStreet(c) && ylo < lotTop(lotKey(c), famQ, gQ)) {
-        int fam; vec2 ctr; vec4 b0, b1, b2, off, rnd; float top;
-        lotOf(c, fam, ctr, b0, b1, b2, off, rnd, top);
+        int fam; vec2 ctr; vec4 b0, b1, b2, off, rnd, rnd2; float top;
+        lotOf(c, fam, ctr, b0, b1, b2, off, rnd, rnd2, top);
         {
           float best = 1e9; vec3 bn = vec3(0.0); int bl = -1;
           for (int j = 0; j < 3; j++) {
@@ -615,15 +766,16 @@ const WORLD_FRAG = /* glsl */ `
             // running along the pavement
             if (b.x < 0.05 || b.w < ylo || b.z > yhi) continue;
             vec2 cc = ctr + (j == 1 ? off.xy : (j == 2 ? off.zw : vec2(0.0)));
-            vec3 n;
+            vec3 n = vec3(0.0);
             float t = boxT(ro, ird, vec3(cc.x - b.x, b.z, cc.y - b.y), vec3(cc.x + b.x, b.w, cc.y + b.y), n);
             if (t > 0.0 && t < best && t <= t1 + 0.001 && t <= tMax) { best = t; bn = n; bl = j; }
           }
-          if (bl >= 0) { nrm = bn; hc = c; hlvl = bl; return best; }
+          if (bl >= 0) { nrm = bn; hc = c; hlvl = bl; tEnd = best; return best; }
         }
       }
+      tEnd = t1;
       if (t1 >= tMax) break;
-      if (rd.y > 0.0 && ro.y + rd.y * t1 > HMAXF) break;
+      if (rd.y > 0.0 && ro.y + rd.y * t1 > HMAXF) { tEnd = tMax; break; }
       if (nx.x < nx.y) { nx.x += dl.x; c.x += st.x; } else { nx.y += dl.y; c.y += st.y; }
       t0 = t1;
     }
@@ -722,28 +874,114 @@ const WORLD_FRAG = /* glsl */ `
     return mix(uPal1, vec3(1.0), 0.35) * on * (sum * 0.12 * (0.35 + uFogD * 90.0) + head * 0.8);
   }
 
+  // ================================================================ the sky
+  // A sunset, interrupted. The sun is low on the left; the dome is a warm
+  // gradient; a cirrus veil lit from beneath; a cumulus deck on the horizon; a
+  // storm cell stands on the right and throws the lightning. uWreck is the ash
+  // dusk the bursts leave — the overcast creeps in, the sun reddens and dims
+  // through the dust, the haze goes grey — and it decays over minutes.
+  // the sun's tint, the haze and the dome's ambient: the same three colours in
+  // every function below, so they are worked out once a pixel (prepColours)
+  vec3 gSunT, gHaze, gAmb;
+  void prepColours() {
+    gSunT = mix(mix(uPal0, vec3(1.0), 0.55), mix(uPal1, uPal3, 0.5) * 0.8, uWreck * 0.85);
+    gHaze = mix(mix(uPal3, uPal0, 0.5) * 0.55, grey(mix(uPal4, uPal1, 0.3), 0.6) * 0.22, uWreck * 0.85);
+    gAmb = mix(mix(mix(uPal3, uPal0, 0.5), grey(uPal2, 0.4), 0.5) * 0.40, grey(mix(uPal4, uPal1, 0.3), 0.6) * 0.14, uWreck * 0.85);
+  }
+  // the dome without its clouds: what glass and wet asphalt reflect
+  vec3 skyBase(vec3 rd) {
+    float h = clamp(rd.y, 0.0, 1.0);
+    vec3 zen = mix(grey(uPal2, 0.35), uPal1, 0.55) * 0.30;
+    vec3 hor = mix(uPal3, uPal0, 0.55) * 1.05;
+    vec3 col = mix(hor, zen, pow(h, 0.42));
+    float sd = max(dot(rd, uSun), 0.0);
+    float sd2 = sd * sd, sd4 = sd2 * sd2, sd8 = sd4 * sd4, sd16 = sd8 * sd8, sd32 = sd16 * sd16;
+    // the warm band round the sun, its glare, and the disc (HDR — the
+    // compositor's limiter takes it)
+    col += mix(uPal0, uPal3, 0.4) * sd8 * 0.55 * (1.0 - h * 0.5);
+    col += mix(uPal0, vec3(1.0), 0.4) * sd32 * sd16 * 0.9;
+    float disc = smoothstep(0.99982, 0.99993, sd);
+    col += gSunT * (disc * 16.0 + sd32 * sd32 * sd32 * sd32 * sd32 * sd32 * sd32 * sd32 * 1.4) * (1.0 - uWreck * 0.8);
+    vec3 ash = mix(grey(uPal4, 0.5), uPal1, 0.25) * 0.14;
+    col = mix(col, ash * (0.6 + 0.8 * (1.0 - h)), uWreck * 0.78);
+    return col;
+  }
+
+  // the sun's shadow at p. The sun stands three degrees up, so every shadow is
+  // hundreds of metres long and what decides the light is whether the next few
+  // blocks along the bearing clear the ray to it: four height lookups along the
+  // bearing stand in for a shadow trace (two lookups). own is the cell p stands in (a block
+  // does not shadow its own lit face).
+  float sunShadow(vec3 p, ivec2 own) {
+    vec2 dir = normalize(uSun.xz);
+    float rise = uSun.y / max(length(uSun.xz), 1e-4);
+    float lit = 1.0;
+    for (int i = 0; i < 2; i++) {
+      float d = (float(i) * 2.2 + 0.95) * CELLF;
+      vec2 q = p.xz + dir * d;
+      ivec2 c = ivec2(floor(q / CELLF + 0.5));
+      if (c == own || lotStreet(c)) continue;
+      int fam = 0; float g = 0.0;
+      float top = lotTop(lotKey(c), fam, g) - 4.0;   // the furniture on the roof is thin; the mass is what shadows
+      lit *= smoothstep(-3.0, 1.5, p.y + rise * d - top);
+    }
+    return lit;
+  }
+
+  // a dot-matrix panel: q relative to its centre, hf its half size; glyph-like
+  // columns of dots, a gap every fourth column and every sixth row, scrolling
+  // where the board is animated. Folds to its average under a pixel.
+  vec3 ledBoard(vec2 q, vec2 hf, float seed, float scroll, float aa, vec3 colA) {
+    float inside = step(abs(q.x), hf.x) * step(abs(q.y), hf.y);
+    if (inside < 0.5) return vec3(0.0);
+    vec2 g = (q + hf) * 2.4;
+    g.x += scroll;
+    vec2 gi = floor(g);
+    float gapC = step(0.75, fract(gi.x * 0.25));
+    float gapR = step(0.83, fract(gi.y * 0.1667));
+    float dt = step(0.42, h21(gi + seed));
+    float onF = dt * (1.0 - gapC) * (1.0 - gapR);
+    vec2 fr = fract(g) - 0.5;
+    float led = mix(smoothstep(0.42, 0.25, length(fr)), 0.55, aa);
+    float border = step(abs(q.x), hf.x - 0.12) * step(abs(q.y), hf.y - 0.12);
+    return colA * (onF * led * 2.8 * border + 0.05);
+  }
+
   // ---- facades
   // window emission at a facade point; aa folds the grid into its average once
-  // a pane falls under a pixel, so the city never crawls
-  vec3 windows(float u, float v, uint k, int fam, vec4 rnd, vec4 bx, float aa, float blown, out float lum) {
+  // a pane falls under a pixel, so the city never crawls. rd is the view ray:
+  // behind a lit pane stands a ROOM — a box the cell wide, a floor high, five
+  // metres deep, its ceiling lit, its furniture a silhouette against the back
+  // wall — and the ray is carried into it, so the interiors slide against the
+  // facade as the eye moves. dmg is the wreck here: a pane past its own
+  // threshold is BLOWN OUT — a dark hole, lit no more — and one in five of
+  // those burns. hole and fire come back for the caller (the wall darkens in
+  // the hole; the fire is emission the caller also uses as light).
+  vec3 windows(float u, float v, vec3 rd, vec3 n, uint k, int fam, vec4 rnd, vec4 bx, float aa, float blown, float dmg, float rooms, out float lum, out float hole, out float fire, out float paneM) {
     float wx = 3.0 + rnd.x * 1.5, wy = 3.3 + rnd.y * 0.9;
-    // most buildings are mostly dark; a few burn late. The cube pulls the mass
-    // of the distribution down so the skyline reads as blocks with a scatter of
-    // occupied floors, not a lit grid.
+    // most buildings are mostly dark at this hour; a few burn late. The cube
+    // pulls the mass of the distribution down so the skyline reads as blocks
+    // with a scatter of occupied floors, not a lit grid.
     float litF = 0.03 + 0.5 * rnd.z * rnd.z;
     float ct = rnd.w * 0.5;
     if (fam == 2) { wx = 2.1 + rnd.x * 0.7; wy = 3.1; litF = 0.10 + 0.55 * rnd.z * rnd.z; ct = 0.55 + rnd.w * 0.45; }
     else if (fam == 3) { wx = 4.5 + rnd.x * 2.0; wy = 4.2; litF = 0.03 + rnd.z * 0.12; }
+    else if (fam == 4) { wx = 2.6 + rnd.x * 1.2; wy = 3.0; litF = 0.05 + 0.45 * rnd.z * rnd.z; ct = 0.3 + rnd.w * 0.5; }
+    else if (fam == 5) { wx = 2.4 + rnd.x * 1.0; wy = 3.2; litF = 0.08 + 0.5 * rnd.z * rnd.z; ct = 0.45 + rnd.w * 0.4; }
     vec3 warm = mix(uPal1, uPal0, 0.30);
     vec3 cool = mix(uPal2, vec3(1.0), 0.30);
     float above = step(bx.z + 1.2, v) * step(v, bx.w - 1.4);
+    hole = 0.0; fire = 0.0; paneM = 0.0;
+    float broken = smoothstep(0.08, 0.55, dmg);
     // past a pane a pixel wide the grid is its own average, so the far half of
-    // the skyline never pays for the pane, the blind or the flicker
+    // the skyline never pays for the pane, the room, the blind or the flicker
     if (aa > 0.985) {
-      lum = litF * 0.30 * above;
+      lum = litF * 0.30 * above * (1.0 - broken);
+      hole = broken * 0.30 * above;
       return mix(warm, cool, ct) * lum * blown;
     }
-    float fu = u / wx, fv = (v - 1.6 - rnd.w * 1.4) / wy;
+    float v0 = 1.6 + rnd.w * 1.4;
+    float fu = u / wx, fv = (v - v0) / wy;
     ivec2 wi = ivec2(floor(fu), floor(fv));
     uint wk = k * 131u + uint(wi.x + 512) * 17u + uint(wi.y + 512) * 71u;
     uint w1 = hu(wk), w2 = hu(wk ^ 0x85ebca6bu);
@@ -755,114 +993,287 @@ const WORLD_FRAG = /* glsl */ `
     float gu = fract(fu), gv = fract(fv);
     // mullion and spandrel: the pane is well short of its cell
     float pane = step(0.24, gu) * step(gu, 0.78) * step(0.18, gv) * step(gv, 0.64);
+    // this pane's own threshold against the wreck: blown out past it
+    float pth = float((w2 >> 24) & 255u) * (1.0 / 255.0);
+    float blownOut = step(pth * 0.9 + 0.05, dmg) * above;
+    float burns = blownOut * step(0.80, float((w1 >> 24) & 255u) * (1.0 / 255.0)) * step(0.25, dmg);
+    float near = 1.0 - aa;
+    hole = pane * blownOut * near;
+    paneM = pane * above * near;
     // a blind drawn in a third of them, and the odd fluorescent flicker
     float blind = 1.0 - 0.55 * step(0.62, float((w2 >> 8) & 255u) * (1.0 / 255.0)) * step(0.5, fract(gv * 6.0));
     float flk = 1.0 - 0.6 * step(0.94, float((w2 >> 16) & 255u) * (1.0 / 255.0)) * step(0.5, h11(floor(uTime * 11.0) + float(wi.x + wi.y)));
-    float sharp = on * pane * br * blind * flk;
-    lum = mix(sharp, litF * 0.30, aa) * above;
-    return mix(warm, cool, mix(ctj, ct, aa)) * lum * blown;
-  }
-
-  // just the material and the panes: what a wet road can carry
-  vec3 shadeFacadeLite(vec3 p, vec3 n, ivec2 c, int lvl, float dist, float blown) {
-    int fam; vec2 ctr; vec4 b0, b1, b2, off, rnd; float top;
-    lotOf(c, fam, ctr, b0, b1, b2, off, rnd, top);
-    vec4 bx = lvl == 0 ? b0 : (lvl == 1 ? b1 : b2);
-    if (n.y > 0.5) return grey(uPal4, 0.8) * 0.02;
-    float u = abs(n.x) > 0.5 ? p.z : p.x;
-    float key = max(dot(n, vec3(-0.823632, 0.220974, 0.522303)), 0.0);
-    key *= key;
-    vec3 stone = grey(mix(uPal4, vec3(1.0), 0.18), 0.82);
-    vec3 col = stone * (0.009 + 0.34 * key);
-    float lum = 0.0;
-    if (bx.w - bx.z > 8.0) col += windows(u, p.y, lotKey(c), fam, rnd, bx, smoothstep(1.4, 4.2, dist * uTanHalf * 2.0 / uRes.y), blown, lum) * (0.06 + 1.05 * uWinFade);
+    float room = 0.6;   // the rooms' own average, where they are not drawn
+    if (rooms > 0.01 && on * pane * above > 0.5 && blownOut < 0.5) {
+      // the room: carry the ray in. u runs along the face (p.z on an x-face,
+      // p.x on a z-face), v is up, depth is along -n.
+      float dd = max(dot(rd, -n), 0.02);
+      float du = abs(n.x) > 0.5 ? rd.z : rd.x;
+      float dv = rd.y;
+      float D = 5.0;
+      float uMin = (float(wi.x) + 0.06) * wx, uMax = (float(wi.x) + 0.96) * wx;
+      float vMin = (float(wi.y) + 0.06) * wy + v0, vMax = (float(wi.y) + 0.92) * wy + v0;
+      float sBack = D / dd;
+      float sU = du > 0.0 ? (uMax - u) / max(du, 1e-4) : (uMin - u) / min(du, -1e-4);
+      float sV = dv > 0.0 ? (vMax - v) / max(dv, 1e-4) : (vMin - v) / min(dv, -1e-4);
+      float s = min(sBack, min(sU, sV));
+      float depth = s * dd / D;
+      float iu = clamp((u + du * s - uMin) / (uMax - uMin), 0.0, 1.0);
+      float iv = clamp((v + dv * s - vMin) / (vMax - vMin), 0.0, 1.0);
+      float hr = h11(float(wi.x) * 3.1 + float(wi.y) * 7.7 + float(k & 1023u));
+      if (s == sV) {
+        // ceiling lit, with a fixture strip across its middle; floor dark
+        room = dv > 0.0 ? (0.78 - 0.25 * depth + 0.2 * step(abs(depth - 0.5), 0.1)) : 0.18;
+      } else if (s == sU) {
+        room = 0.50 - 0.2 * depth;                                   // the side walls
+      } else {
+        room = 0.62 - 0.15 * iv;                                     // the back wall
+        float furn = step(iv, 0.28 + 0.14 * hr);                     // a desk, a counter, a sofa
+        room *= 1.0 - 0.55 * furn;
+        float scr = step(abs(iu - 0.5), 0.16) * step(abs(iv - 0.58), 0.12) * step(0.6, hr);
+        room += scr * 0.55;                                          // a screen, a picture
+      }
+      // a figure standing at the glass in one room in seven
+      float fig = step(0.86, fract(hr * 13.7));
+      room *= 1.0 - 0.85 * fig * step(abs(gu - (0.35 + 0.3 * fract(hr * 3.3))), 0.06) * step(gv, 0.56) * step(0.18, gv);
+      room = mix(0.6, room, rooms);
+    }
+    float sharp = on * pane * br * blind * flk * room * (1.0 - blownOut);
+    lum = mix(sharp, litF * 0.30 * (1.0 - broken), aa) * above;
+    vec3 col = mix(warm, cool, mix(ctj, ct, aa)) * lum * blown;
+    if (burns > 0.5) {
+      // fire in the blown pane: an orange flicker from inside the room
+      float fl = 0.55 + 0.6 * vnoise2(vec2(uTime * 9.0 + float(wi.x) * 3.0, uTime * 5.0 + float(wi.y) * 2.0));
+      float inPane = step(0.20, gu) * step(gu, 0.82) * step(0.12, gv) * step(gv, 0.70);
+      fire = inPane * fl * near;
+      col += mix(uPal1, uPal0, 0.5) * fire * 2.8;
+      lum += fire;
+    }
     return col;
   }
 
-  vec3 shadeFacade(vec3 p, vec3 n, ivec2 c, int lvl, float dist, float blown, float flare, float glint, float scorch, float fireLit, vec2 fireDir) {
-    int fam; vec2 ctr; vec4 b0, b1, b2, off, rnd; float top;
-    lotOf(c, fam, ctr, b0, b1, b2, off, rnd, top);
+  // just the material and the panes: what a wet road can carry
+  vec3 shadeFacadeLite(vec3 p, vec3 n, vec3 rd, ivec2 c, int lvl, float dist, float blown) {
+    int fam; vec2 ctr; vec4 b0, b1, b2, off, rnd, rnd2; float top;
+    lotOf(c, fam, ctr, b0, b1, b2, off, rnd, rnd2, top);
     vec4 bx = lvl == 0 ? b0 : (lvl == 1 ? b1 : b2);
+    vec2 cc = ctr + (lvl == 1 ? off.xy : (lvl == 2 ? off.zw : vec2(0.0)));
+    if (n.y > 0.5) return grey(uPal4, 0.8) * 0.03;
+    float u = abs(n.x) > 0.5 ? p.z : p.x;
+    float sun = max(dot(n, uSun), 0.0) * 0.5;
+    float ao = mix(0.4, 1.0, smoothstep(0.0, 22.0, p.y));
+    vec3 stone = grey(mix(uPal4, vec3(1.0), 0.18), 0.8) * (fam == 2 ? 0.3 : 1.0);
+    vec3 col = stone * (gAmb * ao * 0.45 + gSunT * sun * 0.9 * (1.0 - uWreck * 0.75));
+    float lum = 0.0, hole = 0.0, fire = 0.0, paneM = 0.0;
+    if (bx.w - bx.z > 8.0) col += windows(u, p.y, rd, n, lotKey(c), fam, rnd, bx, smoothstep(1.4, 4.2, dist * uTanHalf * 2.0 / uRes.y), blown, damageAt(cc), 0.0, lum, hole, fire, paneM) * (0.06 + 1.05 * uWinFade);
+    return col * (1.0 - hole * 0.8);
+  }
+
+  vec3 shadeFacade(vec3 p, vec3 n, vec3 rd, ivec2 c, int lvl, float dist, float blown, float flare, float glint, float scorch, float fireLit, vec2 fireDir) {
+    int fam; vec2 ctr; vec4 b0, b1, b2, off, rnd, rnd2; float top;
+    lotOf(c, fam, ctr, b0, b1, b2, off, rnd, rnd2, top);
+    vec4 bx = lvl == 0 ? b0 : (lvl == 1 ? b1 : b2);
+    vec2 cc = ctr + (lvl == 1 ? off.xy : (lvl == 2 ? off.zw : vec2(0.0)));
     uint k = lotKey(c);
     bool roof = n.y > 0.5;
-    float u = abs(n.x) > 0.5 ? p.z : p.x;
+    bool xface = abs(n.x) > 0.5;
+    float u = xface ? p.z : p.x;
     float v = p.y;
+    float ucc = xface ? cc.y : cc.x;                     // the face's centre along u
+    float uh = xface ? bx.y : bx.x;                      // and its half width
     float px = dist * uTanHalf * 2.0 / uRes.y;           // metres per pixel
     float aa = smoothstep(1.4, 4.2, px);
     float near = 1.0 - aa;
+    float close = 1.0 - smoothstep(0.12, 0.5, px);       // brick courses, panel joints: the pavement act's range
+    float det = 1.0 - smoothstep(0.30, 0.60, px);        // the rooms, the glyphs, the balconies: a pane several pixels wide
+    float dmg = damageAt(cc);
+    float hgt = v - bx.z;                                // height above this mass's base
 
-    // one hard key from a low angle, barred by venetian shadow
-    vec3 KEY = vec3(-0.823632, 0.220974, 0.522303); // unit by construction: no constant normalize
-    float key = max(dot(n, KEY), 0.0);
-    key *= key;                                        // hard: the shadow side goes black
-    float bar = mix(1.0, 0.16 + 0.84 * smoothstep(0.28, 0.50, fract(v * 0.20 + u * 0.055 + rnd.z * 4.0)), near * (roof ? 0.0 : 0.9));
-    float grain = 0.78 + 0.44 * vnoise2(vec2(u, v) * (fam == 1 ? 2.2 : 0.55) + rnd.xy * 17.0);
-    vec3 stone = grey(mix(uPal4, vec3(1.0), fam == 1 ? 0.06 : 0.18), 0.82);
-    vec3 col = stone * (0.009 + 0.40 * key * bar) * grain;
-    if (fam == 2 && !roof) {
-      // a glass skin: near black, one sharp specular sliver off the key, the
-      // spandrel bands between floors darker than the glass
-      float k3 = key * key * key;
-      col = stone * 0.004 + grey(mix(uPal2, vec3(1.0), 0.5), 0.4) * k3 * k3 * 0.55;
-      col += stone * 0.05 * step(0.86, fract(u / (2.1 + rnd.x * 0.7))) * near;
+    // ---- light: the sun (hard, low, long shadows), the dome, the occlusion of
+    // the canyon floor and the setbacks, the lightning
+    float sunD = max(dot(n, uSun), 0.0);
+    float sun = sunD > 0.001 ? sunD * sunShadow(p, c) : 0.0;
+    float ao = roof ? 0.85 : mix(0.38, 1.0, smoothstep(0.0, 9.0, hgt)) * mix(0.55, 1.0, smoothstep(0.0, 24.0, v));
+    if (roof) {
+      // the roof darkens against the mass standing on it, and lights at its parapet
+      vec2 c1 = ctr + off.xy;
+      float d1 = lvl == 0 && b1.x > 0.05 && b1.z <= bx.w + 0.01 ? max(abs(p.x - c1.x) - b1.x, abs(p.z - c1.y) - b1.y) : 50.0;
+      ao *= mix(0.5, 1.0, smoothstep(0.0, 4.0, d1));
+      float edge = min(bx.x - abs(p.x - cc.x), bx.y - abs(p.z - cc.y));
+      ao *= 1.0 + 0.35 * (1.0 - smoothstep(0.3, 1.0, edge));
+    }
+    vec3 amb = gAmb;
+    vec3 sunCol = gSunT * (1.0 - uWreck * 0.75);
+    vec3 light = amb * ao * (0.62 + 0.38 * (n.y * 0.5 + 0.5)) + sunCol * sun * 1.5;
+    light += mix(uPal2, vec3(1.0), 0.5) * uLtn * 0.10;
+
+    // ---- material: micro-variation, grime running down from the sills, a wet sheen
+    float g1 = vnoise2(vec2(u, v) * 0.55 + rnd.xy * 17.0);
+    float g2n = close > 0.0 ? vnoise2(vec2(u, v) * 3.1 + rnd.zw * 9.0) : 0.5;
+    float grain = 0.78 + 0.30 * g1 + 0.14 * g2n;
+    float streak = vnoise2(vec2(u * 2.6, v * 0.16) + rnd.wz * 5.0);
+    float grime = 1.0 - 0.38 * smoothstep(0.42, 0.8, streak) * (0.45 + 0.55 * (1.0 - smoothstep(0.0, 18.0, hgt)));
+    vec3 tintA = rnd2.x < 0.33 ? uPal1 : (rnd2.x < 0.66 ? uPal2 : uPal0);
+    vec3 base = grey(mix(uPal4, tintA, 0.10 + rnd2.y * 0.22), 0.7);
+    float albedo = 0.42;
+    vec3 rr = reflect(rd, n);
+    float fres = pow(1.0 - max(dot(-rd, n), 0.0), 5.0);
+    float wetF = uRain * 0.7;
+    if (fam == 0) { base = grey(mix(uPal4, mix(uPal0, vec3(1.0), 0.5), 0.30), 0.75); albedo = 0.52; }          // limestone
+    else if (fam == 1) {                                                                                      // brick
+      base = grey(mix(uPal4, uPal1, 0.40), 0.45) * (lvl == 2 ? 0.5 : 1.0);
+      albedo = 0.34;
+      float course = step(0.88, fract(v * 4.0)) + step(0.93, fract(u * 2.0 + step(0.5, fract(v * 2.0)) * 0.5));
+      grain *= 1.0 - 0.35 * clamp(course, 0.0, 1.0) * close;
+    }
+    else if (fam == 3) {                                                                                      // corrugated sheet, rust
+      base = grey(mix(uPal4, uPal1, 0.22), 0.6); albedo = 0.36;
+      grain *= 0.85 + 0.25 * step(0.5, fract(v * 1.6)) * close + 0.2 * smoothstep(0.55, 0.8, vnoise2(vec2(u, v) * 1.3 + rnd.yx * 4.0));
+    }
+    else if (fam == 4) {                                                                                      // concrete panels
+      albedo = 0.46;
+      float joint = step(0.95, fract(u * 0.25)) + step(0.93, fract(v * 0.3333));
+      grain *= 1.0 - 0.25 * clamp(joint, 0.0, 1.0) * close;
+    }
+    else if (fam == 5 && lvl == 0) { base = grey(mix(uPal4, tintA, 0.25), 0.5); albedo = 0.30; }            // the podium: dark stone
+    vec3 col = base * albedo * grain * grime * light;
+    // the wet sheen: the dome, and the sun where the face can catch it
+    col += gAmb * 2.2 * (0.02 + 0.25 * fres) * wetF * (1.0 - float(roof) * 0.6);
+    bool glassSkin = (fam == 2 && !roof) || (fam == 5 && lvl == 1 && !roof && rnd2.z > 0.45);
+    float lum = 0.0, hole = 0.0, fire = 0.0, paneM = 0.0;
+    if (glassSkin) {
+      // a curtain wall: the dome in it above the horizon, the dark canyon below,
+      // the sun as one hard glint, mullions and the spandrel bands between
+      // floors; rain runs down it
+      float run = uRain * near > 0.01 ? smoothstep(0.55, 0.85, vnoise2(vec2(u * 4.0, v * 0.3 - uTime * 0.7) + rnd.xy * 3.0)) * uRain * near : 0.0;
+      vec3 rr2 = normalize(rr + vec3(0.0, run * 0.25, 0.0));
+      vec3 refl = rr2.y > 0.0 ? skyBase(rr2) : mix(grey(uPal4, 0.7) * 0.03, gHaze * 0.6, clamp(-rr2.y * 4.0, 0.0, 1.0) * 0.3);
+      float F = 0.04 + 0.42 * fres;
+      float mull = step(0.90, fract(u / (2.1 + rnd.x * 0.7))) + step(0.0, fract(v * 0.3226) - 0.82);
+      float spandrel = step(0.82, fract(v / 3.1));
+      col = mix(refl * F * 0.75 * (1.0 - spandrel * 0.7), base * 0.35 * light, clamp(mull, 0.0, 1.0) * near * 0.8);
+      float gl = max(dot(rr2, uSun), 0.0);
+      float gl2 = gl * gl, gl4 = gl2 * gl2, gl16 = gl4 * gl4 * gl4 * gl4;
+      col += sunCol * (gl16 * gl16 * gl16 * gl16 * 4.0 + gl16 * 0.08) * (1.0 - spandrel * 0.8);
+      col *= 1.0 - run * 0.15;
     }
     if (roof) {
-      // tar and gravel, standing water, and whatever the block keeps up there
-      float wetR = smoothstep(0.45, 0.7, vnoise2(p.xz * 0.09 + rnd.zw * 7.0));
-      col = stone * (0.010 + 0.10 * key) * (0.6 + 0.7 * vnoise2(p.xz * 1.6))
-          + grey(mix(uPal2, vec3(1.0), 0.45), 0.35) * wetR * 0.030;
-      if (lvl > 0) col += stone * 0.02;
+      // tar and gravel, standing water carrying the dome, and whatever the block keeps up there
+      float wetR = smoothstep(0.45, 0.7, vnoise2(p.xz * 0.09 + rnd.zw * 7.0)) * (0.3 + uRain * 0.7);
+      vec3 pud = skyBase(vec3(rr.x, abs(rr.y), rr.z));
+      col = grey(uPal4, 0.85) * (0.30 + 0.35 * vnoise2(p.xz * 1.6)) * light * 0.7;
+      col = mix(col, pud * (0.08 + 0.5 * fres), wetR * 0.85);
+      if (lvl > 0) col *= 0.8;
     }
-    float lum = 0.0;
-    if (bx.w - bx.z > 8.0 && !roof) col += windows(u, v, k, fam, rnd, bx, aa, blown, lum) * (0.06 + 1.05 * uWinFade);
+    if (bx.w - bx.z > 8.0 && !roof) {
+      vec3 wcol = windows(u, v, rd, n, k, fam, rnd, bx, aa, blown, dmg, det, lum, hole, fire, paneM);
+      // the dome reflected in every pane (the curtain walls did their own)
+      vec3 refl = rr.y > 0.0 ? gHaze * (1.2 + rr.y * 1.5) : grey(uPal4, 0.7) * 0.02;
+      if (!glassSkin) col = mix(col, refl * (0.04 + 0.5 * fres) + base * 0.1 * light, paneM * 0.7 * (1.0 - hole));
+      col += wcol * (0.06 + 1.05 * uWinFade);
+      col *= 1.0 - hole * 0.85;
+    }
 
-    if (!roof) {
+    bool boardHere = (fam == 4 && rnd2.w > 0.62) || (fam == 2 && rnd2.w > 0.86) || (fam == 0 && lvl == 1 && rnd2.w > 0.7) || (fam == 5 && lvl == 1 && rnd2.w > 0.8);
+    bool neonHere = (fam == 5 && lvl == 0) || (fam == 1 && lvl < 2 && rnd2.z > 0.45) || (fam == 4 && rnd2.z > 0.82);
+    float signAlive = blown * (1.0 - smoothstep(0.15, 0.6, dmg) * 0.9);
+    vec3 neonCol = mix(uPal3, rnd2.y > 0.5 ? uPal2 : uPal0, 0.6 * rnd2.x);
+    if (!roof && det <= 0.01) {
+      // the far form of the signage: the board's and the tube's average over their rectangles
+      if (boardHere) {
+        vec2 hf = vec2(min(3.6, uh * 0.8), 2.0 + rnd2.x * 1.4);
+        float sy = bx.z + (bx.w - bx.z) * (0.45 + 0.35 * rnd2.y);
+        vec2 q = vec2(u - ucc, v - sy);
+        vec3 bc = rnd2.x > 0.66 ? uPal3 : (rnd2.x > 0.33 ? uPal2 : mix(uPal0, uPal3, 0.5));
+        col += bc * step(abs(q.x), hf.x) * step(abs(q.y), hf.y) * 0.9 * signAlive;
+      }
+      if (neonHere) {
+        float sy = bx.z + (fam == 5 ? 5.0 : 3.4 + rnd2.w * 5.0);
+        float sw = min(2.0 + rnd2.x * 3.0, uh - 1.0);
+        vec2 q = vec2(u - ucc - (rnd2.w - 0.5) * 4.0, v - sy);
+        col += neonCol * step(abs(q.y), 1.2) * step(abs(q.x), sw + 0.4) * 0.7 * signAlive;
+      }
+      if (fam == 3 && lvl == 1 && !xface) col = base * 0.2 * light + (rnd2.y > 0.5 ? uPal3 : mix(uPal2, uPal0, rnd2.x)) * 0.8 * signAlive;
+    }
+    if (!roof && det > 0.01) {
       // cornice: a lit lip and the shadow it throws
       float cn = smoothstep(bx.w - 1.5, bx.w - 0.9, v) * (1.0 - step(bx.w, v));
       float cnS = smoothstep(bx.w - 3.4, bx.w - 1.6, v) * (1.0 - smoothstep(bx.w - 1.6, bx.w - 1.4, v));
-      float hasCn = fam == 2 ? 0.15 : 1.0;
-      col += stone * cn * (0.02 + 0.55 * key) * hasCn - stone * cnS * 0.02 * hasCn;
+      float hasCn = glassSkin ? 0.15 : 1.0;
+      col += base * cn * (0.02 + 0.5 * sun + 0.3 * amb.g) * hasCn - base * cnS * 0.03 * hasCn;
       if (fam == 0) {
-        // deco piers: vertical ribs catching the key, and a banded crown
+        // deco piers: vertical ribs catching the sun, and a banded crown
         float rib = smoothstep(0.40, 0.5, abs(fract(u / 3.6) - 0.5));
-        col += stone * rib * key * 0.16;
+        col += base * rib * light * 0.16;
         float crown = step(bx.w - 7.0, v) * step(0.55, fract(v * 0.9));
-        col += stone * crown * key * 0.20;
+        col += base * crown * light * 0.20;
       }
-      if (fam == 1) {
+      if (fam == 1 && lvl < 2) {
         // fire escape: platforms every floor, rails, a diagonal run, over a
         // band of the facade
         float wy = 3.3 + rnd.y * 0.9;
-        float uc = abs(n.x) > 0.5 ? ctr.y : ctr.x;
-        float band = 1.0 - smoothstep(2.4, 3.2, abs(u - (uc + (rnd.w - 0.5) * 9.0)));
+        float band = 1.0 - smoothstep(2.4, 3.2, abs(u - (ucc + (rnd.w - 0.5) * 5.0)));
         float fvv = fract((v - 1.0) / wy);
         float plat = step(fvv, 0.10);
         float rail = step(0.10, fvv) * step(fvv, 0.16);
         float diag = step(abs(fract(u * 0.32 + fvv) - 0.5), 0.06) * step(0.16, fvv);
         float fe = clamp(plat + rail * 0.6 + diag * 0.5, 0.0, 1.0) * band * near;
-        col = mix(col, stone * (0.010 + 0.55 * key), fe * 0.9);
+        col = mix(col, grey(uPal4, 0.9) * 0.25 * light, fe * 0.9);
       }
-      if (fam == 3) {
+      if (fam == 4) {
+        // balconies: a slab every floor across the face, its shadow under it
+        float fvv = fract((v - 0.4) / 3.0);
+        float slab = step(fvv, 0.10) * step(1.5, abs(u - ucc) - 0.0) * step(abs(u - ucc), uh - 0.8);
+        float under = smoothstep(0.28, 0.10, fvv) * (1.0 - slab);
+        col = mix(col, base * albedo * light * 1.1, slab * near * 0.9);
+        col *= 1.0 - under * 0.35 * near;
+      }
+      if (fam == 3 && lvl == 0) {
         // a painted sign across the flank, ghosted
         float paint = smoothstep(0.45, 0.55, vnoise2(vec2(u * 0.35, v * 0.7) + rnd.zw * 9.0)) * step(v, bx.w - 2.0) * step(bx.z + 3.0, v);
-        col += stone * paint * key * 0.22;
+        col += base * paint * light * 0.22;
       }
-      // signage: saturated, one of the few things in the frame that has colour
-      if (rnd.w > 0.74) {
-        float sy = bx.z + (bx.w - bx.z) * (0.6 + rnd.z * 0.35);
-        float sc0 = (rnd.x - 0.5) * 9.0 + (abs(n.x) > 0.5 ? ctr.y : ctr.x);
-        float sh = 0.9 + rnd.y * 0.8, sw = 3.0 + rnd.x * 3.5;
-        float sm = (1.0 - smoothstep(sh, sh + 0.35, abs(v - sy))) * (1.0 - smoothstep(sw, sw + 0.5, abs(u - sc0)));
-        float glyph = step(0.34, fract((u - sc0) * 1.6));
-        float dead = step(0.5, fract((u - sc0) * 0.30 + 0.2));
-        float fl = 0.5 + 0.5 * step(0.16, h11(floor(uTime * 8.0) + rnd.w * 31.0 + dead * 5.0));
-        vec3 sgn = mix(uPal3, uPal0, rnd.z * 0.85);
-        col += sgn * sm * mix(glyph, 0.6, aa) * fl * 3.4 * blown;
-        col += sgn * sm * 0.4 * blown;
+      // ---- signage: the few saturated things in the frame. The palette keeps
+      // its colour here — neon tubes on the podium fronts and the walk-ups, LED
+      // boards up the mid-rises and the slabs, the billboard on the shed's roof.
+      if (neonHere) {
+        float sy = bx.z + (fam == 5 ? 5.0 : 3.4 + rnd2.w * 5.0);
+        float sw = min(2.0 + rnd2.x * 3.0, uh - 1.0);
+        float sc0 = ucc + (rnd2.w - 0.5) * 4.0;
+        vec2 q = vec2(u - sc0, v - sy);
+        // a rectangle outline tube, and a row of glyph tubes inside it
+        float dRect = abs(max(abs(q.x) - sw, abs(q.y) - 0.85));
+        float gq = fract((q.x + sw) * 1.25);
+        float glyph = step(abs(q.y), 0.45) * step(abs(q.x), sw - 0.4) * (step(abs(gq - 0.25), 0.05) + step(abs(q.y - 0.45 * (fract(q.x * 0.7) - 0.5)), 0.05) * step(gq, 0.75));
+        float tube = exp(-dRect * dRect * 70.0) + clamp(glyph, 0.0, 1.0);
+        float halo = exp(-dRect * dRect * 2.0) * 0.22;
+        float nflk = 0.7 + 0.3 * step(0.12, h11(floor(uTime * 11.0) + rnd2.w * 40.0));
+        float avg = step(abs(q.y), 1.2) * step(abs(q.x), sw + 0.4) * 0.35;
+        col += neonCol * (mix(tube * 3.2, avg * 2.0, aa) + halo * 0.7) * nflk * signAlive;
+      }
+      if (boardHere) {
+        vec2 hf = vec2(min(3.6, uh * 0.8), 2.0 + rnd2.x * 1.4);
+        float sy = bx.z + (bx.w - bx.z) * (0.45 + 0.35 * rnd2.y);
+        float scroll = rnd2.z > 0.55 ? uTime * (1.6 + rnd2.z * 3.0) : 0.0;
+        vec3 bc = rnd2.x > 0.66 ? uPal3 : (rnd2.x > 0.33 ? uPal2 : mix(uPal0, uPal3, 0.5));
+        col += ledBoard(vec2(u - ucc, v - sy), hf, rnd2.w * 91.0, scroll, aa, bc) * signAlive;
+      }
+      if (fam == 3 && lvl == 1 && !xface) {
+        // the billboard: the whole face is one board, scrolling on a third of them
+        float scroll = rnd2.z > 0.66 ? uTime * 2.4 : 0.0;
+        vec3 bc = rnd2.y > 0.5 ? uPal3 : mix(uPal2, uPal0, rnd2.x);
+        col = base * 0.2 * light + ledBoard(vec2(u - ucc, v - (bx.z + bx.w) * 0.5), vec2(bx.x - 0.2, (bx.w - bx.z) * 0.5 - 0.2), rnd2.w * 57.0, scroll, aa, bc) * signAlive;
       }
     }
+    // the wreck: exposed floor slabs across a stump's ragged top, the rubble at its foot
+    float stump = smoothstep(0.55, 0.9, dmg);
+    if (stump > 0.01 && !roof) {
+      float slabs = step(0.88, fract(v * 0.303)) * smoothstep(bx.w - 12.0, bx.w - 2.0, v);
+      col = mix(col, grey(uPal4, 0.8) * 0.35 * light, stump * slabs * 0.8);
+      col *= 1.0 - stump * 0.3 * smoothstep(0.4, 0.65, vnoise2(vec2(u * 0.7, v * 0.5) + rnd.xy * 3.0));
+    }
     // the street lamps reach the lower floors
-    if (p.y < 46.0) col += lampLight(p, clamp(blown + flare * 0.5, 0.0, 2.0)) * mix(uPal1, uPal0, 0.3) * 0.22 * max(1.0 - n.y, 0.15);
+    if (p.y < 46.0) col += lampLight(p, clamp(blown + flare * 0.5, 0.0, 2.0)) * mix(uPal1, uPal0, 0.3) * 0.22 * uLamps * max(1.0 - n.y, 0.15);
     // Every fireball is a light: the facades turned toward it burn. The term is
     // PURELY directional and carries no ambient share at all — the smallest
     // floor here is a floor under every wall in frame, and with a deck standing
@@ -872,44 +1283,74 @@ const WORLD_FRAG = /* glsl */ `
     float face = roof ? 0.75 : clamp(n.x * fireDir.x + n.z * fireDir.y, 0.0, 1.0);
     col += fireCol * fireLit * 0.16 * face * face * grain;
     // the front: a hard white edge as it arrives, glass glittering behind it
-    col += mix(uPal0, vec3(1.0), 0.6) * flare * (0.05 + key * 0.14);
-    col += vec3(1.0) * glint * (0.15 + lum) * 0.5 * near;
+    col += mix(uPal0, vec3(1.0), 0.6) * flare * (0.04 + sun * 0.08);
+    col += vec3(1.0) * glint * (0.10 + lum) * 0.35 * near;
     col *= 1.0 - scorch * 0.6;
     return col;
   }
 
-  // ---- the ground: asphalt, kerbs, markings, wet reflection
+  // ---- the ground: asphalt, kerbs, markings, the river, the yard, wet reflection
   vec3 shadeGround(vec3 ro, vec3 rd, vec3 p, float dist, float blown, float flare, float glint, float scorch, float fireLit) {
     // the ground faces every fireball equally, so it takes the sum as it comes
     ivec2 c = ivec2(floor(p.xz / CELLF + 0.5));
     bool street = lotStreet(c);
+    bool river = lotRiver(c);
+    bool yard = lotYard(c);
     vec2 lc = p.xz - vec2(c) * CELLF;                 // position inside the lot
-    float kerb = 1.0 - smoothstep(0.35, 0.7, min(CELLF * 0.5 - abs(lc.x), CELLF * 0.5 - abs(lc.y)));
+    float edgeD = min(CELLF * 0.5 - abs(lc.x), CELLF * 0.5 - abs(lc.y));
+    float kerb = 1.0 - smoothstep(0.35, 0.7, edgeD);
     float gn = 0.75 + 0.5 * vnoise2(p.xz * 0.7);
     float wet = uRain * smoothstep(0.34, 0.66, fbm2b(p.xz * 0.035 + 3.1));
-    vec3 col;
+    float dmg = damageAt(p.xz);
+    // light: the dome into the canyon, the sun where the blocks let it through
+    float shadowG = sunShadow(p, ivec2(100000));
+    float sun = shadowG * max(uSun.y, 0.0) * 4.0;
+    float aoG = street ? mix(0.55, 1.0, smoothstep(0.0, 10.0, edgeD)) : 0.5;
+    vec3 light = gAmb * aoG * 0.8 + gSunT * sun * (1.0 - uWreck * 0.75);
+    light += mix(uPal2, vec3(1.0), 0.5) * uLtn * 0.08;
+    vec3 col = vec3(0.0);
     vec3 tar = grey(uPal4, 0.85);
+    if (river && abs(p.x) > 17.0) {
+      // the water: the dome in it, broken by ripples; the bridge carries the boulevard across
+      vec3 nw = normalize(vec3((vnoise2(p.xz * 0.22 + uTime * 0.25) - 0.5) * 0.14, 1.0, (vnoise2(p.xz * 0.22 + 7.0 - uTime * 0.18) - 0.5) * 0.14));
+      vec3 rr = reflect(rd, nw);
+      rr.y = abs(rr.y);
+      float fr = pow(1.0 - max(-rd.y, 0.0), 4.0);
+      col = mix(grey(mix(uPal2, uPal4, 0.5), 0.6) * 0.03 * light, skyBase(rr) * 0.75, 0.12 + 0.88 * fr);
+      col += mix(uPal1, uPal0, 0.45) * fireLit * 0.04;
+      col *= 1.0 - scorch * 0.4;
+    } else {
     if (street) {
-      vec3 asphalt = tar * 0.019 * gn;
+      vec3 asphalt = tar * 0.19 * gn;
       float centre = 1.0 - smoothstep(0.10, 0.22, abs(p.x));
       float lane = step(0.5, fract(-p.z / 9.0)) * (1.0 - smoothstep(0.10, 0.2, abs(abs(p.x) - 7.5)));
       float edge = 1.0 - smoothstep(0.12, 0.26, abs(abs(p.x) - 13.6));
       float onBlvd = c.x == 0 ? 1.0 : 0.0;
-      vec3 paint = mix(tar, vec3(1.0), 0.8) * 0.10 * onBlvd;
+      vec3 paint = mix(tar, vec3(1.0), 0.8) * 0.6 * onBlvd;
       col = asphalt + paint * (centre * 0.8 + lane + edge * 0.5);
+      if (yard && c.x != 0) {
+        // the rail yard: ballast and rails running across the grid
+        float rail = step(0.93, fract(p.z * 0.6)) + step(0.93, fract(p.z * 0.6 + 0.3));
+        col = mix(tar, vec3(1.0), 0.1) * 0.22 * gn + grey(mix(uPal4, uPal2, 0.3), 0.5) * 0.45 * clamp(rail, 0.0, 1.0);
+      }
+      if (river) col = asphalt * 1.1 + paint * centre * 0.8 + mix(tar, vec3(1.0), 0.3) * 0.3 * step(14.0, abs(p.x));   // the bridge deck and its parapets
+      col *= light;
     } else {
-      col = mix(tar, vec3(1.0), 0.16) * 0.026 * gn + mix(tar, vec3(1.0), 0.3) * kerb * 0.020;
+      col = (mix(tar, vec3(1.0), 0.16) * 0.26 * gn + mix(tar, vec3(1.0), 0.3) * kerb * 0.20) * light;
     }
-    float lampOn = clamp(blown + flare * 0.5, 0.0, 2.0);
+    // the rubble at the foot of the wrecked blocks
+    float rubble = smoothstep(0.45, 0.8, dmg);
+    if (rubble > 0.01) {
+      float lump = smoothstep(0.48, 0.72, vnoise2(p.xz * 0.9 + 2.0)) * (0.5 + 0.5 * vnoise2(p.xz * 3.0));
+      col = mix(col, grey(uPal4, 0.85) * (0.22 + 0.4 * lump) * light, rubble * (0.5 + 0.5 * lump));
+    }
+    float lampOn = clamp(blown + flare * 0.5, 0.0, 2.0) * uLamps * (1.0 - smoothstep(0.3, 0.6, dmg));
     col += lampLight(p, lampOn) * mix(uPal1, uPal0, 0.25) * 0.62 * gn * (0.55 + wet * 0.8);
-    col += grey(mix(uPal4, uPal1, 0.5), 0.5) * 0.008 * gn;   // the overcast bouncing back down
     col += mix(uPal1, uPal0, 0.45) * fireLit * 0.055 * gn;
     // wet asphalt: a second, shorter trace of the reflected ray, torn up
-    // vertically so it smears the way a wet road smears
+    // vertically so it smears the way a wet road smears; where the trace
+    // misses, the dome itself lies in the film — the sunset in the street
     #if REF_STEPS > 0
-    // the blend weight decides whether the second trace is worth taking at all:
-    // a steep look at the road reflects almost nothing, and tracing the city
-    // again to multiply it by two per cent is the pavement act's worst bargain
     float fr = 1.0 - max(-rd.y, 0.0);
     float fr2 = fr * fr;
     float fres = 0.06 + 0.94 * fr2 * fr2 * fr;
@@ -919,13 +1360,29 @@ const WORLD_FRAG = /* glsl */ `
       float rough = 0.035 + 0.05 * (1.0 - wet);
       rr.y += rough * (vnoise2(p.xz * vec2(1.9, 0.16) + uTime * 0.4) - 0.5) * 2.0;
       rr = normalize(rr);
-      vec3 rn; ivec2 rc; int rl;
-      float rt = traceCity(p + vec3(0.0, 0.02, 0.0), rr, 260.0, REF_STEPS, rn, rc, rl);
-      vec3 refl = grey(mix(uPal4, uPal1, 0.45), 0.55) * 0.05;
-      if (rt > 0.0) refl = mix(shadeFacadeLite(p + rr * rt + vec3(0.0, 0.02, 0.0), rn, rc, rl, dist + rt, blown), refl, clamp(rt / 260.0, 0.0, 0.7));
+      vec3 rn = vec3(0.0); ivec2 rc = ivec2(0); int rl = 0; float rEnd = 0.0;
+      float rt = traceCity(p + vec3(0.0, 0.02, 0.0), rr, 260.0, REF_STEPS, rn, rc, rl, rEnd);
+      vec3 refl = skyBase(rr) * 0.8;
+      if (rt > 0.0) refl = mix(shadeFacadeLite(p + rr * rt + vec3(0.0, 0.02, 0.0), rn, rr, rc, rl, dist + rt, blown), refl, clamp(rt / 260.0, 0.0, 0.7));
       col = mix(col, col * 0.7 + refl * 0.9, kw);
     }
+    #else
+    {
+      float fr = 1.0 - max(-rd.y, 0.0);
+      float fr2 = fr * fr;
+      float kw = clamp(wet * (0.06 + 0.94 * fr2 * fr2 * fr) * 2.0, 0.0, 0.5);
+      col = mix(col, skyBase(reflect(rd, vec3(0.0, 1.0, 0.0))) * 0.7, kw);
+    }
     #endif
+    // the sun itself in the wet film: one hard glint down the road
+    {
+      vec3 rr0 = reflect(rd, vec3(0.0, 1.0, 0.0));
+      float gl = dot(rr0, uSun);
+      if (gl > 0.96) {
+        float gl2 = gl * gl, gl4 = gl2 * gl2, gl16 = gl4 * gl4 * gl4 * gl4;
+        col += gSunT * gl16 * gl16 * gl16 * gl16 * 3.0 * wet * (1.0 - uWreck * 0.8) * shadowG;
+      }
+    }
     // long lamp streaks in the film of water. The grain does not depend on
     // which lamp is throwing the streak, so it is sampled once and not six
     // times, and a lamp more than twenty metres across the road contributes a
@@ -958,19 +1415,167 @@ const WORLD_FRAG = /* glsl */ `
       if (m > 0.01) dustSum += m * fbm2(p.xz * 0.02 + A.z);
     }
     col = mix(col, mix(uPal4, uPal1, 0.35) * 0.10, clamp(dustSum * 0.8, 0.0, 0.75));
+    }
     return col;
   }
 
-  // ---- sky: a low overcast lit from beneath by the city, stars through the gaps
-  vec3 skyCol(vec3 rd) {
-    float up = max(rd.y, 0.0);
-    vec3 col = mix(uPal4, uPal1, 0.55) * 0.075 * exp(-up * 5.0);
-    float deck = fbm2b(vec2(rd.x, rd.z) / max(up + 0.09, 0.10) * 0.5 + 11.0);
-    col += mix(uPal1, uPal4, 0.5) * smoothstep(0.30, 0.80, deck) * 0.085 * exp(-up * 1.9);
-    vec3 sc3 = rd * 110.0;
-    vec3 sf = fract(sc3) - 0.5;
-    col += vec3(1.0) * step(0.9955, h31(floor(sc3))) * exp(-dot(sf, sf) * 40.0) * 0.35 * smoothstep(0.10, 0.6, rd.y) * (1.0 - smoothstep(0.25, 0.7, deck));
+  // a forked bolt in the storm cell: a random walk of ten segments from the
+  // cloud base toward the horizon in (azimuth, elevation), a branch off its
+  // middle. Returns the angular distance to the nearest stroke.
+  float bolt(float az, float el, float seed) {
+    float elTop = 0.085 + 0.025 * h11(seed + 1.0);
+    float x = ${STORM_AZ} + (h11(seed) - 0.5) * 0.16, y = elTop;
+    float segH = elTop * 0.1;
+    float best = 1e9;
+    float bx0 = 0.0, by0 = 0.0;
+    for (int i = 0; i < 10; i++) {
+      float nx = x + (h11(seed * 3.1 + float(i) * 7.3) - 0.5) * 0.05;
+      float ny = y - segH;
+      vec2 pa = vec2(az - x, el - y), ba = vec2(nx - x, ny - y);
+      float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+      best = min(best, length(pa - ba * h));
+      if (i == 4) { bx0 = nx; by0 = ny; }
+      x = nx; y = ny;
+    }
+    x = bx0; y = by0;
+    float side = h11(seed + 9.0) > 0.5 ? 1.0 : -1.0;
+    for (int i = 0; i < 4; i++) {
+      float nx = x + side * 0.022 + (h11(seed * 5.7 + float(i) * 3.9) - 0.5) * 0.03;
+      float ny = y - segH * 0.8;
+      vec2 pa = vec2(az - x, el - y), ba = vec2(nx - x, ny - y);
+      float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+      best = min(best, length(pa - ba * h) * 1.3);
+      x = nx; y = ny;
+    }
+    return best;
+  }
+
+  // the whole sky: the dome, the cirrus veil, the cumulus deck, the storm cell
+  // and its lightning, the stars that come out as the dusk deepens
+  vec3 skyCol(vec3 rd, float az) {
+    vec3 col = skyBase(rd);
+    float h = clamp(rd.y, 0.0, 1.0);
+    float sd = max(dot(rd, uSun), 0.0);
+    float sd2 = sd * sd, sd4 = sd2 * sd2;
+    float cumM = 0.0;
+    if (rd.y > 0.0 && rd.y < 0.9) {
+      // cirrus: a high thin veil, streaked, lit from beneath by the sun
+      vec2 pc = rd.xz / (h + 0.12);
+      float cir = fbm2b(pc * vec2(2.1, 0.7) + vec2(3.0, 11.0));
+      cir = smoothstep(0.44, 0.80, cir) * smoothstep(0.0, 0.16, h) * (1.0 - smoothstep(0.45, 0.9, h));
+      vec3 cirCol = mix(uPal0, vec3(1.0), 0.35) * (0.5 + 0.7 * sd4) * (1.0 - uWreck * 0.85);
+      col = mix(col, cirCol, cir * 0.5);
+    }
+    if (rd.y > -0.012 && rd.y < 0.21) {
+      // cumulus: a lower deck on the horizon, lumpier, dark bellies and a lit rim
+      vec2 pk = rd.xz / (h + 0.05);
+      float cum = fbm2b(pk * 0.9 + vec2(17.0, 5.0)) * 0.8 + 0.2 * vnoise2(pk * 3.8 + 9.0);
+      cumM = smoothstep(0.50, 0.70, cum) * (1.0 - smoothstep(0.04, 0.20, h)) * smoothstep(-0.01, 0.015, rd.y);
+      float belly = smoothstep(0.70, 0.95, cum);
+      vec3 cumLit = mix(uPal0, uPal3, 0.5) * (0.35 + 0.65 * sd2);
+      vec3 cumDark = mix(uPal1, uPal4, 0.6) * 0.22;
+      vec3 cumCol = mix(cumLit, cumDark, belly * 0.85);
+      cumCol = mix(cumCol, grey(uPal4, 0.6) * 0.10, uWreck * 0.85);
+      // the storm cell: a dark anvil on the right horizon, its belly lit by the bolt
+      float dAz = abs(az - (${STORM_AZ}));
+      if (dAz < 0.42) {
+        float storm = smoothstep(0.42, 0.12, dAz) * (1.0 - smoothstep(0.05, 0.17, h)) * smoothstep(-0.01, 0.01, rd.y);
+        storm *= smoothstep(0.30, 0.55, fbm2b(pk * 0.5 + vec2(41.0, 3.0)));
+        vec3 stormCol = grey(mix(uPal2, uPal4, 0.6), 0.5) * 0.07;
+        stormCol += mix(uPal2, vec3(1.0), 0.6) * uLtn * 0.9 * (0.4 + 0.6 * (1.0 - smoothstep(0.0, 0.12, h)));
+        cumCol = mix(cumCol, stormCol, storm);
+        cumM = max(cumM, storm * 0.95);
+      }
+      col = mix(col, cumCol, cumM * 0.9);
+      // the bolt, only where the storm stands and only while it flashes
+      if (uLtn > 0.003 && dAz < 0.32 && rd.y < 0.14) {
+        float d = bolt(az, rd.y, uBoltSeed);
+        float core = exp(-d * 700.0);
+        float glow = exp(-d * 60.0) * 0.18;
+        col += mix(uPal2, vec3(1.0), 0.7) * (core * 9.0 + glow * 2.0) * uLtn * (1.0 - cumM * 0.7);
+      }
+    }
+    if (rd.y > 0.1) {
+      // stars through the gaps as the dusk deepens
+      vec3 sc3 = rd * 110.0;
+      vec3 sf = fract(sc3) - 0.5;
+      col += vec3(1.0) * step(0.9955, h31(floor(sc3))) * exp(-dot(sf, sf) * 40.0) * 0.35 * smoothstep(0.10, 0.6, rd.y) * (1.0 - cumM) * (0.15 + uWreck * 0.5) * (1.0 - sd4 * sd4);
+    }
     return col;
+  }
+
+  // the megalopolis past the DDA's reach: two bands of skyline on the horizon
+  // — blocky cells, a tower now and then, a scatter of lights — each fading
+  // into the haze, the farther the fainter
+  vec3 farCity(vec3 rd, float az, vec3 sky) {
+    vec3 haze = gHaze;
+    vec3 dark = grey(mix(uPal4, uPal1, 0.25), 0.7) * 0.06;
+    vec3 col = sky;
+    vec3 lightCol = mix(uPal1, uPal0, 0.4);
+    for (int bb = 0; bb < 2; bb++) {
+      int b = 1 - bb;                                           // the farther band first: the nearer stands in front
+      float cells = b == 0 ? 70.0 : 150.0;
+      float hz = b == 0 ? 0.60 : 0.82;                          // how much of the band is haze
+      float cell = floor(az * cells);
+      float hh = h21(vec2(cell, 7.0 + float(b) * 3.0));
+      float hh2 = h21(vec2(cell, 31.0 + float(b)));
+      float top = (b == 0 ? 0.008 : 0.004) + (b == 0 ? 0.030 : 0.017) * hh * hh + step(0.96, hh2) * (b == 0 ? 0.05 : 0.025) * hh2;
+      float below = 1.0 - smoothstep(top - 0.0015, top + 0.0015, rd.y);
+      vec3 bc = mix(dark, haze, hz);
+      // lit windows in the silhouette, dimmed by the same haze
+      float lit = step(0.965, h21(vec2(floor(az * 900.0 + float(b) * 13.0), floor(rd.y * 2600.0)))) * (1.0 - hz) * 0.8;
+      bc += lightCol * lit * (1.0 - uWreck * 0.7);
+      col = mix(col, bc, below * (b == 0 ? 1.0 : 0.85));
+    }
+    return col;
+  }
+
+  // Smoke columns off the fires the fronts leave: each a leaning column of
+  // noise rising off its roof, growing from the moment the fire catches (nine
+  // metres a second — nothing stands at its height), sampled twice across the
+  // ray's span (one noise sample). Dust-grey off the roofs as the front passes, black smoke as the
+  // fire takes, thinning to haze as it burns out. F = (x, z, y, age).
+  void smokeColumns(vec3 ro, vec3 rd, float tOpaque, inout vec3 col) {
+    vec3 ax = normalize(vec3(uWind.x, 1.0, uWind.y));
+    for (int i = 0; i < MAX_FIRE; i++) {
+      if (i >= uNFire) break;
+      vec4 F = uFire[i];
+      float age = F.w;
+      if (age <= 0.0) continue;
+      float H = min(age * 9.0, 120.0);
+      vec3 A = vec3(F.x, F.z, F.y);
+      // a sphere round the whole column first: most rays leave here
+      vec3 cen = A + ax * (H * 0.5);
+      float rb = H * 0.56 + 12.0;
+      vec3 cw = cen - ro;
+      float cb = dot(cw, rd);
+      if (cb < -rb || cb - rb > tOpaque || dot(cw, cw) - cb * cb > rb * rb) continue;
+      vec3 w0 = ro - A;
+      float b = dot(rd, ax), d0 = dot(w0, rd), d1 = dot(w0, ax);
+      float den = 1.0 - b * b;
+      if (den < 1e-4) continue;
+      float tr = (b * d1 - d0) / den;
+      float ta = (d1 - b * d0) / den;
+      if (tr < 0.0 || tr > tOpaque || ta < 0.0 || ta > H * 1.05) continue;
+      vec3 pr = ro + rd * tr;
+      vec3 pa = A + ax * ta;
+      float dd = length(pr - pa);
+      float Rh = (3.0 + H * 0.075) * (0.35 + 0.65 * ta / max(H, 1.0));
+      if (dd > Rh * 1.3) continue;
+      float span = sqrt(max(Rh * Rh * 1.69 - dd * dd, 0.0)) * 2.0;
+      float n1 = fbm3(vec3(pr.x * 0.07, pr.y * 0.05 - uTime * 0.9, pr.z * 0.07) + float(i) * 3.0);
+      float prof = 1.0 - smoothstep(0.45, 1.0, dd / Rh);
+      float top = 1.0 - smoothstep(H * 0.7, H, ta);
+      float dens = prof * top * smoothstep(0.25, 0.55, n1) * exp(-age / 130.0);
+      float al = 1.0 - exp(-dens * span * 0.28);
+      float fireOn = smoothstep(4.0, 14.0, age);
+      vec3 dust = grey(mix(uPal4, uPal1, 0.25), 0.5) * 0.20;
+      vec3 smoke = grey(uPal4, 0.75) * 0.05;
+      vec3 sc = mix(dust, smoke, fireOn) * (0.4 + 0.6 * ta / max(H, 1.0)) + gAmb * 0.30 * (0.2 + 0.8 * ta / max(H, 1.0)) * (1.0 - fireOn * 0.5);
+      float flick = 0.7 + 0.3 * vnoise2(vec2(uTime * 7.0 + float(i), uTime * 3.0));
+      sc += mix(uPal1, uPal0, 0.4) * 0.9 * exp(-ta * 0.09) * flick * fireOn;
+      col = mix(col, sc, clamp(al, 0.0, 0.92));
+    }
   }
 
   // ================================================================ the cloud
@@ -1034,7 +1639,7 @@ const WORLD_FRAG = /* glsl */ `
     // advanced by the angle-addition identity from its own cosine and sine.
     float r = length(p.xz);
     float invR = 1.0 / max(r, 1e-4);
-    float wc = smoothstep(c.yc - c.rc * 2.2, c.yc - c.rc * 0.8, p.y);
+    float wc = smoothstep(c.yc - c.rc * 2.2, c.yc - c.rc * 0.8, p.y) * smoothstep(0.0, c.Rc * 0.4, r); // the roll fades out on the axis, where its mapping flips
     float ex = r - c.Rc, ey = pc.y;
     float rho = sqrt(ex * ex + ey * ey);
     float invRho = 1.0 / max(rho, 1e-4);
@@ -1112,7 +1717,9 @@ const WORLD_FRAG = /* glsl */ `
     float stepLen = (t1 - t0) / float(steps);
     float t = t0 + stepLen * h31(rd * 100.0 + uTime);
     vec3 lightPos = base + vec3(0.0, yc, 0.0);
-    vec3 ash = grey(mix(uPal4, vec3(1.0), 0.34), 0.45);
+    vec3 ash = grey(mix(uPal4, vec3(1.0), 0.34), 0.72);
+    // the dome lights the cloud: the sunset's warmth on it, ash-grey under the dusk
+    vec3 dome = mix(mix(uPal0, uPal3, 0.35) * 1.15, grey(mix(uPal4, uPal1, 0.3), 0.7) * 0.7, uWreck * 0.8);
     float fireL = c.fireL;
     vec3 fireTint = mix(uPal1, vec3(1.0), 0.3);
     vec3 cityTint = mix(uPal1, uPal0, 0.25);
@@ -1136,10 +1743,10 @@ const WORLD_FRAG = /* glsl */ `
         float fl = fireL / (1.0 + dist * dist * 0.35);
         // the overcast from above (the up-probe is the self-shadow that gives
         // the cap its form), the city's glow from below, the fireball within
-        float sky = 0.14 + 0.55 * exp(-du * 2.4);
-        float city = 0.40 * smoothstep(yc * 0.9, 0.0, p.y) * uCityFade;
+        float sky = 0.22 + 0.72 * exp(-du * 2.4);
+        float city = 0.22 * smoothstep(yc * 0.9, 0.0, p.y) * uCityFade;
         vec3 emit = mix(uPal1, uPal0, clamp(heat * 0.5, 0.0, 1.0)) * heat;
-        vec3 col = emit + ash * (fl * lit * fireTint + sky) + cityTint * city;
+        vec3 col = emit + ash * (fl * lit * fireTint + sky * dome) + cityTint * city;
         float al = 1.0 - exp(-dens * stepLen * 2.6 / sc);
         acc += T * col * al;
         T *= 1.0 - al;
@@ -1163,17 +1770,18 @@ const WORLD_FRAG = /* glsl */ `
     float dens = smoothstep(0.0, -0.55 * c.sc, d + 0.10 * c.carve) * c.fade;
     if (dens < 0.004) return;
     float al = 1.0 - exp(-dens * (t1 - t0) * 1.5 / c.sc);
-    vec3 ash = grey(mix(uPal4, vec3(1.0), 0.34), 0.45);
+    vec3 ash = grey(mix(uPal4, vec3(1.0), 0.34), 0.72) * mix(mix(uPal0, uPal3, 0.35) * 1.15, grey(mix(uPal4, uPal1, 0.3), 0.7) * 0.7, uWreck * 0.8);
     float heat = cloudHeat(p - vec3(0.0, c.yc, 0.0), c);
     float fireL = c.fireL * 0.6;
     vec3 emit = mix(uPal1, uPal0, clamp(heat * 0.5, 0.0, 1.0)) * heat;
-    vec3 col = emit + ash * (0.42 + fireL * 0.35) + mix(uPal1, uPal0, 0.25) * 0.22 * uCityFade;
+    vec3 col = emit + ash * (0.55 + fireL * 0.35) + mix(uPal1, uPal0, 0.25) * 0.12 * uCityFade;
     acc += T * col * al;
     T *= 1.0 - al;
   }
 
   // ================================================================ the world
   vec3 cityWorld(vec3 ro, vec3 rd, vec2 uv) {
+    prepColours();
     // the front bends the ray before anything is traced
     float bImp = length(cross(vec3(${GZ_X}.0, 0.0, ${GZ_Z}.0) - ro, rd));
     float band = 0.0, lip = 0.0;
@@ -1200,16 +1808,23 @@ const WORLD_FRAG = /* glsl */ `
 
     float tg = rd.y < -1e-4 ? -ro.y / rd.y : -1.0;
     float tLimit = tg > 0.0 ? min(tg, CFAR) : CFAR;
-    vec3 nrm; ivec2 hc; int hlvl;
-    float tB = traceCity(ro, rd, tLimit, CITY_STEPS, nrm, hc, hlvl);
-    float tOpaque = tB > 0.0 ? tB : (tg > 0.0 && tg < CFAR ? tg : CFAR);
+    vec3 nrm = vec3(0.0); ivec2 hc = ivec2(0); int hlvl = 0; float tEnd = 0.0;
+    float tB = traceCity(ro, rd, tLimit, CITY_STEPS, nrm, hc, hlvl, tEnd);
+    // the ground is drawn as far as the DDA walked; past its reach the
+    // megalopolis impostor stands in, so the horizon never shows bare ground
+    // where blocks should be
+    bool groundHit = tB <= 0.0 && tg > 0.0 && tg < CFAR && tg <= tEnd + 0.5;
+    float tOpaque = tB > 0.0 ? tB : (groundHit ? tg : CFAR);
     vec3 pHit = ro + rd * min(tOpaque, 900.0);
-    float blown, flare, glint, scorch, fireLit; vec2 fireDir;
+    float blown = 1.0, flare = 0.0, glint = 0.0, scorch = 0.0, fireLit = 0.0; vec2 fireDir = vec2(0.0);
     frontAt(pHit.xz, blown, flare, glint, scorch, fireLit, fireDir);
+    float az = atan(rd.x, -rd.z);
     vec3 col;
-    if (tB > 0.0) col = shadeFacade(ro + rd * tB, nrm, hc, hlvl, tB, blown, flare, glint, scorch, fireLit, fireDir);
-    else if (tg > 0.0 && tg < CFAR) col = shadeGround(ro, rd, ro + rd * tg, tg, blown, flare, glint, scorch, fireLit);
-    else col = skyCol(rd);
+    if (tB > 0.0) col = shadeFacade(ro + rd * tB, nrm, rd, hc, hlvl, tB, blown, flare, glint, scorch, fireLit, fireDir);
+    else if (groundHit) col = shadeGround(ro, rd, ro + rd * tg, tg, blown, flare, glint, scorch, fireLit);
+    else { col = skyCol(rd, az); if (rd.y < 0.1) col = farCity(rd, az, col); }
+    // aerial perspective: the haze takes the distance, and the dust thickens it
+    if (tOpaque < CFAR) col = mix(col, gHaze, (1.0 - exp(-tOpaque * uHaze)) * 0.92);
 
     // fog: an exponential height layer, banded, integrated along the ray
     float Hf = 90.0;
@@ -1219,9 +1834,11 @@ const WORLD_FRAG = /* glsl */ `
       ? dens * exp(-ro.y / Hf) * min(tOpaque, CFAR)
       : dens * Hf / ky * (exp(-ro.y / Hf) - exp(-(ro.y + ky * min(tOpaque, CFAR)) / Hf));
     float fog = 1.0 - exp(-max(I, 0.0));
-    vec3 fogCol = grey(mix(uPal4, uPal1, 0.45), 0.55) * 0.075;
+    vec3 fogCol = gHaze * 0.55;
     col = mix(col, fogCol, clamp(fog, 0.0, 0.96));
-    col += lampAir(ro, rd, min(tOpaque, 420.0), clamp(blown + flare * 0.5, 0.0, 2.0)) * (0.35 + uStreet * 0.9);
+    col += lampAir(ro, rd, min(tOpaque, 420.0), clamp(blown + flare * 0.5, 0.0, 2.0) * uLamps) * (0.35 + uStreet * 0.9);
+    // the smoke off the fires, behind the clouds and in front of the blocks
+    if (uNFire > 0) smokeColumns(ro, rd, tOpaque, col);
 
     // The clouds this ray marches, ranked by where it enters their bounds. Two
     // are marched on med and high and one on low: every extra call to cloudMap
@@ -1298,7 +1915,7 @@ const WORLD_FRAG = /* glsl */ `
       float r2 = A.w * A.w * 5.0;
       glowSum += amp * r2 / (r2 + dot(cr, cr));
     }
-    col += mix(uPal1, uPal0, 0.6) * min(glowSum, 2.0) * (0.07 + 0.93 * clamp(fog, 0.0, 1.0));
+    col += mix(uPal1, uPal0, 0.6) * min(glowSum, 2.0) * (0.07 + 0.93 * clamp(fog + (1.0 - exp(-tOpaque * uHaze)) * 0.5, 0.0, 1.0));
 
     // ground zero's own front: the dust wall, the fireball dome, the shell
     if (uBlastAge >= 0.0) {
@@ -1330,15 +1947,15 @@ const WORLD_FRAG = /* glsl */ `
     // rain in two slanted layers, and the dust that sweeps the eye
     float r1 = h21(floor(vec2(uv.x * 130.0 + uv.y * 22.0, uv.y * 26.0 - uTime * 26.0)));
     float r2 = h21(floor(vec2(uv.x * 74.0 - uv.y * 15.0 + 31.0, uv.y * 15.0 - uTime * 15.0)));
-    float rain = (step(0.986, r1) + step(0.991, r2) * 0.7) * uRain;
-    col += mix(uPal2, vec3(1.0), 0.6) * rain * 0.09;
+    float rain = (step(0.989, r1) + step(0.993, r2) * 0.7) * uRain;
+    col += mix(uPal2, vec3(1.0), 0.6) * rain * 0.045;
     // the dust that sweeps the eye, only while there is dust to sweep: eight
     // octaves of noise on every pixel of every frame was a millisecond spent
     // multiplying by zero
     if (uVeil > 0.002) {
       float veil = uVeil * fbm2(vec2(uv.x * 3.0 + uTime * 6.0, uv.y * 2.0 - uTime * 3.0));
       float streak = uVeil * fbm2(vec2(uv.x * 1.5 + uTime * 14.0, uv.y * 9.0));
-      col = col * (1.0 - veil * 0.8) + mix(uPal4, uPal1, 0.4) * (veil * 0.42 + streak * 0.22) * (0.5 + uBlastFire * 0.5);
+      col = col * (1.0 - veil * 0.8) + grey(mix(uPal4, uPal1, 0.4), 0.65) * (veil * 0.42 + streak * 0.22) * (0.5 + uBlastFire * 0.5);
     }
 
     // steam standing off four gratings on the boulevard
@@ -1357,7 +1974,7 @@ const WORLD_FRAG = /* glsl */ `
           float fall = exp(-r2q / 26.0) * smoothstep(13.0, 0.4, pp.y) * step(0.0, pp.y);
           if (fall > 0.004) {
             float amt = fall * smoothstep(0.25, 0.7, fbm3(vec3(pp.x * 0.22, pp.y * 0.16 - uTime * 0.42, pp.z * 0.22)));
-            col += grey(mix(uPal4, uPal1, 0.5), 0.4) * amt * 0.40 * uStreet;
+            col += (grey(mix(uPal4, uPal1, 0.5), 0.4) * 0.30 + gAmb * 0.6) * amt * 0.45 * uStreet;
           }
         }
       }
@@ -1526,59 +2143,116 @@ const hu = (x) => {
 };
 const hf = (x) => (hu(x) & 0xffffff) / 16777216;
 const lotKeyJS = (cx, cz, seed) => ((cx + 1024) * 4096 + (cz + 1024) + seed * 7919) >>> 0;
-const lotStreetJS = (cx, cz) => (cx + 4100) % AV === 0 || (cz + 4100) % ST === 0;
+const lotStreetJS = (cx, cz) => (cx + 4100) % AV === 0 || (cz + 4100) % ST === 0 || (cz <= RIVER_C0 && cz >= RIVER_C1) || (cz <= YARD_C0 && cz >= YARD_C1);
+// the shader's damageAt and craterAt: the max over the remembered craters of a
+// falloff from each ground zero (and the wake's plateau, for the shading).
+// dmg = { n, x, z, invR2, s } is the scene's crater list.
+function damageAtJS(dmg, x, z) {
+  let d = 0;
+  for (let i = 0; i < dmg.n; i++) {
+    const dx = x - dmg.x[i], dz = z - dmg.z[i];
+    const d2 = dx * dx + dz * dz;
+    let f = (1 - d2 * dmg.invR2[i]) * 1.6;
+    f = f < 0 ? 0 : f > 1 ? 1 : f;
+    let w = (1 - d2 * dmg.invR2[i] * 0.05) * 4 * 0.22;
+    w = w < 0 ? 0 : w > 0.22 ? 0.22 : w;
+    const v = dmg.s[i] * (f > w ? f : w);
+    if (v > d) d = v;
+  }
+  return d;
+}
+function craterAtJS(dmg, x, z) {
+  let d = 0;
+  for (let i = 0; i < dmg.n && i < dmg.stumps && d < 1; i++) {
+    const dx = x - dmg.x[i], dz = z - dmg.z[i];
+    let f = (1 - (dx * dx + dz * dz) * dmg.invR2[i]) * 1.6;
+    f = f < 0 ? 0 : f > 1 ? 1 : f;
+    const v = dmg.s[i] * f;
+    if (v > d) d = v;
+  }
+  return d;
+}
+const smoothstepJS = (a, b, x) => { const u = Math.min(1, Math.max(0, (x - a) / (b - a))); return u * u * (3 - 2 * u); };
 
 // `lotOf` in full, not just its base height: a lot stands as up to three
-// stacked masses, each with its own plan, its own offset off the lot centre and
-// its own height band, and the deco tower's mass 0 tops out at 0.42 of its
-// height with the two above it recessed. A JS copy that knows only the total
-// height sends the cluster to panes that hang in the air in front of the
-// setbacks — sixty-two per cent of that family's candidates — so it mirrors all
-// three. out.b holds four floats per mass (half x, half z, y base, y top) and
-// out.off two per mass (the plan offset).
-function lotOfJS(cx, cz, seed, out) {
+// masses, each with its own plan, its own offset off the lot centre and its
+// own height band — the deco tower's mass 0 tops out at 0.42 of its height
+// with the two above it recessed, the brick pair stands side by side, the
+// podium carries its slab — and the wreck knocks the blocks inside a burst's
+// heavy radius down to stumps. A JS copy that knew only the total height sent
+// the cluster to panes that hang in the air in front of the setbacks, so it
+// mirrors every number. out.b holds four floats per mass (half x, half z, y
+// base, y top), out.off two per mass (the plan offset), out.r / out.r2 the
+// lot's random words.
+function lotOfJS(cx, cz, seed, out, dmg) {
   const k = lotKeyJS(cx, cz, seed);
-  const a = hu(k), b = hu((k ^ 0x9e3779b9) >>> 0);
+  const a = hu(k), b = hu((k ^ 0x9e3779b9) >>> 0), e = hu((k ^ 0x3c6ef372) >>> 0);
   const r0 = (a & 255) / 255, r1 = ((a >>> 8) & 255) / 255, r2 = ((a >>> 16) & 255) / 255, r3 = (a >>> 24) / 255;
+  const q0 = (e & 255) / 255, q1 = ((e >>> 8) & 255) / 255, q2 = ((e >>> 16) & 255) / 255, q3 = (e >>> 24) / 255;
   const f = (b & 4095) / 4096;
   const g = ((b >>> 12) & 4095) / 4096;
-  const fam = f < 0.17 ? 0 : f < 0.55 ? 1 : f < 0.73 ? 2 : 3;
+  const g2 = (b >>> 24) / 255;
+  const fam = f < 0.06 ? 0 : f < 0.36 ? 1 : f < 0.50 ? 2 : f < 0.62 ? 3 : f < 0.85 ? 4 : 5;
   let hx = CELL * 0.5 - (3 + r0 * 4);
   let hz = CELL * 0.5 - (3 + r1 * 4);
   let ox = (r2 - 0.5) * 3, oz = (r3 - 0.5) * 3;
   if (Math.abs(cx) === 1) { hx -= 4; ox += cx > 0 ? 4 : -4; }
+  let ctrx = cx * CELL + ox;
+  const ctrz = cz * CELL + oz;
+  const fall = 1 - 0.72 * smoothstepJS(0.55, 1.0, craterAtJS(dmg, ctrx, ctrz) + (q0 - 0.5) * 0.2);
   const B = out.b, O = out.off;
   B.fill(0); O.fill(0);
-  let H;
   if (fam === 0) {                 // deco setback tower
-    H = 62 + g * 74;
+    const H = (64 + g * 48) * fall;
     B[0] = hx; B[1] = hz; B[2] = 0; B[3] = H * 0.42;
     B[4] = hx * 0.74; B[5] = hz * 0.74; B[6] = H * 0.42; B[7] = H * 0.76;
     B[8] = hx * 0.46; B[9] = hz * 0.46; B[10] = H * 0.76; B[11] = H;
-  } else if (fam === 1) {          // brick low-rise, water tank on the roof
-    H = 13 + g * 23;
-    B[0] = hx; B[1] = hz; B[2] = 0; B[3] = H;
-    B[4] = 3.2; B[5] = 3.2; B[6] = H; B[7] = H + 6.5;
-    O[2] = hx * 0.45; O[3] = -hz * 0.4;
+  } else if (fam === 1) {          // two brick walk-ups side by side, a water tank on the taller
+    const hxa = hx * (0.36 + q1 * 0.28), hxb = hx - 0.4 - hxa;
+    ctrx -= hx - hxa;
+    const H0 = (12 + g * 16) * fall, H1 = (12 + g2 * 16) * fall;
+    B[0] = hxa; B[1] = hz; B[2] = 0; B[3] = H0;
+    B[4] = hxb; B[5] = hz * 0.9; B[6] = 0; B[7] = H1;
+    O[2] = hxa + 0.4 + hxb; O[3] = 0;
+    const Ht = Math.max(H0, H1);
+    B[8] = 2.6; B[9] = 2.6; B[10] = Ht; B[11] = Ht + 5.5;
+    O[4] = (H1 > H0 ? O[2] : 0) + (H1 > H0 ? hxb : hxa) * 0.4 * (r2 > 0.5 ? 1 : -1);
+    O[5] = (H1 > H0 ? O[3] : 0) - hz * 0.45;
   } else if (fam === 2) {          // glass slab, plant room and a mast
     hx *= 1.06; hz *= 0.60;
-    H = 44 + g * 58;
+    const H = (30 + g * 46) * fall;
     B[0] = hx; B[1] = hz; B[2] = 0; B[3] = H;
-    B[4] = hx * 0.55; B[5] = hz * 0.75; B[6] = H; B[7] = H + 5.5;
-    B[8] = 0.55; B[9] = 0.55; B[10] = H + 5.5; B[11] = H + 22;
+    B[4] = hx * 0.55; B[5] = hz * 0.75; B[6] = H; B[7] = H + 4.5;
+    B[8] = 0.5; B[9] = 0.5; B[10] = H + 4.5; B[11] = H + 18;
     O[4] = hx * 0.32; O[5] = 0;
-  } else {                         // warehouse block, roof vents
-    H = 9 + g * 13;
+  } else if (fam === 3) {          // shed: long and low, a billboard standing on the roof, vents
+    const H = (7 + g * 9) * fall;
     B[0] = hx; B[1] = hz; B[2] = 0; B[3] = H;
-    B[4] = hx * 0.4; B[5] = hz * 0.34; B[6] = H; B[7] = H + 4;
-    O[2] = -hx * 0.3; O[3] = hz * 0.22;
+    B[4] = Math.min(hx * 0.8, 7.5); B[5] = 0.25; B[6] = H; B[7] = H + 5.5;
+    O[2] = 0; O[3] = (q2 > 0.5 ? 1 : -1) * (hz - 1);
+    B[8] = hx * 0.3; B[9] = hz * 0.3; B[10] = H; B[11] = H + 2.5;
+    O[4] = -hx * 0.4; O[5] = -hz * 0.2 * (q2 > 0.5 ? 1 : -1);
+  } else if (fam === 4) {          // concrete mid-rise, a plant box on the roof
+    const H = (18 + g * 34) * fall;
+    B[0] = hx; B[1] = hz; B[2] = 0; B[3] = H;
+    B[4] = hx * 0.4; B[5] = hz * 0.45; B[6] = H; B[7] = H + 3.2;
+    O[2] = hx * 0.25; O[3] = -hz * 0.2;
+  } else {                         // podium and slab
+    const H0 = 7 + g2 * 3.5;
+    const H = Math.max((H0 + 22 + g * 40) * fall, H0 + 2);
+    B[0] = hx; B[1] = hz; B[2] = 0; B[3] = H0;
+    B[4] = hx * 0.55; B[5] = hz * 0.62; B[6] = H0; B[7] = H;
+    O[2] = (q3 - 0.5) * hx * 0.6; O[3] = (r2 - 0.5) * hz * 0.4;
+    B[8] = hx * 0.2475; B[9] = hz * 0.31; B[10] = H; B[11] = H + 3;
+    O[4] = O[2]; O[5] = O[3];
   }
   out.fam = fam;
   out.k = k;
-  out.cx = cx * CELL + ox;
-  out.cz = cz * CELL + oz;
+  out.cx = ctrx;
+  out.cz = ctrz;
   out.top = Math.max(B[3], B[7], B[11]);
   out.r[0] = r0; out.r[1] = r1; out.r[2] = r2; out.r[3] = r3;
+  out.r2[0] = q0; out.r2[1] = q1; out.r2[2] = q2; out.r2[3] = q3;
   return out;
 }
 
@@ -1588,8 +2262,8 @@ export function createScene(ctx) {
   const camera = new THREE.PerspectiveCamera(FOV, ctx.width / Math.max(1, ctx.height), 0.4, 4000);
   const tier = quality.tier;
   const CLOUD_STEPS = tier === 'low' ? 11 : tier === 'high' ? 34 : 12; // 12 on med pays for the near ring filling the frame
-  const CITY_STEPS = tier === 'low' ? 26 : tier === 'high' ? 72 : 34;
-  const REF_STEPS = tier === 'low' ? 0 : tier === 'high' ? 22 : 5;
+  const CITY_STEPS = tier === 'low' ? 24 : tier === 'high' ? 72 : 28; // the lower city walks farther a ray; the impostor stands past the reach
+  const REF_STEPS = tier === 'low' ? 0 : tier === 'high' ? 22 : 4;
   const MAX_CLOUDS = tier === 'low' ? 4 : tier === 'high' ? 8 : 5; // the bigger bursts cost a slot on med
   // A second inlined march costs the whole shader its occupancy — 2.5 ms a
   // frame at 1080p — but without it a cloud in front bites a crescent out of
@@ -1598,6 +2272,9 @@ export function createScene(ctx) {
   // for everything else.
   const MARCH2 = tier === 'low' ? 0 : 1;
   const SALVO_STEP = Math.max(1, Math.floor(16 / (MAX_CLOUDS - 1))); // the salvo's pitch across the deck
+  const MAX_FIRE = tier === 'low' ? 4 : tier === 'high' ? 12 : 5;    // smoke columns the fronts can leave standing
+  const MAX_DMG = tier === 'high' ? 8 : 5;                           // craters the wreck remembers (the clouds come and go; the damage stays)
+  const STUMPS = tier === 'high' ? 4 : 2;                            // of those, how many knock blocks down to stumps in the DDA's geometry
 
   // instance layout
   const N_CAPS_DET = DET_CAPS;
@@ -1607,14 +2284,16 @@ export function createScene(ctx) {
   const CAP_LAMP0 = CAP_NEUT0 + MAX_NEUTRONS;
   const CAP_RV0 = CAP_LAMP0 + LAMPS * 2;
   const N_CAPS = CAP_RV0 + MAX_RV * TRAIL_SEGS;
-  const N_SOLID = NUCLEI * NUCLEONS;
+  const N_NUC = NUCLEI * NUCLEONS;
+  const N_SOLID = N_NUC + DEBRIS;     // the debris chunks ride the solid (depth-writing, normal-blended) impostors
   const GL_BUNCH0 = 0;
   const GL_HIT0 = 2;
   const GL_NEUT0 = GL_HIT0 + MAX_HITS;
   const GL_EMBER0 = GL_NEUT0 + MAX_NEUTRONS;
   const GL_RV0 = GL_EMBER0 + EMBERS;
   const GL_WIN0 = GL_RV0 + MAX_RV * 2;
-  const GL_VERTEX = GL_WIN0 + N_SOLID;
+  const GL_FIRE0 = GL_WIN0 + N_NUC;   // the glow of every fire the fronts leave burning
+  const GL_VERTEX = GL_FIRE0 + MAX_FIRE;
   const N_GLOW = GL_VERTEX + 1;
 
   const pal5 = () => Array.from({ length: 5 }, () => ({ value: new THREE.Color(1, 1, 1) }));
@@ -1631,6 +2310,11 @@ export function createScene(ctx) {
   const cloudC = new Float32Array(MAX_CLOUDS * 4);
   const cloudD = new Float32Array(MAX_CLOUDS * 4);
   const cloudE = new Float32Array(MAX_CLOUDS * 4);
+  // The wreck the bursts leave, as the shader reads it: up to MAX_DMG craters
+  // (centre, 1/R², strength), the max over them the damage at a point. The JS
+  // lot mirror runs the same loops, so the stumps and the blown panes the city
+  // shows are the ones the nucleons are matched against.
+  const dmg = { n: 0, stumps: STUMPS, x: new Float32Array(MAX_DMG), z: new Float32Array(MAX_DMG), invR2: new Float32Array(MAX_DMG), s: new Float32Array(MAX_DMG) };
   const WU = {
     uRes: { value: new THREE.Vector2(ctx.width, ctx.height) },
     uCamPos: { value: new THREE.Vector3() },
@@ -1667,12 +2351,24 @@ export function createScene(ctx) {
     uBlastFire: { value: 0 },
     uVeil: { value: 0 },
     uDustH: { value: 40 },
+    uSun: { value: new THREE.Vector3(Math.sin(SUN_AZ) * Math.cos(SUN_EL), Math.sin(SUN_EL), -Math.cos(SUN_AZ) * Math.cos(SUN_EL)) },
+    uWind: { value: new THREE.Vector2(WIND_X, WIND_Z) },
+    uWreck: { value: 0 },
+    uHaze: { value: 0.0007 },
+    uLamps: { value: 0.5 },
+    uLtn: { value: 0 },
+    uBoltSeed: { value: 1 },
+    uNDmg: { value: 0 },
+    uDmg: { value: new Float32Array(MAX_DMG * 4) },
+    uDmgBox: { value: new THREE.Vector4(0, 0, 0, 0) },
+    uNFire: { value: 0 },
+    uFire: { value: new Float32Array(MAX_FIRE * 4) },
     ...palUniforms(wp),
   };
   const worldMat = new THREE.ShaderMaterial({
     glslVersion: THREE.GLSL3,
     uniforms: WU,
-    defines: { CLOUD_STEPS, CITY_STEPS, REF_STEPS, MAX_CLOUDS, MARCH2 },
+    defines: { CLOUD_STEPS, CITY_STEPS, REF_STEPS, MAX_CLOUDS, MARCH2, MAX_DMG, MAX_FIRE, STUMPS },
     vertexShader: /* glsl */ `
       out vec2 vUv;
       void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
@@ -1850,12 +2546,13 @@ export function createScene(ctx) {
   const winDir = new Float32Array(WIN_CAP * 2);   // each window's place in the frame
   const winNuc = new Float32Array(NUCLEI * NUCLEONS * 2); // each nucleon's place in the frame
   const winUsed = new Uint8Array(WIN_CAP);
-  const winTarget = new Float32Array(N_SOLID * 3);
-  const winCt = new Float32Array(N_SOLID);
-  const order = new Int32Array(N_SOLID);
-  const rank = new Float32Array(N_SOLID);
-  const lotRec = { fam: 0, k: 0, cx: 0, cz: 0, top: 0, b: new Float64Array(12), off: new Float64Array(6), r: [0, 0, 0, 0] };
+  const winTarget = new Float32Array(N_NUC * 3);
+  const winCt = new Float32Array(N_NUC);
+  const order = new Int32Array(N_NUC);
+  const rank = new Float32Array(N_NUC);
+  const lotRec = { fam: 0, k: 0, cx: 0, cz: 0, top: 0, b: new Float64Array(12), off: new Float64Array(6), r: [0, 0, 0, 0], r2: [0, 0, 0, 0] };
   let winCount = 0;
+  let winDirty = false;   // the wreck changed since the windows were gathered
 
   function gatherWindows(seed) {
     winCount = 0;
@@ -1886,6 +2583,9 @@ export function createScene(ctx) {
       let ct = r[3] * 0.5;
       if (L.fam === 2) { wx = 2.1 + r[0] * 0.7; wy = 3.1; litF = 0.10 + 0.55 * r[2] * r[2]; ct = 0.55 + r[3] * 0.45; }
       else if (L.fam === 3) { wx = 4.5 + r[0] * 2.0; wy = 4.2; litF = 0.03 + r[2] * 0.12; }
+      else if (L.fam === 4) { wx = 2.6 + r[0] * 1.2; wy = 3.0; litF = 0.05 + 0.45 * r[2] * r[2]; ct = 0.3 + r[3] * 0.5; }
+      else if (L.fam === 5) { wx = 2.4 + r[0] * 1.0; wy = 3.2; litF = 0.08 + 0.5 * r[2] * r[2]; ct = 0.45 + r[3] * 0.4; }
+      const dmgHere = damageAtJS(dmg, ccx, ccz);   // the shader's own wreck at this mass: blown panes are no landing
       const uc = axis === 0 ? ccz : ccx;
       const uh = axis === 0 ? bzz : bx;
       const plane = axis === 0 ? ccx + sign * bx : ccz + sign * bzz;
@@ -1914,6 +2614,9 @@ export function createScene(ctx) {
           // pane skipped here still burns on the wall) hands the constellation
           // the skyline's own mix of warm and cool.
           if (L.fam === 2 && (w1 >>> 24) > 150) continue;
+          // the shader's blow-out rule: a pane past its own threshold is a dark hole
+          const w2 = hu((wk ^ 0x85ebca6b) >>> 0);
+          if (dmgHere >= ((w2 >>> 24) & 255) / 255 * 0.9 + 0.05) continue;
           // At the distance the cluster resolves at, a pane is under a pixel and
           // the shader has already folded the grid into its average, which uses
           // the building's own colour temperature and not the per-pane jitter —
@@ -1931,7 +2634,7 @@ export function createScene(ctx) {
     for (let cz = cz0 - 1; cz >= cz0 - 26; cz--) {
       for (let cx = -8; cx <= 8; cx++) {
         if (lotStreetJS(cx, cz)) continue;
-        const L = lotOfJS(cx, cz, seed, lotRec);
+        const L = lotOfJS(cx, cz, seed, lotRec, dmg);
         const side = Math.abs(cx) <= 5 && cz >= cz0 - 14;
         for (let m = 0; m < 3; m++) {
           facade(L, m, 1, 1); // the face turned toward the eye
@@ -1961,7 +2664,7 @@ export function createScene(ctx) {
     };
     const fa = [0, 0], fb = [0, 0];
     let nMax = 0;
-    for (let i = 0; i < N_SOLID; i++) {
+    for (let i = 0; i < N_NUC; i++) {
       const n = (i / NUCLEONS) | 0, j = i % NUCLEONS;
       if (!frame(ATOM_X + latPos[n * 3] + nucBase[j * 3], ATOM_Y + latPos[n * 3 + 1] + nucBase[j * 3 + 1], ATOM_Z + latPos[n * 3 + 2] + nucBase[j * 3 + 2], c1, fa)) { rank[i] = 0; continue; }
       winNuc[i * 2] = fa[0]; winNuc[i * 2 + 1] = fa[1];
@@ -1985,10 +2688,10 @@ export function createScene(ctx) {
     winCount = keep;
     if (winCount === 0) return;
     // the outermost nucleons claim first, so the silhouette survives the match
-    for (let i = 0; i < N_SOLID; i++) order[i] = i;
+    for (let i = 0; i < N_NUC; i++) order[i] = i;
     order.sort((a, b) => rank[b] - rank[a]);
     winUsed.fill(0, 0, winCount);
-    for (let q = 0; q < N_SOLID; q++) {
+    for (let q = 0; q < N_NUC; q++) {
       const idx = order[q];
       const ax = winNuc[idx * 2] * BLOOM, ay = winNuc[idx * 2 + 1] * BLOOM;
       let best = -1, bs = 1e9;
@@ -2078,6 +2781,7 @@ export function createScene(ctx) {
   const jetPhi = new Float32Array(3), jetTheta = new Float32Array(3);
   // the two ends of the city's window colour, refreshed from the palette
   const winWarm = new Float32Array(3), winCool = new Float32Array(3);
+  const pal4Dark = new Float32Array(3);   // the debris: the palette's ash, greyed and dark
   const nucPh = new Float32Array(NUCLEONS * 3);
   for (let i = 0; i < NUCLEONS * 3; i++) nucPh[i] = Math.random() * 6.2831853;
   // The scene OPENS on the collider — act 0, the detector held dark until the
@@ -2100,8 +2804,174 @@ export function createScene(ctx) {
   let salvoLeft = 0, salvoT = 0, salvoIdx = 0;
   let deckStand = 1;      // how much of the MIRV deck stands: out for the pull-back
   const padPrev = new Float32Array(16);
+  let wasTransiting = false;
+  let tNow = 0;
+
+  // ---- the wreck, the fires, the lightning, the debris, the lamps ----------------------
+  let wreck = 0;          // the ash dusk: up with every burst, down over minutes
+  let gzRs = 0;           // ground zero's own front radius this frame
+  // fire sites: where the fronts set the blocks alight; to the shader as (x, z, y, age)
+  const fireX = new Float32Array(MAX_FIRE), fireZ = new Float32Array(MAX_FIRE), fireY = new Float32Array(MAX_FIRE);
+  const fireT0 = new Float32Array(MAX_FIRE).fill(-1);   // the scene time the fire catches; < 0 idle
+  const fireRec = { fam: 0, k: 0, cx: 0, cz: 0, top: 0, b: new Float64Array(12), off: new Float64Array(6), r: [0, 0, 0, 0], r2: [0, 0, 0, 0] };
+  const FIRE_PICK = 5;                                   // fires one burst lights
+  const candX = new Float32Array(FIRE_PICK), candZ = new Float32Array(FIRE_PICK), candY = new Float32Array(FIRE_PICK), candS = new Float32Array(FIRE_PICK);
+  // lightning: the storm cell throws a bolt every so often; 'lightning' fires one
+  let ltnT = 9, ltnClock = 0, ltnNext = 26 + Math.random() * 30;
+  // the debris shower: chunks waiting on a front, then flying with it
+  const dbState = new Uint8Array(DEBRIS);                // 0 idle, 1 waiting on its front, 2 flying
+  const dbSrc = new Int8Array(DEBRIS);                   // the cloud slot whose front it rides; -2 ground zero's own
+  const dbX = new Float32Array(DEBRIS), dbY = new Float32Array(DEBRIS), dbZ = new Float32Array(DEBRIS);
+  const dbVX = new Float32Array(DEBRIS), dbVY = new Float32Array(DEBRIS), dbVZ = new Float32Array(DEBRIS);
+  const dbTrig = new Float32Array(DEBRIS), dbAz = new Float32Array(DEBRIS), dbR = new Float32Array(DEBRIS);
+  let debrisLive = 0;
+  // the lamps: how far each has fallen (0 standing, 1 down); persistent until rebuild
+  const lampFall = new Float32Array(LAMPS * 2);
 
   gatherWindows(citySeed);
+
+  // A burst's crater: merged into one standing close by, else a free slot,
+  // else the weakest. Packed straight to the shader; the window gather is
+  // marked stale so the next pull-back matches against the wrecked city.
+  function addDamage(x, z, R, s) {
+    let slot = -1;
+    for (let i = 0; i < dmg.n; i++) {
+      const dx = x - dmg.x[i], dz = z - dmg.z[i];
+      const Ri = 1 / Math.sqrt(dmg.invR2[i]);
+      if (dx * dx + dz * dz < Math.max(R, Ri) * Math.max(R, Ri) * 0.2) {
+        slot = i;
+        if (Ri > R) { x = dmg.x[i]; z = dmg.z[i]; R = Ri; }
+        s = Math.max(s, dmg.s[i]);
+        break;
+      }
+    }
+    if (slot < 0) {
+      if (dmg.n < MAX_DMG) slot = dmg.n++;
+      else { let w = 1e18; for (let i = 0; i < MAX_DMG; i++) { const v = dmg.s[i] / dmg.invR2[i]; if (v < w) { w = v; slot = i; } } }
+    }
+    dmg.x[slot] = x; dmg.z[slot] = z; dmg.invR2[slot] = 1 / (R * R); dmg.s[slot] = s;
+    // the biggest first: the geometry reads only the first STUMPS of them
+    for (let i = 1; i < dmg.n; i++) {
+      for (let j = i; j > 0 && dmg.s[j] / dmg.invR2[j] > dmg.s[j - 1] / dmg.invR2[j - 1]; j--) {
+        let q = dmg.x[j]; dmg.x[j] = dmg.x[j - 1]; dmg.x[j - 1] = q;
+        q = dmg.z[j]; dmg.z[j] = dmg.z[j - 1]; dmg.z[j - 1] = q;
+        q = dmg.invR2[j]; dmg.invR2[j] = dmg.invR2[j - 1]; dmg.invR2[j - 1] = q;
+        q = dmg.s[j]; dmg.s[j] = dmg.s[j - 1]; dmg.s[j - 1] = q;
+      }
+    }
+    const U = WU.uDmg.value;
+    let bx0 = 1e9, bz0 = 1e9, bx1 = -1e9, bz1 = -1e9;
+    for (let i = 0; i < dmg.n; i++) {
+      U[i * 4] = dmg.x[i]; U[i * 4 + 1] = dmg.z[i]; U[i * 4 + 2] = dmg.invR2[i]; U[i * 4 + 3] = dmg.s[i];
+      if (i >= STUMPS) continue;
+      // the box round the radii a block starts to fall at (the crater term past 0.45)
+      const Rf = 0.85 / Math.sqrt(dmg.invR2[i]);
+      bx0 = Math.min(bx0, dmg.x[i] - Rf); bx1 = Math.max(bx1, dmg.x[i] + Rf);
+      bz0 = Math.min(bz0, dmg.z[i] - Rf); bz1 = Math.max(bz1, dmg.z[i] + Rf);
+    }
+    WU.uDmgBox.value.set(bx0, bz0, bx1, bz1);
+    WU.uNDmg.value = dmg.n;
+    winDirty = true;
+  }
+  // one pass of the fire scan: the lots of a box, standing but hit (damage in
+  // [dMin, 0.97]), one in five by hash, the `pick` nearest the eye kept
+  function scanFires(x, z, sc, c0x, c1x, c0z, c1z, dMin, pick, scoreX, scoreZ) {
+    let nc = 0;
+    for (let cz = c0z; cz <= c1z; cz++) {
+      for (let cx = c0x; cx <= c1x; cx++) {
+        if (lotStreetJS(cx, cz)) continue;
+        const k = lotKeyJS(cx, cz, citySeed);
+        if ((hu((k ^ 0x51ed27) >>> 0) & 255) > 52) continue;
+        const L = lotOfJS(cx, cz, citySeed, fireRec, dmg);
+        const d = damageAtJS(dmg, L.cx, L.cz);
+        if (d < dMin || d > 0.97) continue;
+        const ex = L.cx - scoreX, ez = L.cz - scoreZ;
+        const score = ex * ex + ez * ez;
+        let at = nc < pick ? nc : -1;
+        if (at < 0) { let w = -1; for (let i = 0; i < pick; i++) if (candS[i] > w) { w = candS[i]; at = i; } if (score >= w) continue; }
+        else nc++;
+        let top = 0;
+        for (let m = 0; m < 3; m++) if (L.b[m * 4] > 2 && L.b[m * 4 + 3] > top) top = L.b[m * 4 + 3];
+        candX[at] = L.cx + (Math.random() - 0.5) * 4; candZ[at] = L.cz + (Math.random() - 0.5) * 4; candY[at] = top; candS[at] = score;
+      }
+    }
+    for (let c = 0; c < nc; c++) {
+      let slot = -1, oldest = 1e18;
+      for (let i = 0; i < MAX_FIRE; i++) { if (fireT0[i] < 0) { slot = i; break; } if (fireT0[i] < oldest) { oldest = fireT0[i]; slot = i; } }
+      const dx = candX[c] - x, dz = candZ[c] - z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      fireX[slot] = candX[c]; fireZ[slot] = candZ[c]; fireY[slot] = candY[c];
+      // it catches when the front reaches it, and a moment after
+      fireT0[slot] = tNow + Math.pow(dist / (sc * 9), 1 / 0.7) + 1 + Math.random() * 3;
+    }
+  }
+  // The fires a burst leaves: a scan of the lots inside its crater for blocks
+  // still standing but hit hard, and a second of the blocks round the eye for
+  // the ones the front's wake sets alight — so the smoke columns stand where
+  // the eye is, in the front's wake, not only at ground zero
+  function igniteFrom(x, z, sc) {
+    const R = Math.min(sc * 10 * 0.85, 330);
+    scanFires(x, z, sc, Math.floor((x - R) / CELL), Math.ceil((x + R) / CELL), Math.floor((z - R) / CELL), Math.ceil((z + R) / CELL), 0.28, 3, camPos.x, camPos.z);
+    // the wake fires: round a point ahead of the eye, so the columns stand in frame
+    let fx = camTarget.x - camPos.x, fz = camTarget.z - camPos.z;
+    const fl = Math.sqrt(fx * fx + fz * fz) + 1e-6;
+    fx = camPos.x + (fx / fl) * 150; fz = camPos.z + (fz / fl) * 150;
+    const E = 170;
+    scanFires(x, z, sc, Math.floor((fx - E) / CELL), Math.ceil((fx + E) / CELL), Math.floor((fz - E) / CELL), Math.ceil((fz + E) / CELL), 0.18, 2, fx, fz);
+  }
+  // the debris a front throws: a share of the idle pool waits on this burst's
+  // front at radii spread round the eye's distance, bearing toward the eye,
+  // so the shower passes the eye as the front does
+  function seedDebris(src, x, z, sc, share) {
+    const dx = camPos.x - x, dz = camPos.z - z;
+    const dCam = Math.sqrt(dx * dx + dz * dz);
+    const azC = Math.atan2(dz, dx);
+    const rMax = Math.min(sc * 45, 900);
+    for (let i = 0; i < DEBRIS; i++) {
+      if (dbState[i] !== 0 || Math.random() > share) continue;
+      dbState[i] = 1; dbSrc[i] = src;
+      dbAz[i] = azC + (Math.random() - 0.5) * 1.5;
+      dbTrig[i] = Math.min(rMax, dCam * (0.35 + Math.random() * 0.75));
+      dbR[i] = 0.35 + Math.random() * 1.1;
+    }
+  }
+  function updateDebris(dt) {
+    debrisLive = 0;
+    const cr = pal4Dark[0], cg = pal4Dark[1], cb = pal4Dark[2];
+    for (let i = 0; i < DEBRIS; i++) {
+      const idx = N_NUC + i;
+      if (dbState[i] === 1) {
+        const src = dbSrc[i];
+        let rs, ox, oz;
+        if (src === -2) { rs = blastAge >= 0 ? gzRs : -1; ox = GZ_X; oz = GZ_Z; }
+        else { rs = cAge[src] >= 0 ? ringR(cAge[src], cSc[src]) : -1; ox = cX[src]; oz = cZ[src]; }
+        if (rs < 0) { dbState[i] = 0; }
+        else if (rs >= dbTrig[i]) {
+          const ca = Math.cos(dbAz[i]), sa = Math.sin(dbAz[i]);
+          dbX[i] = ox + ca * rs; dbZ[i] = oz + sa * rs; dbY[i] = 1 + Math.random() * 5;
+          const v = 22 + Math.random() * 40;
+          dbVX[i] = ca * v + (Math.random() - 0.5) * 12; dbVZ[i] = sa * v + (Math.random() - 0.5) * 12; dbVY[i] = 10 + Math.random() * 18;
+          dbState[i] = 2;
+        }
+      }
+      if (dbState[i] === 2) {
+        dbVY[i] -= 20 * dt;
+        const drag = Math.exp(-dt * 0.45);
+        dbVX[i] *= drag; dbVZ[i] *= drag;
+        dbX[i] += dbVX[i] * dt; dbY[i] += dbVY[i] * dt; dbZ[i] += dbVZ[i] * dt;
+        if (dbY[i] < 0.2) dbState[i] = 0;
+        else debrisLive++;
+      }
+      const q = idx * 4;
+      solids.c[q] = cr; solids.c[q + 1] = cg; solids.c[q + 2] = cb; solids.c[q + 3] = 0.92;
+      sph(solids, idx, dbX[i], dbY[i], dbZ[i], dbR[i], dbState[i] === 2 ? 1 : 0, 4.0, 0.0);
+    }
+  }
+  function fireLightning() {
+    ltnT = 0;
+    WU.uBoltSeed.value = 1 + ((Math.random() * 1000) | 0);
+    ltnNext = ltnClock + 18 + Math.random() * 40;
+  }
 
   // --- the collider ----------------------------------------------------------------------
   function fireCollision() {
@@ -2399,6 +3269,12 @@ export function createScene(ctx) {
     cFade[slot] = 1;
     const dx = camPos.x - x, dz = camPos.z - z;
     const d = Math.sqrt(dx * dx + dz * dz + camPos.y * camPos.y);
+    // what the burst leaves: a crater in the wreck, fires in its wake, debris on
+    // its front, and a little more ash in the sky
+    addDamage(x, z, cSc[slot] * 10, 0.45 + 0.55 * yf);
+    igniteFrom(x, z, cSc[slot]);
+    seedDebris(slot, x, z, cSc[slot], 0.3 * clamp(900 / (300 + d), 0, 1));
+    wreck = Math.min(1, wreck + 0.10 + 0.28 * yf);
     flash = Math.max(flash, clamp((sc * 26) / (110 + d), 0, 0.94));
     emberA = Math.max(emberA, clamp(0.35 + yf * 0.8, 0, 1) * clamp(700 / (200 + d), 0, 1));
     for (let i = 0; i < EMBERS; i++) {
@@ -2419,7 +3295,7 @@ export function createScene(ctx) {
   // bounds the cloud march uses. One query per vehicle body and four along each
   // trail is nothing — sixteen vehicles at twenty lots apiece — and the answer
   // drives alpha, so a body passing behind a cornice fades instead of popping.
-  const visRec = { fam: 0, k: 0, cx: 0, cz: 0, top: 0, b: new Float64Array(12), off: new Float64Array(6), r: [0, 0, 0, 0] };
+  const visRec = { fam: 0, k: 0, cx: 0, cz: 0, top: 0, b: new Float64Array(12), off: new Float64Array(6), r: [0, 0, 0, 0], r2: [0, 0, 0, 0] };
   function visibleFrom(px, py, pz) {
     const ox = camPos.x, oy = camPos.y, oz = camPos.z;
     let dx = px - ox, dy = py - oy, dz = pz - oz;
@@ -2453,7 +3329,7 @@ export function createScene(ctx) {
         const ya = oy + dy * t0, yb = oy + dy * t1;
         const ylo = ya < yb ? ya : yb;
         if (ylo < H_MAX) {
-          const L = lotOfJS(cx, cz, citySeed, visRec);
+          const L = lotOfJS(cx, cz, citySeed, visRec, dmg);
           if (ylo < L.top) {
             const yhi = ya < yb ? yb : ya;
             for (let m = 0; m < 3; m++) {
@@ -2685,6 +3561,10 @@ export function createScene(ctx) {
     passAge = -1;
     flash = 1;
     emberA = 1;
+    addDamage(GZ_X, GZ_Z, cSc[0] * 10, 1);
+    igniteFrom(GZ_X, GZ_Z, cSc[0]);
+    seedDebris(-2, GZ_X, GZ_Z, cSc[0], 0.6);
+    wreck = Math.min(1, wreck + 0.35);
     for (let i = 0; i < EMBERS; i++) {
       embX[i] = camPos.x + (Math.random() - 0.5) * 120;
       embZ[i] = camPos.z - Math.random() * 260;
@@ -2703,6 +3583,7 @@ export function createScene(ctx) {
       if (passAge < 0 && rs >= dCam) { passAge = blastAge; shake = 1; emberA = 1; }
       if (blastAge > 12) { blastAge = -1; passAge = -1; }
     }
+    gzRs = rs;
     const sincePass = passAge >= 0 && blastAge >= 0 ? blastAge - passAge : -1;
     const veiling = sincePass >= 0 && sincePass < 2.5;
     veil = approach(veil, veiling ? w : 0, veiling ? 0.25 : 0.8, dt);
@@ -2723,7 +3604,16 @@ export function createScene(ctx) {
       for (let s = 0; s < 2; s++) {
         const lx = s ? LAMP_X : -LAMP_X;
         const i = k * 2 + s;
-        cap(CAP_LAMP0 + i, lx, 0, lz, lx, LAMP_H, lz, 1.4, w * 0.16, 4.0, 0);
+        // the front knocks the posts over — ground zero's own as it passes
+        // (most of them), or any burst's heavy radius — and they stay down
+        const dgx = lx - GZ_X, dgz = lz - GZ_Z;
+        const hit = (blastAge >= 0 && gzRs * gzRs >= dgx * dgx + dgz * dgz && hf(i * 977 + 13) < 0.75) || damageAtJS(dmg, lx, lz) > 0.35;
+        if (hit && lampFall[i] < 1) lampFall[i] = Math.min(1, lampFall[i] + dt * 2.2);
+        const th = smooth01(lampFall[i]) * (0.95 + hf(i * 31 + 7) * 0.55);
+        const dirx = (hf(i * 53 + 3) - 0.5) * 1.4;                 // away from ground zero, a little sideways
+        const dl = Math.sqrt(dirx * dirx + 1);
+        const st = Math.sin(th), ct = Math.cos(th);
+        cap(CAP_LAMP0 + i, lx, 0, lz, lx + (st * LAMP_H * dirx) / dl, LAMP_H * ct, lz + (st * LAMP_H) / dl, 1.6, w * 0.34, 4.0, 0);
       }
     }
     for (let i = 0; i < EMBERS; i++) {
@@ -2732,7 +3622,7 @@ export function createScene(ctx) {
         embX[i] += Math.sin(t * 1.3 + i) * dt * 2.5;
         if (embY[i] < 0) { embY[i] = 30 + Math.random() * 50; embX[i] = camPos.x + (Math.random() - 0.5) * 140; embZ[i] = camPos.z - Math.random() * 240; }
       }
-      sph(glows, GL_EMBER0 + i, embX[i], embY[i], embZ[i], 0.5 + 0.4 * (i % 3), emberA * (0.4 + 0.5 * Math.sin(t * 6 + i)), 1.0, 0.6);
+      sph(glows, GL_EMBER0 + i, embX[i], embY[i], embZ[i], 0.5 + 0.4 * (i % 3), emberA * (0.4 + 0.5 * Math.sin(t * 6 + i)), 0.45, 0.8);
     }
   }
 
@@ -2768,7 +3658,13 @@ export function createScene(ctx) {
       // landed — so the salvo is exactly as long as the deck is deep, spread
       // across the pad map so it reads as a bus's payload and not a cluster.
       else if (key === 'salvo') { salvoLeft = MAX_CLOUDS - 1; salvoT = 0; salvoIdx = 0; }
-      else if (key === 'rebuild') { citySeed = 1 + ((Math.random() * 900) | 0); WU.uCitySeed.value = citySeed; gatherWindows(citySeed); }
+      else if (key === 'lightning') fireLightning();
+      // a new city, whole: the craters, the fires, the fallen lamps and the ash dusk go with the old one
+      else if (key === 'rebuild') {
+        citySeed = 1 + ((Math.random() * 900) | 0); WU.uCitySeed.value = citySeed;
+        dmg.n = 0; WU.uNDmg.value = 0; fireT0.fill(-1); lampFall.fill(0); wreck = 0;
+        gatherWindows(citySeed); winDirty = false;
+      }
     },
     setParam(key, value) {
       if (key === 'act') setAct(Math.round(value));
@@ -2778,6 +3674,7 @@ export function createScene(ctx) {
       else if (key === 'place') placeP = clamp(value, 0, 15);
     },
     update(dt, t, io) {
+      tNow = t;
       // ---- the cold open: held dark until the first beat, the transport, or a pad
       if (!opened) {
         const tp = io.transport || null;
@@ -2825,6 +3722,10 @@ export function createScene(ctx) {
       // the deck leaves fast when the move starts and comes back over the
       // second after it lands (updateClouds says why)
       deckStand = approach(deckStand, transiting ? 0 : 1, transiting ? 0.09 : 0.30, dt);
+      // a pull-back starting over a wrecked city matches the nucleons against
+      // the panes the wreck left lit — gathered again only when the wreck changed
+      if (transiting && !wasTransiting && winDirty) { gatherWindows(citySeed); winDirty = false; }
+      wasTransiting = transiting;
 
       yieldS = approach(yieldS, yieldTarget, 0.3, dt);
       swayS = approach(swayS, io.gestures.sway, 0.4, dt);
@@ -2873,7 +3774,7 @@ export function createScene(ctx) {
         const hw = smooth01((transit - 0.7) / 0.3);
         wantPos.set(
           ATOM_X + dx * dist0 + (hx - 0.5) * 140 * hw,
-          ATOM_Y + dy * dist0 + ((hy - 0.5) * 64 + 12) * hw,
+          ATOM_Y + dy * dist0 + ((hy - 0.5) * 64 + 24) * hw,
           ATOM_Z + dz * dist0,
         );
         wantTarget.set(ATOM_X - TDX * 400 * transit, ATOM_Y - TDY * 400 * transit, ATOM_Z - TDZ * 400 * transit);
@@ -2907,6 +3808,12 @@ export function createScene(ctx) {
       winCool[0] = pw[2].r + (1 - pw[2].r) * 0.30;
       winCool[1] = pw[2].g + (1 - pw[2].g) * 0.30;
       winCool[2] = pw[2].b + (1 - pw[2].b) * 0.30;
+      {
+        const l4 = 0.299 * pw[4].r + 0.587 * pw[4].g + 0.114 * pw[4].b;
+        pal4Dark[0] = (pw[4].r + (l4 - pw[4].r) * 0.8) * 0.22;
+        pal4Dark[1] = (pw[4].g + (l4 - pw[4].g) * 0.8) * 0.22;
+        pal4Dark[2] = (pw[4].b + (l4 - pw[4].b) * 0.8) * 0.22;
+      }
 
       // ---- the acts (every act keeps running; only weighted ones show)
       updateCollider(dt, t, actW[0]);
@@ -2915,6 +3822,42 @@ export function createScene(ctx) {
       updateRVs(dt);
       updateShockwave(dt, t, actW[3]);
       updateStreet(dt, t, actW[3]);
+      updateDebris(dt);
+
+      // ---- the sky's state: the ash dusk decays over minutes; the storm throws
+      // a bolt every so often; the fires age and their smoke stands
+      wreck *= Math.exp(-dt / 300);
+      ltnClock += dt;
+      ltnT += dt;
+      if (ltnClock >= ltnNext && (actW[2] > 0.5 || actW[3] > 0.5)) fireLightning();
+      else if (ltnClock >= ltnNext) ltnNext = ltnClock + 10;
+      const ltn = ltnT < 0.7
+        ? Math.exp(-ltnT / 0.07) + 0.35 * Math.exp(-(ltnT - 0.12) * (ltnT - 0.12) / 0.001) + 0.7 * Math.exp(-(ltnT - 0.30) * (ltnT - 0.30) / 0.003)
+        : 0;
+      WU.uLtn.value = Math.min(1, ltn);
+      {
+        const F = WU.uFire.value;
+        let n = 0;
+        let fwx = camTarget.x - camPos.x, fwz = camTarget.z - camPos.z;
+        const fwl = Math.sqrt(fwx * fwx + fwz * fwz) + 1e-6;
+        fwx /= fwl; fwz /= fwl;
+        for (let i = 0; i < MAX_FIRE; i++) {
+          const gi = GL_FIRE0 + i;
+          if (fireT0[i] < 0) { glows.s[gi * 4 + 1] = 0; continue; }
+          const age = t - fireT0[i];
+          if (age > 260) { fireT0[i] = -1; glows.s[gi * 4 + 1] = 0; continue; }
+          // a column behind the eye or well off to the side is not packed: the shader's loop runs over what can be seen
+          const rx = fireX[i] - camPos.x, rz = fireZ[i] - camPos.z;
+          const along = rx * fwx + rz * fwz, across = Math.abs(rx * fwz - rz * fwx);
+          if (along < -90 || across > along * 1.6 + 160) { glows.s[gi * 4 + 1] = 0; continue; }
+          F[n * 4] = fireX[i]; F[n * 4 + 1] = fireZ[i]; F[n * 4 + 2] = fireY[i]; F[n * 4 + 3] = age;
+          n++;
+          // the fire's own glow at the roof, flickering, hidden by what stands in front of it
+          const lit = age > 0 ? (0.5 + 0.5 * Math.abs(Math.sin(t * 7.3 + i * 1.7))) * Math.min(1, age / 6) * Math.exp(-age / 180) : 0;
+          sph(glows, gi, fireX[i], fireY[i] + 2, fireZ[i], 5.0, lit * 0.45 * (lit > 0 ? visibleFrom(fireX[i], fireY[i] + 3, fireZ[i]) : 0), 0.15, 1.0);
+        }
+        WU.uNFire.value = n;
+      }
 
       // ---- uniforms and buffers
       const pl = io.palette;
@@ -2928,7 +3871,10 @@ export function createScene(ctx) {
       WU.uStreet.value = actW[3];
       WU.uMorph.value = swayS;
       WU.uPress.value = pressS;
-      WU.uRain.value = 0.35 + high * 0.5;
+      WU.uRain.value = 0.25 + high * 0.45;
+      WU.uWreck.value = wreck;
+      WU.uHaze.value = 0.0007 + wreck * 0.0009;   // the dust thickens the distance
+      WU.uLamps.value = 0.5 + 0.5 * wreck;         // the lamps come up as the dusk deepens
       WU.uFogD.value = 0.0020 + bass * 0.0015;
       CU.uIntensity.value = io.intensity * openDim;
       solids.U.uIntensity.value = io.intensity * openDim;
@@ -2938,7 +3884,7 @@ export function createScene(ctx) {
       glows.aPos.needsUpdate = true; glows.aS.needsUpdate = true; glows.aC.needsUpdate = true;
       const cityOn = actW[2] > 0.002 || actW[3] > 0.002;
       caps.visible = actW[0] > 0.002 || actW[1] > 0.002 || cityOn;
-      solids.mesh.visible = actW[1] > 0.002;
+      solids.mesh.visible = actW[1] > 0.002 || debrisLive > 0;
       glows.mesh.visible = caps.visible;
       bloom.strength = 0.45 + flash * 1.2 + collFlash * 0.4 + cascadeFlash * 0.8;
     },
