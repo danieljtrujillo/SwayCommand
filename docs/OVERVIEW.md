@@ -9,7 +9,7 @@ The application is one page — the cockpit — and it is always live. There is 
 | Region | Contents |
 |---|---|
 | Top bar | Wordmark; the project button (opens the project menu: New, Open, Save, Save as, recent files, templates); the transport (play/pause, stop, clock, LOOP); the current scene readout; status pills (`SWAY`/`MIDI`/`KEYS` link, `LOOPBACK`/`LINE`/`GROOVE`/`MUTE` input, fps); the deck buttons SYNTH, RACK, KIT, DOCS, HELP |
-| Left rail | The SCENES bank — all twenty registry scenes, with digit hints on the first nine of the active pool; a click switches the stage, a drag onto the timeline lays a clip. The AUTO group — RUN toggle, HOLD min–max seconds, FADE seconds |
+| Left rail | The SCENES bank — all twenty-one registry scenes, with digit hints on the first nine of the active pool; a click switches the stage, a drag onto the timeline lays a clip. The AUTO group — RUN toggle, HOLD min–max seconds, FADE seconds |
 | Center | The stage canvas. The blast door covers it at boot and opens once |
 | Right rail | The assignment panel for the selected control, and the INPUT box: the analysis-source button, a level meter, and an audio-reactive band display |
 | Bottom band | The timeline: a toolbar (IMPORT, + TRACK, BPM, TAP, SNAP), a head column (SCENES, then one head per audio track with M / S), a ruler in bars and beats (scrub, loop region, locators), a VISUAL lane of scene clips, one lane per audio track with waveforms and effect sections, and the playhead |

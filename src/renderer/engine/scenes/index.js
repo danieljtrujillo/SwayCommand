@@ -22,11 +22,12 @@ import * as miraclemile from './miraclemile.js';
 import * as tunnelending from './tunnelending.js';
 import * as wormholept1 from './wormholept1.js';
 import * as wormholeend from './wormholeend.js';
+import * as weather from './weather.js';
 
 const modules = [
   beams, swarm, ribbons, voxels, warp, nebula, mandelbulb, cymatic,
   spectra, vjshader, ferrofluid, chladni, valley, lattice, willidream, naturestomb, miraclemile,
-  tunnelending, wormholept1, wormholeend,
+  tunnelending, wormholept1, wormholeend, weather,
 ];
 
 export const sceneList = modules.map((m) => m.meta);
