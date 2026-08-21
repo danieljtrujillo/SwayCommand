@@ -33,7 +33,7 @@ Sample data is never copied into the settings directory or the project file — 
 
 ## The assignment panel
 
-The panel header names the selection — PAD *n*, KNOB *n*, BUTTON *n*, X, Y, PULSE, PRESS, or SWAY — and carries three chips: **FOLLOW** (hardware touch selects here), **LEARN** (bind the next incoming CC; shown for continuous controls and buttons), and **CLEAR** (remove the selection's assignment). All edits mutate the project's assignment table in place — the router holds the same references — and mark the project dirty.
+The panel header names the selection — PAD *n*, KNOB *n*, BUTTON *n*, X, Y, PULSE, PRESS, or SWAY — and carries up to four chips: **FOLLOW** (hardware touch selects here), **LEARN** (bind the next incoming CC; shown for continuous controls and buttons), **UNLEARN** (shown only when the selected dimension carries a learned override — drops it and falls back to the factory map), and **CLEAR** (remove the selection's assignment). All edits mutate the project's assignment table in place — the router holds the same references — and mark the project dirty.
 
 ### Pads
 
@@ -44,12 +44,13 @@ A pad's ACTION is one of:
 | sample | SAMPLE, MODE, GAIN, CHOKE, TRIG | Plays the chosen sample. MODE: `one-shot` plays to the end; `loop` toggles a looping voice on alternate strikes; `gate` plays while held. GAIN 0–1.5 scales the voice (strike velocity scales it further). CHOKE: pads sharing a non-empty group cut each other, the closed-hat-cuts-open-hat behavior. TRIG auditions the pad. |
 | visual | VISUAL, ENTRY | Switches the stage to the chosen scene and disables Auto-VJ. ENTRY is `cut` (instant) or `fade` with a duration in seconds. |
 | punch | PARAM, VALUE | Momentary effect: while the pad is held, the chosen numeric rack parameter is forced to VALUE; on release the previous value is restored. The router re-asserts a held punch every frame so nothing overwrites it mid-hold. |
+| scene event | EVENT | Fires one of the active scene's own events — a black hole, a hyperspace jump, an organism change. Events are grouped by scene and come from each scene's `meta.controls` ([SCENE_CONTRACT.md](SCENE_CONTRACT.md#the-scene-control-surface)); the panel says whether the chosen scene is the one on stage, because an event only reaches a scene that is actually visible. |
 
 An assigned pad no longer double-fires the synth — see [Note routing](#note-routing).
 
 ### Knobs
 
-A knob drives one continuous TARGET, chosen from four groups:
+A knob drives one continuous TARGET, chosen from five groups:
 
 | Group | Targets |
 |---|---|
@@ -57,6 +58,7 @@ A knob drives one continuous TARGET, chosen from four groups:
 | RACK | every numeric effects-rack parameter (`fx:<key>`) |
 | SYNTH | every range parameter in the synth's control manifest (`synth:<key>`) |
 | KIT | kit level, kit filter, kit rate, kit delay (`sampler:master`, `sampler:cutoff`, `sampler:rate`, `sampler:send`) |
+| *scene name* | every parameter that scene declares in `meta.controls.params` (`scene:<sceneId>:<key>`) — one group per scene that has any |
 
 RANGE sets the min–max the 0–1 knob position maps into (picking a target preloads its natural range). CURVE is `linear` or `center detent`; the detent maps the exact center of travel to zero — the semantics the hue knob has always had. Knob dispatch is change-driven: an idle knob never fights an edit made in a drawer panel.
 
@@ -74,16 +76,19 @@ The Sway's eight mappable buttons transmit CC numbers that Audima has not publis
 | play / pause | the transport (`transport:playPause`) |
 | stop | the transport (`transport:stop`) |
 | any boolean rack parameter | that parameter (`fx:<key>`) |
+| any scene event | fires it, momentarily, on the scene that owns it (`scene:<sceneId>:<key>`) — a scene event is a trigger, not a switch, so the deck never lights for one |
 
 The deck lights a button whose toggled state is currently on.
 
 ### Gesture dimensions
 
-X, Y, PULSE, PRESS, and SWAY each hold a list of modulation ROUTEs. A route maps the dimension's 0–1 value through a DEPTH min–max onto any continuous target from the same four groups knobs use; a checkbox enables or disables it, and ADD ROUTE appends another. A dimension can drive any number of targets at once. Routes are applied every frame **after** knob dispatch, so on a shared target the gesture wins over the knob.
+X, Y, PULSE, PRESS, and SWAY each hold a list of modulation ROUTEs. A route maps the dimension's 0–1 value through a DEPTH min–max onto any continuous target from the same five groups knobs use; a checkbox enables or disables it, and ADD ROUTE appends another. A dimension can drive any number of targets at once. Routes are applied every frame **after** knob dispatch, so on a shared target the gesture wins over the knob.
 
 ## LEARN and persistence
 
 LEARN on a continuous control (a knob, X, Y, or a gesture chip) rebinds it to the next incoming CC — this is what makes any class-compliant controller a full replacement for the Sway. Learned overrides are stored twice: in `settings.json` (device-level, applied at startup) and in the project's `midiOverrides` (so a `.sway` file carries its bindings). A button LEARN captures the CC into the button slot only; the throwaway continuous override it records is removed immediately so a button press never drives a knob path. Mechanics of the underlying learn call: [MIDI.md](MIDI.md).
+
+A learn that lands on the wrong dimension is undone with **UNLEARN**, which appears on the header whenever the selected control carries an override: it removes that one binding and writes the reduced set back to `settings.json`, so the control falls back to its factory CC. This matters because an override does not replace the factory binding for its target — it adds one — so learning, say, Y onto the CC the surface sends for X leaves X driven by nothing and both CCs fighting over Y until the override is dropped.
 
 ## Note routing
 

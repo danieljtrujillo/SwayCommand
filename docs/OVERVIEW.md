@@ -9,7 +9,7 @@ The application is one page — the cockpit — and it is always live. There is 
 | Region | Contents |
 |---|---|
 | Top bar | Wordmark; the project button (opens the project menu: New, Open, Save, Save as, recent files, templates); the transport (play/pause, stop, clock, LOOP); the current scene readout; status pills (`SWAY`/`MIDI`/`KEYS` link, `LOOPBACK`/`LINE`/`GROOVE`/`MUTE` input, fps); the deck buttons SYNTH, RACK, KIT, DOCS, HELP |
-| Left rail | The SCENES bank — all seventeen registry scenes, with digit hints on the first nine of the active pool; a click switches the stage, a drag onto the timeline lays a clip. The AUTO group — RUN toggle, HOLD min–max seconds, FADE seconds |
+| Left rail | The SCENES bank — all twenty registry scenes, with digit hints on the first nine of the active pool; a click switches the stage, a drag onto the timeline lays a clip. The AUTO group — RUN toggle, HOLD min–max seconds, FADE seconds |
 | Center | The stage canvas. The blast door covers it at boot and opens once |
 | Right rail | The assignment panel for the selected control, and the INPUT box: the analysis-source button, a level meter, and an audio-reactive band display |
 | Bottom band | The timeline: a ruler (scrub, loop region, locators), a VISUAL lane of scene clips, an AUDIO lane with waveforms, and the playhead |
@@ -45,7 +45,7 @@ The Sway is optional at every point. All Sway controls have mouse, keyboard, and
 | scene | A self-contained procedural visual module conforming to [SCENE_CONTRACT.md](SCENE_CONTRACT.md). |
 | project | A `.sway` file: one JSON document holding palette, engine settings, effects snapshot, synth patch, media list, kit, timeline, and assignments. See [PROJECTS.md](PROJECTS.md). |
 | template | A read-only bundled project (`projects/templates/*.sway`) reachable from the project menu; the former factory presets. |
-| assignment | What a control does: a pad action, a knob target, a button toggle, or a gesture route. Stored in the project. See [STUDIO.md](STUDIO.md). |
+| assignment | What a control does: a pad action (a sample, a scene switch, a scene event, an effect punch), a knob target, a button toggle, or a gesture route. Targets span the engine, the effects rack, the synth, the kit, and any event or parameter a scene declares. Stored in the project. See [STUDIO.md](STUDIO.md). |
 | router | The single dispatch point between the control surface and everything playable (sampler, synth, engine, effects rack, transport): `src/renderer/control/router.js`. |
 | transport | Timeline playback: audio clips scheduled on the `AudioContext` clock, visual clips fired at the router. `src/renderer/audio/transport.js`. |
 | factory map | The Sway's default MIDI assignments, recovered from Audima's own artifacts. See [SWAY_INTEGRATION.md](SWAY_INTEGRATION.md). |

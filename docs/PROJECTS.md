@@ -78,7 +78,8 @@ A trimmed example:
     "assignments": {
       "version": 1,
       "noteRouting": { "synth": "unassigned" },
-      "pads": [ { "type": "sample", "pad": 0 }, null ],
+      "pads": [ { "type": "sample", "pad": 0 },
+                 { "type": "sceneAction", "scene": "willidream", "action": "blackhole" }, null ],
       "knobs": [ { "target": "engine:hue", "min": 0, "max": 1, "curve": "detent" }, null ],
       "buttons": [ { "cc": null, "channel": null, "action": null } ],
       "gestures": [ { "source": "gesture:press", "target": "fx:glitch",
@@ -94,6 +95,8 @@ A trimmed example:
 ## Validation and loading
 
 `validateProject()` never throws on content: every missing key is filled with its default, out-of-range numbers are clamped, and anything unusable — a media entry without a path, a clip referencing unknown media, a knob with an invalid target — is dropped with a message appended to a `warnings` array. Unrecognized keys survive the round-trip, so data written by a newer minor version is not destroyed by an older one. Only two conditions reject a file outright, both in `readProject()`: `format` is not `"sway"`, or `format_version` is newer than the build supports. A size cap of 8 MB keeps the read channel from being pointed at non-project files.
+
+A pad action is one of `sample`, `scene` (switch the stage), `sceneAction` (fire an event the active scene declares), or `fxPunch`. A continuous target is `<namespace>:<key>` over the namespaces `engine`, `fx`, `synth`, `sampler` and `transport`, or `scene:<sceneId>:<key>` for a parameter a scene declares in its `meta.controls` ([SCENE_CONTRACT.md](SCENE_CONTRACT.md#the-scene-control-surface)). Scene ids and keys are not resolved at validation time — a project may reference a scene the build does not have, and the reference simply never fires — so a file written against a newer scene registry still loads.
 
 On open, the project store applies the document in a fixed order: synth patch first (a patch swap is silent; a scene cut is visible), then `engine.applyProject` (palette, Auto-VJ, effects snapshot, start scene as an instant cut, scene prewarm), then router assignments, MIDI overrides, the timeline into the transport, and the sampler knobs. Media then loads asynchronously — one decode at a time so the render loop keeps breathing — and the show starts before the stems finish streaming in.
 
