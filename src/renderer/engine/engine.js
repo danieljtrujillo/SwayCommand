@@ -68,23 +68,25 @@ export function createEngine({ canvas, quality = 'med' }) {
       uMaster: { value: 1 },
       uFlash: { value: 0 },
     },
+    glslVersion: THREE.GLSL3,
     vertexShader: /* glsl */ `
-      varying vec2 vUv;
+      out vec2 vUv;
       void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
     fragmentShader: /* glsl */ `
       uniform sampler2D tA, tB;
       uniform float uMix, uMaster, uFlash;
-      varying vec2 vUv;
+      in vec2 vUv;
+      out vec4 fragColor;
       void main() {
         float a = cos(uMix * 1.5707963) ;
         float b = sin(uMix * 1.5707963);
-        vec3 col = texture2D(tA, vUv).rgb * a * a + texture2D(tB, vUv).rgb * b * b;
+        vec3 col = texture(tA, vUv).rgb * a * a + texture(tB, vUv).rgb * b * b;
         // gentle S-curve + master fader + beat flash headroom
         col = col * (1.0 + uFlash * 0.25);
         col = col / (1.0 + 0.35 * col);
         // subtle vignette keeps edges calm on projectors
         float vig = smoothstep(1.35, 0.45, length(vUv - 0.5) * 1.6);
-        gl_FragColor = vec4(col * uMaster * vig, 1.0);
+        fragColor = vec4(col * uMaster * vig, 1.0);
       }`,
     depthTest: false,
     depthWrite: false,

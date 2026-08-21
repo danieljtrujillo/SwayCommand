@@ -5,8 +5,10 @@
 // geometry itself — the lissajous rate accumulates faster while the
 // amplitudes and strip width pull in, so the field glides from long
 // silk sweeps to tight coils — and a strike is a whipcrack: one
-// amplitude impulse travels head -> tail down every strip. One draw
-// call for all strips + one for the head sprites.
+// amplitude impulse travels head -> tail down every strip. The camera
+// holds a fixed eye (bass dollies it, the hand lifts it) — nothing in the
+// scene turns by itself; the lissajous travel is path motion, not a spin.
+// One draw call for all strips + one for the head sprites.
 // (docs/SCENE_CONTRACT.md)
 
 export const meta = { id: 'ribbons', name: 'Ribbons', mood: 'fluid' };
@@ -89,6 +91,7 @@ export function createScene(ctx) {
   // palette lives in a 5-slot uniform array, .copy()'d every frame;
   // per-ribbon flash rides along as a float array uniform (shared buffer).
   const mat = new THREE.ShaderMaterial({
+    glslVersion: THREE.GLSL3,
     transparent: true,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
@@ -103,20 +106,20 @@ export function createScene(ctx) {
       uIntensity: { value: 0 },
     },
     vertexShader: /* glsl */ `
-      attribute vec3 aPrev;
-      attribute float aSide;
-      attribute float aFade;
-      attribute float aRib;
+      in vec3 aPrev;
+      in float aSide;
+      in float aFade;
+      in float aRib;
       uniform vec3 uPalette[5];
       uniform float uFlash[${RIBBONS}];
       uniform float uWidth;
       uniform float uAspect;
       uniform float uWhip;
       uniform float uWhipPos;
-      varying float vFade;
-      varying float vSide;
-      varying vec3 vColor;
-      varying float vFlash;
+      out float vFade;
+      out float vSide;
+      out vec3 vColor;
+      out float vFlash;
       void main() {
         vec4 cur = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         vec4 prv = projectionMatrix * modelViewMatrix * vec4(aPrev, 1.0);
@@ -142,17 +145,18 @@ export function createScene(ctx) {
       }`,
     fragmentShader: /* glsl */ `
       uniform float uIntensity;
-      varying float vFade;
-      varying float vSide;
-      varying vec3 vColor;
-      varying float vFlash;
+      in float vFade;
+      in float vSide;
+      in vec3 vColor;
+      in float vFlash;
+      out vec4 fragColor;
       void main() {
         float tail = 1.0 - vFade;
         float a = tail * tail;                 // alpha fades along the tail
         a *= 1.0 - vSide * vSide;              // soft strip edges
         a *= (0.9 + vFlash * 1.2) * uIntensity;
         vec3 col = vColor * (1.2 + vFlash * 1.6);
-        gl_FragColor = vec4(col * uIntensity, a);
+        fragColor = vec4(col * uIntensity, a);
       }`,
   });
   const ribbons = new THREE.Mesh(geo, mat);
@@ -168,6 +172,7 @@ export function createScene(ctx) {
   for (let i = 0; i < RIBBONS; i++) headRib[i] = i;
   headGeo.setAttribute('aRib', new THREE.BufferAttribute(headRib, 1));
   const headMat = new THREE.ShaderMaterial({
+    glslVersion: THREE.GLSL3,
     transparent: true,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
@@ -178,12 +183,12 @@ export function createScene(ctx) {
       uIntensity: { value: 0 },
     },
     vertexShader: /* glsl */ `
-      attribute float aRib;
+      in float aRib;
       uniform vec3 uPalette[5];
       uniform float uFlash[${RIBBONS}];
       uniform float uBeat;
-      varying vec3 vColor;
-      varying float vFlash;
+      out vec3 vColor;
+      out float vFlash;
       void main() {
         vFlash = uFlash[int(aRib + 0.5)];
         vColor = uPalette[int(mod(aRib, 5.0) + 0.5)];
@@ -193,12 +198,13 @@ export function createScene(ctx) {
       }`,
     fragmentShader: /* glsl */ `
       uniform float uIntensity;
-      varying vec3 vColor;
-      varying float vFlash;
+      in vec3 vColor;
+      in float vFlash;
+      out vec4 fragColor;
       void main() {
         float d = length(gl_PointCoord - 0.5);
         float a = smoothstep(0.5, 0.0, d) * (0.6 + vFlash) * uIntensity;
-        gl_FragColor = vec4(vColor * (1.0 + vFlash) * uIntensity, a);
+        fragColor = vec4(vColor * (1.0 + vFlash) * uIntensity, a);
       }`,
   });
   const headPts = new THREE.Points(headGeo, headMat);
@@ -316,11 +322,11 @@ export function createScene(ctx) {
       headMat.uniforms.uBeat.value = io.beat;
       headMat.uniforms.uIntensity.value = io.intensity;
 
-      // slow orbit; bass breathes the radius (sway morphs the field above)
-      const orbit = t * 0.05;
+      // fixed eye — nothing orbits by itself; bass breathes the dolly
+      // distance and the hand lifts the eye (sway morphs the field above)
       const radius = 30 - io.bands.bass * 4;
-      camera.position.x = Math.sin(orbit) * radius;
-      camera.position.z = Math.cos(orbit) * radius;
+      camera.position.x = 0;
+      camera.position.z = radius;
       camera.position.y = (io.xy.y - 0.5) * 4;
       camera.lookAt(camTarget);
     },

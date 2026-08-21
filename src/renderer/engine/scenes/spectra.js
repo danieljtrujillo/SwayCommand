@@ -27,9 +27,11 @@
 //     eq = 0.85 + pct*0.55, pow(.., 1.15), the EMA (default 0.65), the
 //     30-band `energy` tracker and its 0.15 display lerp;
 //   * all SEVEN themes (hex for hex) and all FIVE camera modes with their
-//     upstream radii, heights, look targets, steer rates, damping and clamps;
-//   * the world-group sway block and the geometry layout (50x50 terrain at
-//     y=-2, walls 1000x320 at x=+/-280 in a group at y=45, FOV 55).
+//     upstream radii, heights, look targets, steer rates, damping and clamps
+//     (less their self-advancing orbit / bob / slide terms — item 10);
+//   * the world-group sway block (its translations; the rotations are out,
+//     item 10) and the geometry layout (50x50 terrain at y=-2, walls
+//     1000x320 at x=+/-280 in a group at y=45, FOV 55).
 //
 // ADAPTED (see the inline notes marked "SwayCommand"):
 //   1. AUDIO. Upstream takes a live FFT of any width when the host supplies
@@ -42,13 +44,16 @@
 //      verbatim mel/EMA chain. Only the CONTENT of those 256 bins differs from
 //      upstream; every consumer of them is unchanged. This is the one place
 //      the port cannot be literal — full note at synthSpectrum().
-//   2. GLSL. Upstream is already GLSL1 (three.js ShaderMaterial: `varying`,
-//      `texture2D`, `gl_FragColor`), so NO version port was needed. This file
-//      is GLSL1 — no `glslVersion`, no `#version`, no in/out. There are no
-//      loops in any of the three shaders, so no bounds to make constant.
-//      Added guards: `max(-mvPosition.z, 0.25)` and `min(.., 64.0)` around the
-//      point-size divide (NaN and fill-rate respectively) and `max(..,0.0)` on
-//      the pow base in the mel chain.
+//   2. GLSL. Upstream is GLSL1 (three.js ShaderMaterial: `varying`,
+//      `texture2D`, `gl_FragColor`). This file is GLSL3 (GLSL ES 3.00): all
+//      three ShaderMaterials set `glslVersion: THREE.GLSL3`, `attribute` /
+//      `varying` are `in` / `out`, `texture2D` is `texture`, and each fragment
+//      shader writes a declared `out vec4 fragColor`; three.js supplies the
+//      `#version` and precision headers. The maths are upstream's unchanged.
+//      There are no loops in any of the three shaders, so no bounds to make
+//      constant. Added guards: `max(-mvPosition.z, 0.25)` and `min(.., 64.0)`
+//      around the point-size divide (NaN and fill-rate respectively) and
+//      `max(..,0.0)` on the pow base in the mel chain.
 //   3. NO POST. Upstream stacks an UnrealBloomPass; SwayCommand owns compositing,
 //      so the wall and particle emissive terms carry a BLOOM_GAIN lift to
 //      stand in for the missing bloom.
@@ -79,6 +84,20 @@
 //      height field before scrolling away with the history, and the layout
 //      SEED jumps — the arrangement sway morphs toward steps to the next
 //      LAYOUT_SEEDS entry, the way the Quantum Lattice steps geometries.
+//  10. NO AUTONOMOUS ROTATION (project rule: nothing auto-rotates in any
+//      scene). Upstream's Dynamic Orbit and Bird's Eye cameras advanced their
+//      orbit angle by themselves (t*0.18 / t*0.25 behind an auto-rotate flag
+//      on pad 7), Dynamic Orbit bobbed its height on sin(t*0.3), Deep Horizon
+//      slid its eye on sin(t*0.3), and the world-group sway block rocked the
+//      whole world on three sin/cos(t) rotations. Every one of those
+//      self-advancing terms is removed: the orbit angles rest at the upstream
+//      non-rotating values (0.6 / 0) and move only with the io.xy stick, the
+//      world-group rotation holds at zero, and pad 7 is a pure slam like pad
+//      15. Kept: io.xy steering in every mode, Free Flight's hand-integrated
+//      yaw / pitch and forward travel, Canyon Flight's hand-driven bank, the
+//      energy-driven radius / height / world-position terms, the world
+//      group's lateral slide (a translation, not a turn), the terrain scroll
+//      and the particle drift.
 // ===========================================================================
 //
 // The mechanism: a 256x256 scrolling spectrogram history lives in a RedFormat
@@ -186,8 +205,8 @@ const M_FREECAM = 4;
 // and every degree of knob-0 hue rotation is visible in the frame: peaks and
 // specular glints carry palette hue, particles are mixed 55% toward palette
 // entries, and the wall gets a palette wash. Same wrap-around lerp helper as
-// warp.js / cymatic.js, constant-index only so GLSL1 accepts it in fragment
-// shaders.
+// warp.js / cymatic.js, constant-index only (a fragment-shader restriction of
+// GLSL ES 1.00 that GLSL3 lifts; the helper is kept as is).
 const PAL_GLSL = /* glsl */ `
   uniform vec3 uColors[5];
 
@@ -535,6 +554,7 @@ export function createScene(ctx) {
   };
 
   const terrainMat = new THREE.ShaderMaterial({
+    glslVersion: THREE.GLSL3,
     transparent: true,
     side: THREE.DoubleSide,
     uniforms: terrainUniforms,
@@ -549,9 +569,9 @@ export function createScene(ctx) {
       uniform float u_fold;
       uniform float u_axisWarp;
       uniform float u_radial;
-      varying float v_height;
-      varying float v_amp;
-      varying vec2 v_uv;
+      out float v_height;
+      out float v_amp;
+      out vec2 v_uv;
       // SwayCommand layout morph. Upstream reads abs(uv.x - 0.5) * 2.0 — one
       // mirrored pair. u_fold re-folds the axis as a triangle wave (1.0 is
       // upstream exactly; higher values comb the field into repeated mirrors)
@@ -568,7 +588,7 @@ export function createScene(ctx) {
         // else is upstream's terrain vertex shader unchanged.
         float sampleY = fract((u_offset / ${HISTORY_SIZE}.0) + uv.y + u_skew * (uv.x - 0.5));
         float freqUv = freqAt(uv.x);
-        float rawHeight = texture2D(u_texture, vec2(freqUv, sampleY)).r;
+        float rawHeight = texture(u_texture, vec2(freqUv, sampleY)).r;
         v_amp = rawHeight;
         float boosted = smoothstep(u_noiseGate, 1.0, rawHeight);
         float centerSmooth = smoothstep(0.0, 0.02, freqUv) * 0.1 + 0.9;
@@ -606,9 +626,10 @@ export function createScene(ctx) {
       uniform vec3 u_colorMid;
       uniform vec3 u_colorHigh;
       uniform vec3 u_colorPeak;
-      varying float v_height;
-      varying float v_amp;
-      varying vec2 v_uv;
+      in float v_height;
+      in float v_amp;
+      in vec2 v_uv;
+      out vec4 fragColor;
       ${PAL_GLSL}
       // Accurate inferno colormap (Matt Zucker polynomial fit) -- the standard
       // spectrogram palette: near-black -> deep purple -> magenta -> orange ->
@@ -644,7 +665,7 @@ export function createScene(ctx) {
       float terrainH(vec2 uvc) {
         float sY = fract((u_offset / ${HISTORY_SIZE}.0) + uvc.y + u_skew * (uvc.x - 0.5));
         float fU = freqAt(uvc.x);
-        float rh = texture2D(u_texture, vec2(fU, sY)).r;
+        float rh = texture(u_texture, vec2(fU, sY)).r;
         float b = smoothstep(u_noiseGate, 1.0, rh);
         float cs = smoothstep(0.0, 0.02, fU) * 0.1 + 0.9;
         float ed = smoothstep(0.0, 0.12, uvc.y) * smoothstep(1.0, 0.82, uvc.y);
@@ -679,7 +700,7 @@ export function createScene(ctx) {
         float edgeFade = smoothstep(0.0, 0.12, v_uv.x) * smoothstep(1.0, 0.88, v_uv.x);
         float depthFade = smoothstep(0.0, 0.05, v_uv.y) * smoothstep(1.0, 0.72, v_uv.y);
         float alpha = (0.55 + amp * 0.45) * edgeFade * depthFade;
-        gl_FragColor = vec4(col * u_intensity, alpha);
+        fragColor = vec4(col * u_intensity, alpha);
       }
     `,
   });
@@ -722,6 +743,7 @@ export function createScene(ctx) {
 
   function makeWall(x, rotY, flipX) {
     const mat = new THREE.ShaderMaterial({
+      glslVersion: THREE.GLSL3,
       transparent: true,
       side: THREE.DoubleSide,
       depthWrite: false,
@@ -732,7 +754,7 @@ export function createScene(ctx) {
       }, wallCommon),
       vertexShader: /* glsl */ `
         uniform float u_curveRadius;
-        varying vec2 v_uv;
+        out vec2 v_uv;
         void main() {
           v_uv = uv;
           vec3 pos = position;
@@ -755,7 +777,8 @@ export function createScene(ctx) {
         uniform vec3 u_colorMid;
         uniform vec3 u_colorHigh;
         uniform vec3 u_colorPeak;
-        varying vec2 v_uv;
+        in vec2 v_uv;
+        out vec4 fragColor;
         ${PAL_GLSL}
         vec3 getPalette(float t, float energy) {
           vec3 low = u_colorLow;
@@ -774,7 +797,7 @@ export function createScene(ctx) {
           // u_wallOffset is the newest column; walking sampleUv.x back through
           // the (repeat-wrapped) ring walks back through time.
           sampleUv.x = u_wallOffset - sampleUv.x * u_wallSpan;
-          float t = texture2D(u_texture, sampleUv).r;
+          float t = texture(u_texture, sampleUv).r;
           vec3 col = getPalette(t, u_energy);
           // SwayCommand: palette wash over the theme ramp.
           col = mix(col, pal(fract(u_palPhase + v_uv.y * 0.6) * 5.0), clamp(u_palMix * 0.7, 0.0, 0.85));
@@ -782,8 +805,8 @@ export function createScene(ctx) {
           float edgeY = smoothstep(0.0, 0.2, v_uv.y) * smoothstep(1.0, 0.6, v_uv.y);
           // 0.45 / 0.25 are upstream; ${BLOOM_GAIN.toFixed(2)} stands in for the
           // UnrealBloomPass this port cannot run.
-          gl_FragColor = vec4(col * 0.45 * ${BLOOM_GAIN.toFixed(2)} * u_intensity,
-                              t * edgeX * edgeY * 0.25 * ${BLOOM_GAIN.toFixed(2)});
+          fragColor = vec4(col * 0.45 * ${BLOOM_GAIN.toFixed(2)} * u_intensity,
+                           t * edgeX * edgeY * 0.25 * ${BLOOM_GAIN.toFixed(2)});
         }
       `,
     });
@@ -839,6 +862,7 @@ export function createScene(ctx) {
 
   const particleGeo = new THREE.BufferGeometry();
   const particleMat = new THREE.ShaderMaterial({
+    glslVersion: THREE.GLSL3,
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
@@ -851,11 +875,11 @@ export function createScene(ctx) {
       uniform float u_palMix;
       uniform float u_palPhase;
       uniform float u_pxScale;
-      attribute float aScale;
-      attribute float aHue;
-      attribute vec3 aColor;
-      varying vec3 vColor;
-      varying float vAlpha;
+      in float aScale;
+      in float aHue;
+      in vec3 aColor;
+      out vec3 vColor;
+      out float vAlpha;
       ${PAL_GLSL}
       void main() {
         // SwayCommand: theme colour mixed toward the engine palette. Upstream used
@@ -892,14 +916,15 @@ export function createScene(ctx) {
     `,
     fragmentShader: /* glsl */ `
       uniform float u_energy;
-      varying vec3 vColor;
-      varying float vAlpha;
+      in vec3 vColor;
+      in float vAlpha;
+      out vec4 fragColor;
       void main() {
         float dist = length(gl_PointCoord - vec2(0.5));
         if (dist > 0.5) discard;
         float intensity = (0.5 - dist) * 2.0;
         vec3 finalColor = mix(vColor, vec3(0.7, 0.9, 1.0), u_energy * 0.25);
-        gl_FragColor = vec4(finalColor, vAlpha * intensity);
+        fragColor = vec4(finalColor, vAlpha * intensity);
       }
     `,
   });
@@ -1011,7 +1036,6 @@ export function createScene(ctx) {
   let clock = 0;          // own clock: only advances while the scene is visible
   let modeIndex = M_DYNAMIC;
   let lastCamMode = -1;
-  let autoRotate = true;
   const prevPads = new Float32Array(PADS);
 
   // flight / freecam rig (upstream names)
@@ -1108,24 +1132,29 @@ export function createScene(ctx) {
       if (camera.position.x > 25) camera.position.x -= 50;
       camera.position.y = Math.max(1.5, Math.min(18, camera.position.y));
     } else if (modeIndex === M_OVERHEAD) {
-      // Bird's Eye. xy nudges the orbit angle and the altitude.
-      const a = (autoRotate ? tSec * 0.25 : 0) + stickX * 1.2;
+      // Bird's Eye. xy sets the orbit angle and the altitude; the angle no
+      // longer advances by itself (header item 10).
+      const a = stickX * 1.2;
       camera.position.set(Math.sin(a) * 2, 30 - stickY * 9, Math.cos(a) * 2);
       camera.up.set(0, 0, -1);
       camera.lookAt(0, 0, 0);
     } else if (modeIndex === M_HORIZON) {
-      // Deep Horizon. xy slides along the ridge line and lifts the eye.
-      const sway = Math.sin(tSec * 0.3) * 3 + stickX * 9;
-      camera.position.set(sway, 1 + e * 2 + stickY * 4, 30);
+      // Deep Horizon. xy slides along the ridge line and lifts the eye; the
+      // upstream sin(t*0.3) self-slide is removed (header item 10).
+      const slide = stickX * 9;
+      camera.position.set(slide, 1 + e * 2 + stickY * 4, 30);
       camera.up.set(0, 1, 0);
       camera.lookAt(0, 3, -8);
     } else {
-      // Dynamic Orbit (upstream default). xy adds orbit offset and height.
-      const a = (autoRotate ? tSec * 0.18 : 0.6) + stickX * 1.6;
+      // Dynamic Orbit (upstream default). xy sets orbit offset and height;
+      // the upstream t*0.18 orbit advance and sin(t*0.3) height bob are
+      // removed (header item 10) — the eye rests at the upstream
+      // non-rotating angle 0.6 and energy still breathes the radius.
+      const a = 0.6 + stickX * 1.6;
       const r = 22 - e * 3;
       camera.position.set(
         Math.sin(a) * r,
-        7 + Math.sin(tSec * 0.3) * 1.5 + stickY * 5,
+        7 + stickY * 5,
         Math.cos(a) * r,
       );
       camera.up.set(0, 1, 0);
@@ -1145,7 +1174,8 @@ export function createScene(ctx) {
       slam *= Math.exp(-dt / SLAM_TAU);
 
       // --- PADS ------------------------------------------------------------
-      // 0-6  theme          7   toggle auto-rotate
+      // 0-6  theme          7   pure slam (the upstream auto-rotate toggle is
+      //                         gone with auto-rotate itself — header item 10)
       // 8-12 camera mode    13  next theme   14  next camera mode   15 free
       // EVERY rising edge is also a STRIKE — the spectral slam: io.strike
       // (the engine's max pad energy) becomes a full-band impulse in the
@@ -1159,8 +1189,6 @@ export function createScene(ctx) {
           if (i < THEMES.length) {
             themeIndex = i;
             applyTheme();
-          } else if (i === 7) {
-            autoRotate = !autoRotate;
           } else if (i >= 8 && i < 8 + MODES.length) {
             modeIndex = i - 8;
           } else if (i === 13) {
@@ -1276,17 +1304,17 @@ export function createScene(ctx) {
         worldGroup.position.set(0, 0, 0);
         worldGroup.rotation.set(0, 0, 0);
       } else {
+        // SwayCommand: upstream also rocked worldGroup.rotation.x/y/z on
+        // sin/cos(tSec) here — a self-advancing rotation of the whole world,
+        // removed (header item 10); the rotation holds at zero. The
+        // translations stay: the lateral slide and the energy-driven
+        // pull-back / dip.
         const eScaled = energy * ENERGY_IMPACT;
         const swayTurn = Math.sin(tSec * 0.4);
         worldGroup.position.x += (swayTurn * -8.0 - worldGroup.position.x) * 0.02;
         worldGroup.position.z += (eScaled * -4.0 - worldGroup.position.z) * 0.1;
         worldGroup.position.y += (eScaled * -2.5 - worldGroup.position.y) * 0.1;
-        const rotX = Math.sin(tSec * 1.1) * -0.02 * (1.0 + eScaled * 2);
-        const rotZ = swayTurn * 0.15 + Math.cos(tSec * 0.8) * -0.02 * (1.0 + eScaled * 2);
-        const rotY = swayTurn * 0.1;
-        worldGroup.rotation.x += (rotX - worldGroup.rotation.x) * 0.1;
-        worldGroup.rotation.y += (rotY - worldGroup.rotation.y) * 0.1;
-        worldGroup.rotation.z += (rotZ - worldGroup.rotation.z) * 0.1;
+        worldGroup.rotation.set(0, 0, 0);
       }
 
       applyCamera(tSec, dt, io, heightMulti);

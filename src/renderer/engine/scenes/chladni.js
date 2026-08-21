@@ -10,14 +10,26 @@
 // statement of changes.
 //
 // CHANGES FROM THE ORIGINAL:
-//   * The plate maths are verbatim: the float[16] n/m/sign mode tables,
-//     getCymaticValue() (quadrature traveling-wave Chladni + polar Faraday
-//     cell + even/odd geometryMix), calcPlane() (1.75 half-extent, adjacent-
-//     mode blend, 0.45 * smoothedAmplitude excitation, clamped-edge damping),
-//     and the central-difference normals at inc = 0.01. They are injected into
+//   * The plate maths are verbatim, one term excepted (next bullet): the
+//     float[16] n/m/sign mode tables, getCymaticValue() (quadrature
+//     traveling-wave Chladni + polar Faraday cell + even/odd geometryMix),
+//     calcPlane() (1.75 half-extent, adjacent-mode blend, 0.45 *
+//     smoothedAmplitude excitation, clamped-edge damping), and the
+//     central-difference normals at inc = 0.01. They are injected into
 //     MeshStandardMaterial's vertex shader via onBeforeCompile instead of
 //     replacing the whole shader, so the surrounding chunk list tracks this
 //     tree's three.js rather than upstream's.
+//   * Shader language: the backdrop is a RawShaderMaterial in GLSL3
+//     (glslVersion: THREE.GLSL3, `in` / `out vec4 fragmentColor`), as upstream
+//     wrote it. The plate maths ride inside three.js's own
+//     MeshStandardMaterial program through onBeforeCompile, so those chunks
+//     follow three's built-in shader conventions by necessity; three.js
+//     compiles and versions that program itself.
+//   * No autonomous rotation (project rule): the Faraday spoke term
+//     cos(n * theta - t * 0.4), which slowly turned the polar nodal spokes by
+//     themselves, is cos(n * theta) here — the spokes hold still while the
+//     rings keep propagating and the quadrature Chladni waves keep migrating.
+//     The camera was already hand-only (io.xy inside the DRIFT margin).
 //   * Upstream reads a real 16-band FFT. SwayCommand scenes receive three bands
 //     plus a level, so the 16 audioLevels are synthesized (bins 0-3 bass,
 //     4-10 mid, 11-15 high — upstream's own split — shaped into a curve with a
@@ -60,7 +72,8 @@ const TAN_HALF_FOV = Math.tan((FOV * Math.PI) / 360);
 const COVER = 1.45;
 const DRIFT = 0.14;
 
-// --- upstream cymatics-shader.ts, verbatim plate maths ------------------------
+// --- upstream cymatics-shader.ts, verbatim plate maths (the spoke-drift term
+//     dropped, see header) --------------------------------------------------
 
 const PLATE_PARS = /* glsl */ `
 uniform float time;
@@ -97,8 +110,11 @@ float getCymaticValue(float u, float v, float r, float theta, int idx, float t) 
 
   // 2. Faraday liquid cell polar standing waves converted to centrifugal propagating ripples:
   // - cos(m * PI * r - t * 3.5) continuously translates circles outward/inward.
-  // - cos(n * theta - t * 0.4) smoothly rotates the nodal spokes.
-  float polarCymatic = cos(m * PI * r - t * 3.5) * cos(n * theta - t * 0.4);
+  // - cos(n * theta) holds the nodal spokes still. PORT NOTE: upstream writes
+  //   cos(n * theta - t * 0.4), which slowly rotates the spokes by themselves;
+  //   the project rules out autonomous rotation, so the drift term is dropped
+  //   and the rings keep propagating through a fixed spoke pattern.
+  float polarCymatic = cos(m * PI * r - t * 3.5) * cos(n * theta);
 
   // Even modes have a square tray look, odd modes have a round, polar fluidic look
   float geometryMix = mod(float(idx), 2.0) == 0.0 ? 0.3 : 0.7;

@@ -17,29 +17,39 @@
 // in the shader body below.
 //
 // CHANGES MADE IN THIS PORT (full list; see the report notes inline):
-//   * GLSL3 -> GLSL1. Route taken: convert to GLSL1, the three.js r180 default
-//     for ShaderMaterial (NOT glslVersion: GLSL3). `#version 300 es` and the
-//     `out vec4 O` declaration are dropped, `O = ...` becomes gl_FragColor,
-//     `precision` is left to the three.js prefix, and every upstream `in`/`out`
-//     stage variable becomes a `varying`.
+//   * GLSL3, as upstream. Every material sets glslVersion: THREE.GLSL3, so the
+//     shaders are GLSL ES 3.00 end to end: `in`/`out` stage variables and a
+//     declared `out vec4 fragColor` (upstream's `out vec4 O`; `O = ...` is
+//     `fragColor = ...`). `#version 300 es` and `precision` are left to the
+//     three.js prefix. An earlier pass of this port had rewritten the syntax
+//     down to GLSL1 (varyings, gl_FragColor, tanh polyfills, a cpAt(int)
+//     selector); that is undone. The NaN guards, the determinism fixes and
+//     the loop-invariant hoist that pass added are version-independent and
+//     stay — each is listed below with why.
 //   * gl_FragCoord / `resolution` are replaced by the interpolated `vUv` of a
 //     2x2 clip-space quad plus a precomputed `uAspectScale`. This is exactly
 //     equivalent — (FC - 0.5*R)/min(R.x,R.y) == (vUv-0.5) * vec2(max(A,1),
 //     max(1/A,1)) and FC/R == vUv — and it makes the frame independent of the
 //     engine's device-pixel-ratio scaling of the render target.
-//   * yotta's `vec3 cp[14]` global array + initCam() become a `cpAt(int)`
-//     if/else selector (GLSL1 has no array constructors and mandates only
-//     constant-index-expression array access). The 14 control points, the
-//     `a = 2*0.96, b = 2*a` constants and the Catmull-Rom evaluation are
-//     unchanged.
-//   * yotta's `for(; i++<maxd;)` march (non-constant bound, no init clause —
-//     illegal under GLSL ES 1.00 Appendix A) becomes a constant-bound `for`
-//     with the identical `if (i++ >= maxd) break;` test, so the step count and
-//     the final value of `i` are unchanged.
-//   * yotta's `#define ZERO (time*.0)` unroll-blocker becomes a literal `0.`
-//     (a non-constant loop initialiser is illegal in GLSL ES 1.00). Same math.
-//   * GLSL1 has no tanh(): polyfilled as tanh1()/tanh3() with the argument
-//     clamped to +/-10 so exp() cannot overflow to inf/inf = NaN.
+//   * yotta's `vec3 cp[14]` global array + initCam() are one `const vec3
+//     cp[14] = vec3[14](...)` array constructor. GLSL ES 3.00 has array
+//     constructors and dynamic array indexing, so the table is built at
+//     compile time instead of once per fragment and camPath() indexes it
+//     exactly as upstream. The 14 control points, the `a = 2*0.96, b = 2*a`
+//     constants and the Catmull-Rom evaluation are unchanged.
+//   * yotta's `for(; i++<maxd;)` march runs inside a constant-bound `for` with
+//     the identical `if (i++ >= maxd) break;` test. Kept from the GLSL1 pass:
+//     GLSL ES 3.00 accepts the upstream form, but the literal bound hands the
+//     compiler a known trip count, and the step count and the final value of
+//     `i` are unchanged either way.
+//   * yotta's `#define ZERO (time*.0)` loop initialiser stays a literal `0.`.
+//     Kept from the GLSL1 pass: the macro is an unroll hint to the compiler,
+//     not maths (time*0 is 0), and the Menger fold count is a per-tier literal
+//     here anyway. Same math.
+//   * tanh() is the native GLSL ES 3.00 builtin again, as upstream. The GLSL1
+//     pass's tanh1()/tanh3() exp() polyfills (argument clamped to +/-10) are
+//     removed: both call sites feed tanh() values inside [0, ~1.1] — ao*ao and
+//     a smoothstep()'d colour cubed — so there is nothing to overflow.
 //   * Upstream undefined behaviour made deterministic: yotta's `bool near;`,
 //     `float dd, i, edge;` are now explicitly zero/false-initialised (drivers
 //     zero-init in practice, so this reproduces the observed upstream look),
@@ -104,9 +114,19 @@
 //     eight-material picker occupy pads 0-3 and the one that ignores it sits on
 //     pad 4. Consequence: the scene opens on the Mandelbulb, not on yotta.
 //     Every preset's own parameters are unchanged by the reordering.
+//   * NO AUTONOMOUS ROTATION (project rule: nothing auto-rotates in any
+//     scene). The raymarch template's camera orbit advanced by itself —
+//     azimuth T*0.2, elevation sin(T*0.15)*0.4. Both terms are removed; the
+//     orbit angles are now io.xy alone (azimuth uPan.x*3.0, elevation
+//     uPan.y*0.9), so the view holds still until the hand moves it. T still
+//     drives everything non-rotational it drove upstream: the surface colour
+//     cycling, the glow tint cycle, the Julia constant's c.z oscillation and
+//     yotta's forward travel along the Catmull-Rom path (which turns with the
+//     corridor but never rolls — dir() keeps world up). The wheelOffset drift
+//     that advances T is therefore a scrub of those terms, not a turn.
 //   * SwayCommand additions, all additive on top of untouched upstream math:
 //     u_hue is driven from io.palette[0]'s hue, the glow accumulator is tinted
-//     with a palette colour, io.xy offsets the camera orbit angles, press
+//     with a palette colour, io.xy sets the camera orbit angles, press
 //     biases the active preset's primary parameter, SWAY is a preset-space
 //     morph — every structural parameter carries a per-preset morph vector
 //     (swA/swB in the tables below) so the hand glides the solid through
@@ -119,8 +139,10 @@
 //     white transition flash.
 //     Every one of those inputs contributes ZERO at its documented rest value
 //     (knobs 0.5, io.xy 0.5/0.5, gestures 0, no strikes), so with nothing
-//     connected the scene sits on the upstream defaults exactly — verified:
-//     u_power 8.0000, u_glow 1.0000 after 30 s of idle update() calls.
+//     connected the scene sits on the upstream parameter defaults exactly —
+//     verified: u_power 8.0000, u_glow 1.0000 after 30 s of idle update()
+//     calls. (The camera, per the bullet above, rests at azimuth 0 /
+//     elevation 0 instead of drifting.)
 // =============================================================================
 //
 // Pads 0-4 pick the preset (Mandelbulb, Julia Bulb, Mandelbox, Kaleido IFS,
@@ -148,7 +170,7 @@ const TC_PARAM = 0.08;   // 80 ms parameter easing
 //     1.5-2.5 s: structural parameters must drift under the hand, never snap.
 const TAU_PRESS = 2.0;  // press -> active preset's PRIMARY parameter
 const TAU_SWAY = 2.5;   // sway  -> preset-space morph position (swA/swB tables)
-const TAU_PAN = 1.5;    // io.xy -> camera orbit angle offsets
+const TAU_PAN = 1.5;    // io.xy -> camera orbit angles (the only thing that turns the view)
 const TAU_DRIVE = 0.4;  // knob 7 -> wheel-drift audioDrive (a trim, not a gesture)
 
 const FLASH_TAU = 0.22; // preset / material change flash decay, seconds
@@ -259,21 +281,23 @@ const ENV_GLSL =
 // One vertex shader for all five presets: emit the 2x2 plane straight to clip
 // space and carry the 0..1 uv, which stands in for gl_FragCoord/resolution.
 const VERT = /* glsl */ `
-  varying vec2 vUv;
+  out vec2 vUv;
   void main() {
     vUv = uv;
     gl_Position = vec4(position.xy, 0.0, 1.0); // fullscreen, no matrices
   }`;
 
 /**
- * The shared distance-field raymarch harness from shaderPresets.ts, ported to
- * GLSL1. The camera orbit, march, normal, eight-material shading, glow, hue,
- * gamma and vignette are reproduced expression for expression; only the
- * declarations above main() and the guards marked GUARD differ.
+ * The shared distance-field raymarch harness from shaderPresets.ts, GLSL ES
+ * 3.00 as upstream. The camera orbit, march, normal, eight-material shading,
+ * glow, hue, gamma and vignette are reproduced expression for expression; only
+ * the declarations above main(), the guards marked GUARD and the two
+ * orbit-angle lines differ — the orbit's self-advancing T terms are removed
+ * (header CHANGES list), so the view turns only under io.xy.
  */
 function raymarchSource(o) {
   return /* glsl */ `
-varying vec2 vUv;
+in vec2 vUv;
 uniform float time;
 uniform vec2  wheel;
 uniform vec2  uAspectScale; // (max(A,1), max(1/A,1)); stands in for resolution
@@ -288,6 +312,7 @@ uniform vec3  uGlowTint;    // SwayCommand: palette tint for the glow accumulato
 uniform float uFlash;       // SwayCommand: preset / material change flash
 uniform float uIntensity;   // SwayCommand: io.intensity
 ${o.uniforms}
+out vec4 fragColor;         // upstream: out vec4 O
 #define T (time + wheel.y/1e3)
 mat2 rot(float a){ float c=cos(a), s=sin(a); return mat2(c,-s,s,c); }
 ${HUE_GLSL}
@@ -309,9 +334,9 @@ void main(){
   vec2 uv=(vUv-0.5)*uAspectScale;
   vec3 ro=vec3(0.,0.,${o.camDist.toFixed(2)});
   vec3 rd=normalize(vec3(uv,-1.3));
-  float a=T*0.2+uPan.x*3.0;          // SwayCommand: io.xy.x offsets the azimuth
+  float a=uPan.x*3.0;   // SwayCommand: io.xy.x sets the azimuth (upstream T*0.2 self-drift removed)
   ro.xz*=rot(a); rd.xz*=rot(a);
-  float b=sin(T*0.15)*0.4+uPan.y*0.9; // SwayCommand: io.xy.y offsets the elevation
+  float b=uPan.y*0.9;   // SwayCommand: io.xy.y sets the elevation (upstream sin(T*0.15)*0.4 removed)
   ro.yz*=rot(b); rd.yz*=rot(b);
   float t=0., g=0.;
   vec3 p=ro;
@@ -366,7 +391,7 @@ void main(){
   col*=0.4+0.6*pow(max(16.0*q.x*q.y*(1.0-q.x)*(1.0-q.y),0.0),0.2); // GUARD: pow base
   col=hueShift(col,u_hue);
   col=mix(col,vec3(1.0),clamp(uFlash,0.,1.)*0.35); // SwayCommand transition flash
-  gl_FragColor=vec4(col*uIntensity,1.0);
+  fragColor=vec4(col*uIntensity,1.0);
 }`;
 }
 
@@ -478,7 +503,7 @@ function yottaSource(near, far, mengerIter) {
 * MIT -- attribution carried through from VJ-9000's shaderPresets.ts, which
 * records this preset's origin as "Source: Matthias Hurrle (@atzedent), MIT."
 */
-varying vec2 vUv;
+in vec2 vUv;
 uniform float time;
 uniform vec2  wheel;
 uniform vec2  uAspectScale;
@@ -489,6 +514,7 @@ uniform float u_hue;
 uniform vec3  uGlowTint;
 uniform float uFlash;
 uniform float uIntensity;
+out vec4 fragColor;   // upstream: out vec4 O
 #define T (time+wheel.y/1e3)
 #define S smoothstep
 #define EDGESIZE 42e-4
@@ -498,30 +524,29 @@ const vec3 LP = vec3(-2,8,-2);   // upstream #define LP, hoisted to a const
 // is NaN and a single NaN fragment blanks the frame.
 vec3 nsafe(vec3 v){ float l=length(v); return l>1e-9 ? v/l : vec3(0.,0.,1.); }
 #define N nsafe
-// GLSL1 has no tanh(); clamp keeps exp() finite so (e-1)/(e+1) cannot be NaN.
-float tanh1(float x){ x=clamp(x,-10.,10.); float e=exp(2.*x); return (e-1.)/(e+1.); }
-vec3  tanh3(vec3 v){ return vec3(tanh1(v.x),tanh1(v.y),tanh1(v.z)); }
 ${HUE_GLSL}
-// The 14 camera control points, verbatim (a = 2*.96, b = 2*a); GLSL1 has no
-// array constructors, so an if/else selector replaces cp[14] + initCam().
+// The 14 camera control points, verbatim (a = 2*.96, b = 2*a). Upstream fills
+// a global vec3 cp[14] from initCam() once per fragment; GLSL ES 3.00 has
+// array constructors, so the same table is one const array built at compile
+// time and indexed directly (dynamic indexing is legal in ES 3.00).
 const float CPA = 2.*.96;
 const float CPB = 2.*CPA;
-vec3 cpAt(int i){
-  if(i==0)  return vec3(0.);
-  if(i==1)  return vec3(0.,0.,CPB);
-  if(i==2)  return vec3(CPA,0.,CPB);
-  if(i==3)  return vec3(CPA,0.,CPA);
-  if(i==4)  return vec3(CPA,-CPA*1.2,CPA);
-  if(i==5)  return vec3(-CPA,-CPA,CPA);
-  if(i==6)  return vec3(-CPA,0.,CPA);
-  if(i==7)  return vec3(-CPA,0.,0.);
-  if(i==8)  return vec3(0.);
-  if(i==9)  return vec3(0.,0.,-CPB);
-  if(i==10) return vec3(0.,CPA,-CPB);
-  if(i==11) return vec3(-CPA,CPA,-CPB);
-  if(i==12) return vec3(-CPA,0.,-CPB);
-  return vec3(-CPA,0.,0.); // i == 13
-}
+const vec3 cp[14] = vec3[14](
+	vec3(0.),
+	vec3(0.,0.,CPB),
+	vec3(CPA,0.,CPB),
+	vec3(CPA,0.,CPA),
+	vec3(CPA,-CPA*1.2,CPA),
+	vec3(-CPA,-CPA,CPA),
+	vec3(-CPA,0.,CPA),
+	vec3(-CPA,0.,0.),
+	vec3(0.),
+	vec3(0.,0.,-CPB),
+	vec3(0.,CPA,-CPB),
+	vec3(-CPA,CPA,-CPB),
+	vec3(-CPA,0.,-CPB),
+	vec3(-CPA,0.,0.)
+);
 vec3 catmull(vec3 a, vec3 b, vec3 c, vec3 d, float t){
 	return (((-a+b*3.-c*3.+d)*t*t*t + (a*2.- b*5.+c*4.-d)*t*t + (-a+c)*t + b*2.)*.5);
 }
@@ -530,12 +555,12 @@ vec3 camPath(float t){
 	const float k=float(n);
 	t=fract(t/k)*k;
 	float sn=floor(t), st=t-sn;
-	if (sn==.0) return catmull(cpAt(n-1), cpAt(0), cpAt(1), cpAt(2), st);
+	if (sn==.0) return catmull(cp[n-1], cp[0], cp[1], cp[2], st);
 	for (int i=1; i<n-2; i++) {
-		if (sn==float(i)) return catmull(cpAt(i-1), cpAt(i), cpAt(i+1), cpAt(i+2), st);
+		if (sn==float(i)) return catmull(cp[i-1], cp[i], cp[i+1], cp[i+2], st);
 	}
-	if (sn==k-2.) return catmull(cpAt(n-3), cpAt(n-2), cpAt(n-1), cpAt(0), st);
-	if (sn==k-1.) return catmull(cpAt(n-2), cpAt(n-1), cpAt(0), cpAt(1), st);
+	if (sn==k-2.) return catmull(cp[n-3], cp[n-2], cp[n-1], cp[0], st);
+	if (sn==k-1.) return catmull(cp[n-2], cp[n-1], cp[0], cp[1], st);
 	return vec3(0.);
 }
 float rnd(vec3 p) {
@@ -560,7 +585,7 @@ float map(vec3 p) {
 	float e=length(vec2(fract(p.z)-.5,p.y-1.))-.1;
 	p.xz=mod(p.xz+1.,2.)-1.;
 	float d=box(p,1.), f=1.;
-	for(float i=0.; i<${mengerIter}.; i++) {   // upstream ZERO unroll-blocker -> 0.
+	for(float i=0.; i<${mengerIter}.; i++) {   // upstream ZERO initialiser -> literal 0. (unroll hint, not maths)
 		vec3 a=mod(p*f,2.)-1., r=abs(1.-3.*abs(a));
 		f*=2.25;
 		float
@@ -581,11 +606,12 @@ vec3 norm(vec3 p) {
 	);
 }
 // Upstream: bool march(inout vec3 p, vec3 rd, out float dd, out float edge,
-// out float i) with a 'for (; i++<maxd;)' march. GLSL1 needs a constant loop
-// bound and an init clause, and reading an 'out' parameter is undefined -- so
-// dd/edge/i are 'inout', zero-initialised at the call site, and the identical
-// 'i++ >= maxd' test lives inside a constant-bound loop. Step count and the
-// final value of i are unchanged.
+// out float i) with a 'for (; i++<maxd;)' march. Reading an 'out' parameter
+// before writing it is undefined in every GLSL version, so dd/edge/i are
+// 'inout', zero-initialised at the call site; and the identical 'i++ >= maxd'
+// test lives inside a constant-bound loop -- GLSL ES 3.00 would take the
+// upstream form, the literal bound just hands the compiler a known trip
+// count. Step count and the final value of i are unchanged.
 bool march(inout vec3 p, vec3 rd, inout float dd, inout float edge, inout float i) {
 	bool near=false;
 	float maxd=abs(p.y)>1.?${near}.:${far}.;
@@ -646,7 +672,7 @@ vec3 render(vec2 uv) {
 		} else col+=dif*ao;
 		col+=clamp(dot(-rd,l),.0,1.)*ao*atten;
 		col*=vec3(1,.65,.5)+.3*amb*ao*atten;
-		col*=tanh1(ao*ao);
+		col*=tanh(ao*ao);
 		float fog=1.-clamp(dd/200.,.0,1.), eo=getao(p,n,EDGESIZE);
 		if(eo<.9) edge=max(edge,max(1.,fog));
 		eo=getao(p,n,-EDGESIZE);
@@ -671,7 +697,7 @@ vec3 render(vec2 uv) {
 	col=mix(col,vec3(1,.95,.9),S(.0,15.,distance(p,ro)));
 	col+=S(-1.,2.,clamp(i/300.,.0,1.))*k*vec3(1,.65,.5);
 	col=S(-.2,.8,col*1.2);
-	col=tanh3(col*col*col);
+	col=tanh(col*col*col);
 	col=sqrt(max(col,.0));                        // GUARD: sqrt of negative
 	vec2 c=vUv;                                   // upstream: FC/R
 	c*=1.-c.yx;
@@ -687,7 +713,7 @@ void main() {
 	vec3 col=render(uv);
 	col=hueShift(col,u_hue);
 	col=mix(col,vec3(1.0),clamp(uFlash,0.,1.)*0.35); // SwayCommand transition flash
-	gl_FragColor=vec4(col*uIntensity,1.);
+	fragColor=vec4(col*uIntensity,1.);
 }`;
 }
 
@@ -719,7 +745,7 @@ export function createScene(ctx) {
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
   // --- quality ladder. Every loop bound is a literal in the generated source,
-  //     so GLSL1 sees an unrollable constant count.
+  //     so the shader compiler sees an unrollable constant count.
   //
   //     Upstream targets discrete GPUs at 1280x720 with one shared 140-step
   //     march for all four fractals and the full DE iteration counts. SwayCommand
@@ -857,6 +883,7 @@ export function createScene(ctx) {
   const meshes = [];
   for (let i = 0; i < sources.length; i++) {
     const m = new THREE.ShaderMaterial({
+      glslVersion: THREE.GLSL3,
       depthTest: false,
       depthWrite: false,
       uniforms: uniformSets[i],

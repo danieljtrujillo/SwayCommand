@@ -11,8 +11,11 @@
 // a fresh figure and the amplitude hit rings down over ~1.2 s, the way a
 // struck bell settles. Beats and pads also fire travelling ripples, press
 // collapses the resonance back toward a perfect sphere while the lines
-// burn white. A second back-facing shell adds the aura. Two draw calls,
-// everything procedural. See docs/SCENE_CONTRACT.md.
+// burn white. A second back-facing shell adds the aura. Nothing turns on
+// its own: no orb spin, no camera drift, and the azimuthal phases hold
+// still (re-seated only by a strike) — the figure's motion is the polar
+// phases flowing pole to pole and the hand alone orbits the eye. Two draw
+// calls, everything procedural. See docs/SCENE_CONTRACT.md.
 
 export const meta = { id: 'cymatic', name: 'Cymatic Orb', mood: 'resonant' };
 
@@ -76,7 +79,7 @@ const PAL_GLSL = /* glsl */ `
 const FIELD_GLSL = /* glsl */ `
   uniform vec4 uMode;    // x,y,z = bass/mid/high mode numbers, w = zonal ring order
   uniform vec4 uAmp;     // matching amplitudes, per band
-  uniform vec4 uPhaseA;  // azimuthal phase per term, integrated CPU-side
+  uniform vec4 uPhaseA;  // azimuthal phase per term, fixed; re-seated per strike
   uniform vec4 uPhaseB;  // polar phase per term (w = zonal term's phase)
   uniform vec3 uRipDir[${RIPPLES}];
   uniform float uRipAmp[${RIPPLES}];
@@ -123,9 +126,10 @@ const FIELD_GLSL = /* glsl */ `
 
     // Travelling shock ripples. Chord length is monotonic in the geodesic
     // angle and costs a subtract + length instead of a second acos. The bound
-    // is the literal RIPPLES, so GLSL1 sees a constant it can unroll and
-    // uRipAmp[i] stays a constant-index-expression; it is interpolated from
-    // the JS pool size so the two can never drift apart.
+    // is the literal RIPPLES, so the compiler sees a constant it can unroll
+    // (GLSL ES 3.00 would also take a dynamic index into uRipAmp; the literal
+    // is kept for the unroll); it is interpolated from the JS pool size so
+    // the two can never drift apart.
     for (int i = 0; i < ${RIPPLES}; i++) {
       if (uRipAmp[i] > 0.002) {          // uniform branch: free when idle
         float x = (length(dir - uRipDir[i]) - uRipR[i]) * 6.0;
@@ -164,6 +168,7 @@ export function createScene(ctx) {
   // --- the orb: one mesh, one ShaderMaterial, displaced in the vertex stage
   const orbGeo = new THREE.IcosahedronGeometry(1, detail);
   const orbMat = new THREE.ShaderMaterial({
+    glslVersion: THREE.GLSL3,
     uniforms: {
       uMode: { value: new THREE.Vector4(3, 5, 9, 4) },
       uAmp: { value: new THREE.Vector4(0.14, 0.1, 0.06, 0.08) },
@@ -190,9 +195,9 @@ export function createScene(ctx) {
       ${FIELD_GLSL}
       uniform float uDisp;
       uniform float uBreathe;
-      varying vec3 vDir;
-      varying vec3 vNv;
-      varying vec3 vPv;
+      out vec3 vDir;
+      out vec3 vNv;
+      out vec3 vPv;
 
       void main() {
         vec3 dir = normalize(position);      // unit sphere: dir is also the normal
@@ -210,17 +215,18 @@ export function createScene(ctx) {
       ${FIELD_GLSL}
       uniform float uNorm, uNode, uTime, uHue, uHigh, uBeat, uPress, uFlash, uIntensity;
       uniform vec3 uMicro;
-      varying vec3 vDir;
-      varying vec3 vNv;
-      varying vec3 vPv;
+      in vec3 vDir;
+      in vec3 vNv;
+      in vec3 vPv;
+      out vec4 fragColor;
 
       void main() {
         vec3 dir = normalize(vDir);
         vec3 sa = sphAngles(dir);
 
         // The field is re-evaluated per pixel from the interpolated direction
-        // rather than carried through as a varying. A varying is linear
-        // across a triangle while the field is not, so the difference shows
+        // rather than carried through as an interpolated out. An interpolant
+        // is linear across a triangle while the field is not, so the difference shows
         // up as flat facets and polygon-straight nodal lines; recomputing
         // costs a few trig ops and keeps the figure curved and hair-thin at
         // any tessellation. Vertex and fragment share cymaticField(), so the
@@ -245,7 +251,7 @@ export function createScene(ctx) {
         vec3 edgeC = neon(pal(fract(hu + 0.22) * 5.0));
 
         // --- interior: dark palette color, deepening into the antinodes.
-        // Driven by the per-pixel field, not the varying: an interpolated
+        // Driven by the per-pixel field, not the interpolant: an interpolated
         // value shades each triangle as a flat facet and the tessellation
         // reads straight through the surface.
         float belly = smoothstep(0.1, 0.9, an);
@@ -276,7 +282,7 @@ export function createScene(ctx) {
         float fres = pow(1.0 - clamp(dot(normalize(vNv), normalize(-vPv)), 0.0, 1.0), 3.0);
         col += hot * fres * (0.3 + uBeat * 0.55 + uPress * 0.4);
 
-        gl_FragColor = vec4(col * uIntensity, 1.0);
+        fragColor = vec4(col * uIntensity, 1.0);
       }`,
   });
   const orb = new THREE.Mesh(orbGeo, orbMat);
@@ -289,6 +295,7 @@ export function createScene(ctx) {
   // silhouette. Cheap geometry (20*16 = 320 tris) and a cheap shader.
   const auraGeo = new THREE.IcosahedronGeometry(AURA_R, 3);
   const auraMat = new THREE.ShaderMaterial({
+    glslVersion: THREE.GLSL3,
     transparent: true,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
@@ -301,9 +308,9 @@ export function createScene(ctx) {
       uColors: { value: palette },
     },
     vertexShader: /* glsl */ `
-      varying vec3 vNv;
-      varying vec3 vPv;
-      varying float vLat;
+      out vec3 vNv;
+      out vec3 vPv;
+      out float vLat;
       void main() {
         vec3 dir = normalize(position);
         vLat = dir.y;
@@ -315,9 +322,10 @@ export function createScene(ctx) {
     fragmentShader: /* glsl */ `
       ${PAL_GLSL}
       uniform float uGlow, uBand, uHue, uIntensity;
-      varying vec3 vNv;
-      varying vec3 vPv;
-      varying float vLat;
+      in vec3 vNv;
+      in vec3 vPv;
+      in float vLat;
+      out vec4 fragColor;
       void main() {
         // Grazing angle on the shell's far side. The high power plus the
         // smoothstep gate concentrates the glow into a narrow bright ring at
@@ -328,7 +336,7 @@ export function createScene(ctx) {
         // faint latitude banding keeps the halo from being a flat gradient
         float band = 0.72 + 0.28 * sin(vLat * 22.0 + uBand);
         vec3 c = neon(pal(fract(vLat * 0.42 + 0.5 + uHue) * 5.0));
-        gl_FragColor = vec4(c * rim * band * uGlow * uIntensity, 1.0);
+        fragColor = vec4(c * rim * band * uGlow * uIntensity, 1.0);
       }`,
   });
   const aura = new THREE.Mesh(auraGeo, auraMat);
@@ -359,13 +367,12 @@ export function createScene(ctx) {
   let azim = 0, elev = 0;                       // camera orbit
   let modeLo = 3, modeMi = 5, modeHi = 9, modeZo = 4;
   let ampLo = 0.14, ampMi = 0.1, ampHi = 0.06, ampZo = 0.08;
-  let pa0 = 0, pa1 = 0, pa2 = 0;                // azimuthal phases
-  let pb0 = 0, pb1 = 0, pb2 = 0, pb3 = 0;       // polar phases
-  let micA = 0, micB = 0;                       // fine-figure phases
+  let pb0 = 0, pb1 = 0, pb2 = 0, pb3 = 0;       // polar phases (the azimuthal
+                                                // ones are strike-seated, below)
+  let micB = 0;                                 // fine-figure polar phase
   let wtime = 0;                                // wrapped clock for the strobe
   let band = 0;                                 // aura banding phase
   let hue = 0;                                  // slow palette travel
-  let spin = 0;                                 // slow autonomous orb drift
   let swaySm = 0.5;                             // smoothed sway -> mode morph
   let ring = 0;                                 // strike ring-down envelope
   let jumpPhase = 0;                            // mode-jump seed, hopped per strike
@@ -399,13 +406,13 @@ export function createScene(ctx) {
       const ks = Math.min(1, dt * 2.5);   // slow smoothing, for mode travel
 
       // --- camera: hand x orbits in azimuth, hand y in elevation, both
-      // smoothed so sensor jitter never shakes the frame
+      // smoothed so sensor jitter never shakes the frame. The orbit is the
+      // hand's alone — no drift term advances it on its own.
       azim += ((io.xy.x - 0.5) * 2.6 - azim) * k;
       elev += ((io.xy.y - 0.5) * 1.9 - elev) * k;
-      const drift = azim + t * 0.05;
       const ce = Math.cos(elev);
-      camera.position.set(Math.sin(drift) * ce * CAM_R, Math.sin(elev) * CAM_R,
-        Math.cos(drift) * ce * CAM_R);
+      camera.position.set(Math.sin(azim) * ce * CAM_R, Math.sin(elev) * CAM_R,
+        Math.cos(azim) * ce * CAM_R);
       camera.lookAt(camTarget);
 
       // --- pads: rising edge launches a ripple from that pad's own point on
@@ -469,22 +476,25 @@ export function createScene(ctx) {
       // constant thickness instead of flooding the sphere on a quiet bar
       u.uNorm.value = 1 / Math.max(0.35, (ampLo + ampMi + ampHi + ampZo) * rs);
 
-      // --- phases: each term drifts at its own band-driven rate, and the
-      // polar phases run counter to the azimuthal ones so the figure churns
-      pa0 = wrap(pa0 + dt * (0.35 + bass * 1.6));
-      pa1 = wrap(pa1 - dt * (0.50 + mid * 2.2));
-      pa2 = wrap(pa2 + dt * (0.90 + high * 3.4));
+      // --- phases. The polar phases flow pole to pole at their own
+      // band-driven rates, alternating direction per term, so the figure
+      // churns along the axis. The azimuthal phases do NOT advance — an
+      // azimuthal phase running in sin(m*phi + pa) would turn the whole lobe
+      // pattern about the axis, and nothing here rotates on its own. They
+      // sit on three distinct constants (so no two terms share a nodal
+      // meridian) and re-seat with the strike's jump seed, landing as part
+      // of the mode jump.
       pb0 = wrap(pb0 - dt * (0.22 + bass * 0.9));
       pb1 = wrap(pb1 + dt * (0.31 + mid * 1.1));
       pb2 = wrap(pb2 - dt * (0.44 + high * 1.7));
       pb3 = wrap(pb3 + dt * (0.18 + io.level * 0.8));
-      u.uPhaseA.value.set(pa0, pa1, pa2, 0);
+      u.uPhaseA.value.set(jumpPhase, 1.9 + jumpPhase * 1.7, 4.1 + jumpPhase * 2.3, 0);
       u.uPhaseB.value.set(pb0, pb1, pb2, pb3);
 
-      // --- fine treble figure: much higher order, gated by the highs
-      micA = wrap(micA + dt * 1.3);
+      // --- fine treble figure: much higher order, gated by the highs. Its
+      // azimuthal phase is fixed for the same reason; only the polar one flows.
       micB = wrap(micB - dt * 0.8);
-      u.uMicro.value.set(10 + high * 14, micA, micB);
+      u.uMicro.value.set(10 + high * 14, 0.7, micB);
 
       // --- beats: alternate between a pole shock and one thrown from the
       // last pad's position, so a run of beats never looks repetitive
@@ -525,11 +535,9 @@ export function createScene(ctx) {
       u.uNode.value = 0.02 + io.knobs[3] * 0.06 + press * 0.03 + flash * 0.03;
       u.uFlash.value = flash;
 
-      // --- slow autonomous drift on the orb's axis. Sway stays out of it:
-      // its travel goes into the mode numbers above, which is the difference
+      // --- the orb holds its orientation: no drift on its axis. Sway's
+      // travel goes into the mode numbers above, which is the difference
       // between turning a globe and re-striking a bell
-      spin = wrap(spin + dt * 0.12);
-      orb.rotation.y = spin;
 
       // --- bass/beat breathe the whole radius a little
       u.uBreathe.value = bass * 0.05 + io.beat * 0.03;

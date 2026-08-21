@@ -19,9 +19,11 @@
 //   * Bloom is real now: the engine runs UnrealBloomPass per scene, and this
 //     instance mutates its live bloom (base 0.2 × shape multiplier, + volume,
 //     + morph shockwave, radius 0.35, threshold 0.82 — upstream's numbers).
-//   * Both fragment shaders verbatim (fresnel/energyFlux/grid/burst beams,
-//     thermal/storm/reactor nodes), upstream fresnel powers (beams 3.0,
-//     nodes 2.5) and heartbeat default 6.5.
+//   * Both fragment shaders' maths verbatim (fresnel/energyFlux/grid/burst
+//     beams, thermal/storm/reactor nodes), upstream fresnel powers (beams 3.0,
+//     nodes 2.5) and heartbeat default 6.5, written in GLSL3 form
+//     (glslVersion: THREE.GLSL3; `in` / `out` in place of `varying`, a
+//     declared `out vec4 fragColor` in place of gl_FragColor).
 //   * Upstream's four named palettes become io.palette on the four color
 //     roles, as the scene contract requires.
 //   * Control morphs drive the engine's own parameters, not object motion:
@@ -84,9 +86,9 @@ export function createScene(ctx) {
   };
 
   const VERT = /* glsl */ `
-    varying vec2 vUv;
-    varying vec3 vNormalW;
-    varying vec3 vViewDir;
+    out vec2 vUv;
+    out vec3 vNormalW;
+    out vec3 vViewDir;
     void main() {
       vUv = uv;
       vec4 mv = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
@@ -97,6 +99,7 @@ export function createScene(ctx) {
 
   // Upstream beam/tube shader, verbatim chain.
   const beamMat = new THREE.ShaderMaterial({
+    glslVersion: THREE.GLSL3,
     transparent: true,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
@@ -106,9 +109,10 @@ export function createScene(ctx) {
     fragmentShader: /* glsl */ `
       uniform float uTime, uSpeed, uWaveScale, uFresnelPow, uGridIntensity, uIntensity;
       uniform vec3 uColorCyan, uColorMagenta, uColorGold, uColorWhite;
-      varying vec2 vUv;
-      varying vec3 vNormalW;
-      varying vec3 vViewDir;
+      in vec2 vUv;
+      in vec3 vNormalW;
+      in vec3 vViewDir;
+      out vec4 fragColor;
       void main() {
         float fresnel = pow(clamp(1.0 - abs(dot(vViewDir, vNormalW)), 0.0, 1.0), uFresnelPow);
         float speedFactor = uTime * uSpeed * 4.0;
@@ -127,12 +131,13 @@ export function createScene(ctx) {
         float burst = smoothstep(0.96, 1.0, sin(vUv.y * 6.0 - speedFactor * 1.8));
         finalColor = mix(finalColor, uColorWhite, burst * 0.85);
         float alpha = mix(0.12 + fresnel * 0.65, 1.0, (grid * 0.75) + (energyFlux * 0.35));
-        gl_FragColor = vec4(clamp(finalColor * uIntensity, vec3(0.0), vec3(8.0)), clamp(alpha, 0.0, 1.0));
+        fragColor = vec4(clamp(finalColor * uIntensity, vec3(0.0), vec3(8.0)), clamp(alpha, 0.0, 1.0));
       }`,
   });
 
   // Upstream node/sphere shader, verbatim chain.
   const nodeMat = new THREE.ShaderMaterial({
+    glslVersion: THREE.GLSL3,
     transparent: true,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
@@ -142,9 +147,10 @@ export function createScene(ctx) {
     fragmentShader: /* glsl */ `
       uniform float uTime, uSpeed, uFresnelPow, uHeartbeat, uIntensity;
       uniform vec3 uColorCyan, uColorMagenta, uColorGold, uColorWhite;
-      varying vec2 vUv;
-      varying vec3 vNormalW;
-      varying vec3 vViewDir;
+      in vec2 vUv;
+      in vec3 vNormalW;
+      in vec3 vViewDir;
+      out vec4 fragColor;
       void main() {
         float fresnel = pow(clamp(1.0 - abs(dot(vViewDir, vNormalW)), 0.0, 1.0), uFresnelPow);
         float speedFactor = uTime * uSpeed * 3.2;
@@ -159,7 +165,7 @@ export function createScene(ctx) {
         float heartbeat = sin(uTime * uHeartbeat) * 0.5 + 0.5;
         finalColor += uColorGold * (fresnel * heartbeat * 0.4);
         float alpha = mix(0.3 + fresnel * 0.7, 1.0, activeSolar * 0.5 + centralReactor * 0.5);
-        gl_FragColor = vec4(clamp(finalColor * uIntensity, vec3(0.0), vec3(8.0)), alpha);
+        fragColor = vec4(clamp(finalColor * uIntensity, vec3(0.0), vec3(8.0)), alpha);
       }`,
   });
 

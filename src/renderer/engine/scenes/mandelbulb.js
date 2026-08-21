@@ -21,7 +21,9 @@
 //
 // Rays that miss still paint neon haze, striped by the active formula's
 // rotational symmetry order, so the frame keeps depth instead of falling to
-// flat black. One draw call, all GLSL1. Follows docs/SCENE_CONTRACT.md;
+// flat black. Nothing turns on its own: the solid holds its orientation and
+// the haze stripes hold their angle — only the hand orbits the camera. One
+// draw call, all GLSL3 (GLSL ES 3.00). Follows docs/SCENE_CONTRACT.md;
 // reference style: beams.js.
 
 export const meta = { id: 'mandelbulb', name: 'Mandelbulb', mood: 'infinite' };
@@ -72,7 +74,7 @@ const TAU_KNOB = 0.80;   // knobs 4/5 -> direct formula parameters A and B
 const TAU_TRIM = 0.45;   // knobs 6/7 -> colour-cycle rate, haze amount
 const TAU_BASS = 0.16;   // bass breathing around the gesture-set value
 const TAU_HIGH = 0.09;   // treble shimmer
-const TAU_LEVEL = 0.55;  // loudness envelope for spin and haze
+const TAU_LEVEL = 0.55;  // loudness envelope for the haze swell
 
 // Transition scalars: the flash is short and hard, the scale pulse rings a
 // little longer so the size change reads as the solid inflating on the hit.
@@ -96,8 +98,10 @@ export function createScene(ctx) {
   // coords directly so the camera is only there to satisfy the contract.
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
-  // --- quality budget: every loop bound is a compile-time constant so GLSL1
-  //     sees literal, unrollable counts. Worst case per marched pixel is
+  // --- quality budget: every loop bound is a compile-time constant so the
+  //     shader compiler sees literal, unrollable counts (GLSL ES 3.00 would
+  //     accept a uniform bound; the literal is kept for the unroll). Worst
+  //     case per marched pixel is
   //     MB_STEPS * (iterations of the active formula), and the engine renders
   //     at canvas * devicePixelRatio (capped 1.75) — 6.3 Mpx at 1080p, doubled
   //     during a crossfade. med holds the bulb at 44 * 6 = 264 iterations, the
@@ -121,6 +125,7 @@ export function createScene(ctx) {
 
   const geo = new THREE.PlaneGeometry(2, 2);
   const mat = new THREE.ShaderMaterial({
+    glslVersion: THREE.GLSL3,
     depthTest: false,
     depthWrite: false,
     defines: {
@@ -144,7 +149,6 @@ export function createScene(ctx) {
       uJuliaSel: { value: 0 },     // 1 only for the Julia bulb
       uJuliaC: { value: new THREE.Vector3(0, 0, 0) },   // lissajous constant
       uSym: { value: 8 },          // haze symmetry order of the formula
-      uSpin: { value: 0 },         // solid spin about its own axis
       uDetail: { value: 0 },       // epsilon / bailout bias (pulse)
       uHaze: { value: 1 },         // haze amount (knob 7)
       uHuePhase: { value: 0 },     // integrated colour-cycle phase (knob 6)
@@ -158,21 +162,23 @@ export function createScene(ctx) {
       uIntensity: { value: 1 },
     },
     vertexShader: /* glsl */ `
-      varying vec2 vUv;
+      out vec2 vUv;
       void main() {
         vUv = uv;
         gl_Position = vec4(position.xy, 0.0, 1.0); // fullscreen, no matrices
       }`,
     fragmentShader: /* glsl */ `
-      varying vec2 vUv;
+      in vec2 vUv;
 
-      uniform float uTime, uAspect, uSpin, uHuePhase;
+      uniform float uTime, uAspect, uHuePhase;
       uniform float uParamA, uParamB, uSolidScale, uJuliaSel, uRelax;
       uniform float uDetail, uHaze, uTrans, uSym;
       uniform float uBeat, uHigh, uBass, uGlow, uIntensity;
       uniform vec3  uCamPos, uJuliaC, uHitColor, uOffset;
       uniform vec3  uColors[5];
       uniform int   uFormula;
+
+      out vec4 fragColor;
 
       const float BOUND = 1.40; // bounding sphere; every formula fits inside
       const float FOCAL = 1.70; // ray-fan tightness (~60 deg vertical fov)
@@ -193,12 +199,6 @@ export function createScene(ctx) {
         c = mix(c, uColors[3], clamp(t - 2.0, 0.0, 1.0));
         c = mix(c, uColors[4], clamp(t - 3.0, 0.0, 1.0));
         return mix(c, uColors[0], clamp(t - 4.0, 0.0, 1.0));
-      }
-
-      vec3 rotY(vec3 p, float a) {
-        float s = sin(a);
-        float c = cos(a);
-        return vec3(c * p.x + s * p.z, p.y, c * p.z - s * p.x);
       }
 
       float sdBox(vec3 p, float b) {
@@ -402,10 +402,8 @@ export function createScene(ctx) {
         vec3 rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
         vec3 up = cross(rt, fw);
         vec3 rd = normalize(fw * FOCAL + rt * q.x + up * q.y);
-
-        // spin the solid: rotate the ray into the solid's own frame
-        ro = rotY(ro, -uSpin);
-        rd = rotY(rd, -uSpin);
+        // the solid sits fixed in world space: no spin of its own, the only
+        // turning is the hand's camera orbit above
 
         // closest approach of the ray to the origin — cheap outer-haze basis
         float tc = max(-dot(ro, rd), 0.0);
@@ -510,8 +508,10 @@ export function createScene(ctx) {
 
         // Volumetric neon haze: how close the ray passed plus the marched
         // accumulation, striped by the active formula's own rotational
-        // symmetry so misses read as a kaleidoscopic corona, not black.
-        float sym = 0.60 + 0.40 * cos(atan(cp.y, cp.x + 1e-9) * uSym + uTime * 0.6);
+        // symmetry so misses read as a kaleidoscopic corona, not black. The
+        // stripes hold a fixed angle (no phase advance: they do not spin);
+        // the hand's orbit is what carries the pattern across the frame.
+        float sym = 0.60 + 0.40 * cos(atan(cp.y, cp.x + 1e-9) * uSym);
         float halo = exp(-dmin * 7.0);
         vec3 hazeCol = pal(fract(dmin * 1.3 + uHuePhase + 0.35) * 5.0);
         col += hazeCol * (glow * 0.11 + halo * 0.30 * sym)
@@ -522,7 +522,7 @@ export function createScene(ctx) {
         col += mix(uHitColor, vec3(1.0), 0.5) * uTrans * uTrans
              * exp(-abs(dmin - (1.0 - uTrans) * 0.9) * 9.0) * 0.9;
 
-        gl_FragColor = vec4(col * uIntensity, 1.0);
+        fragColor = vec4(col * uIntensity, 1.0);
       }`,
   });
   const quad = new THREE.Mesh(geo, mat);
@@ -534,7 +534,6 @@ export function createScene(ctx) {
   let formula = 0;     // active distance estimator, switched by pads
   let az = 0;          // smoothed orbit azimuth, radians
   let el = 0;          // smoothed orbit elevation, radians
-  let spin = 0;        // integrated solid spin
   let huePhase = 0;    // integrated colour-cycle phase (knob 6 sets the rate)
   let swaySm = 0.5;    // slow: sway  -> primary shape parameter (the power)
   let pressSm = 0;     // slow: press -> secondary fold squeeze + camera dive
@@ -719,12 +718,9 @@ export function createScene(ctx) {
         Math.cos(az) * ce * rad,
       );
 
-      // ---- slow idle spin, pushed by loudness. Sway stays out of it: its
-      //      whole travel goes into the exponent above, where it morphs the
-      //      fractal instead of merely turning it.
-      spin += dt * (0.07 + levelSm * 0.25);
-      if (spin > TAU) spin -= TAU; else if (spin < -TAU) spin += TAU;
-      u.uSpin.value = spin;
+      // ---- no idle spin: the solid holds its orientation, and sway's whole
+      //      travel goes into the exponent above, where it morphs the fractal
+      //      instead of merely turning it.
 
       // ---- knob 6 sets the colour-cycling rate; integrating the phase means
       //      turning the knob changes the speed without jumping the hue

@@ -20,11 +20,18 @@
 //     central-difference lighting normal are all unchanged.
 //   * Upstream replaces MeshStandardMaterial's whole vertex shader; this port
 //     injects the same code through onBeforeCompile, the supported r180 route.
-//   * plasmaVS/plasmaFS/haloFS are reproduced verbatim; the plasma sun, its
-//     additive fresnel halo, the purple point light that lights the terrain,
-//     and the 240-star golden-scatter sky keep their upstream geometry,
-//     placement and response, but every colour is re-tinted from io.palette
-//     each frame (contract rule 1) instead of the fixed purples.
+//     Those chunks ride inside three.js's own program and so follow three's
+//     built-in shader conventions by necessity; three.js compiles and
+//     versions that program itself.
+//   * plasmaVS/plasmaFS/haloFS keep their maths verbatim but are written in
+//     GLSL3 form (glslVersion: THREE.GLSL3; `in` / `out` in place of
+//     `varying`, a declared `out vec4 fragColor` in place of gl_FragColor,
+//     and the body-level precision line dropped because three.js prefixes
+//     it); the plasma sun, its additive fresnel halo, the purple point light
+//     that lights the terrain, and the 240-star golden-scatter sky keep their
+//     upstream geometry, placement and response (the star roll excepted,
+//     below), but every colour is re-tinted from io.palette each frame
+//     (contract rule 1) instead of the fixed purples.
 //   * Upstream reflects an .exr through PMREMGenerator; scenes may not load
 //     assets, so the chrome reflects ctx.environment, the engine's shared
 //     PMREM-filtered RoomEnvironment.
@@ -45,6 +52,12 @@
 //     ridges while the fog pulls in (near 5 -> 3); PULSE surges the sun and the
 //     stars; XY steers — x drifts the camera across the valley, y moves the
 //     eye line.
+//   * No autonomous rotation (project rule): upstream rolls the star field
+//     0.0006/frame around the view axis; here the sky holds still behind the
+//     scrolling terrain. The terrain scroll, the valleyWave, the spike ebb
+//     and the plasma's noise-domain flow are translations and pulses, not
+//     rotations, and stay as they are. The camera has no orbit of its own —
+//     io.xy and press place it.
 //   * Plane segments are 180/300/340 by quality tier (upstream fixed 300).
 
 export const meta = {
@@ -180,11 +193,11 @@ export function createScene(ctx) {
   scene.add(land);
 
   // --- plasma sun: fbm plasma core + additive fresnel halo (upstream 3b) ----
-  // plasma-shader.ts, verbatim.
+  // plasma-shader.ts, maths verbatim, GLSL3 form.
   const plasmaVS = /* glsl */ `
-    varying vec3 vPos;
-    varying vec3 vNrm;
-    varying vec3 vView;
+    out vec3 vPos;
+    out vec3 vNrm;
+    out vec3 vView;
     void main() {
       vPos = position;
       vNrm = normalize(normalMatrix * normal);
@@ -193,14 +206,14 @@ export function createScene(ctx) {
       gl_Position = projectionMatrix * mv;
     }`;
   const plasmaFS = /* glsl */ `
-    precision highp float;
     uniform float time;
     uniform float intensity;
     uniform vec3 colorLow;
     uniform vec3 colorHigh;
-    varying vec3 vPos;
-    varying vec3 vNrm;
-    varying vec3 vView;
+    in vec3 vPos;
+    in vec3 vNrm;
+    in vec3 vView;
+    out vec4 fragColor;
 
     float hash(vec3 p) {
       p = fract(p * 0.3183099 + 0.1);
@@ -236,21 +249,22 @@ export function createScene(ctx) {
       vec3 col = mix(colorLow, colorHigh, plasma);
       col += colorHigh * fres * 0.55;
       col += vec3(1.0, 0.85, 1.0) * pow(plasma, 5.0) * 0.5; // hot white filament cores
-      gl_FragColor = vec4(col * intensity, 1.0);
+      fragColor = vec4(col * intensity, 1.0);
     }`;
   const haloFS = /* glsl */ `
-    precision highp float;
     uniform vec3 color;
-    varying vec3 vPos;
-    varying vec3 vNrm;
-    varying vec3 vView;
+    in vec3 vPos;
+    in vec3 vNrm;
+    in vec3 vView;
+    out vec4 fragColor;
     void main() {
       float fres = pow(1.0 - max(dot(normalize(vNrm), normalize(vView)), 0.0), 3.0);
-      gl_FragColor = vec4(color * fres, fres);
+      fragColor = vec4(color * fres, fres);
     }`;
 
   const sun = new THREE.Group();
   const plasmaMat = new THREE.ShaderMaterial({
+    glslVersion: THREE.GLSL3,
     uniforms: {
       time: { value: 0 },
       intensity: { value: 0.85 },
@@ -263,6 +277,7 @@ export function createScene(ctx) {
   const sunCoreGeo = new THREE.IcosahedronGeometry(3.0, 6);
   const sunCore = new THREE.Mesh(sunCoreGeo, plasmaMat);
   const haloMat = new THREE.ShaderMaterial({
+    glslVersion: THREE.GLSL3,
     uniforms: { color: { value: new THREE.Color(0x9b30ff) } },
     vertexShader: plasmaVS,
     fragmentShader: haloFS,
@@ -384,8 +399,10 @@ export function createScene(ctx) {
       haloMat.uniforms.color.value.copy(io.palette[0]);
       sunLight.color.copy(io.palette[1]);
 
-      // Sky: stars drift and twinkle with the highs; PULSE surges them.
-      stars.rotation.z += dt * 0.036; // upstream 0.0006/frame
+      // Sky: stars twinkle with the highs; PULSE surges them. Upstream's
+      // 0.0006/frame roll of the star field around the view axis is dropped
+      // (project rule: nothing rotates by itself) — the sky holds still
+      // behind the scrolling terrain.
       starMat.color.copy(io.palette[2]);
       starMat.opacity = 0.3 + 0.45 * envH + io.gestures.pulse * 0.45;
 

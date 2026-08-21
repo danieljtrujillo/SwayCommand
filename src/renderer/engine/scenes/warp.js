@@ -4,7 +4,8 @@
 //             tinted stars (dim red dwarfs through blue giants) on the
 //             celestial sphere, a G-type star in the distance with limb
 //             darkening and a thin corona, faint palette-tinted nebulosity.
-//             The view drifts slowly; the hand (xy) turns the eye.
+//             The view holds still — nothing turns on its own; only the
+//             hand (xy) turns the eye, and the star's corona breathes.
 //   WARP      A STRIKE engages warp. Stars streak along great circles toward
 //             the direction of travel — relativistic aberration crowds the
 //             sky forward while the Doppler shift blues and brightens what
@@ -45,7 +46,6 @@ export function createScene(ctx) {
     uSeed: { value: 3.7 }, // sky region; changes on transit
     uSeedB: { value: 9.2 }, // the region seen THROUGH the mouth
     uLook: { value: new THREE.Vector2(0, 0) },
-    uDrift: { value: 0 }, // slow coasting rotation phase
     uFlash: { value: 0 }, // strike / transit flash
     uTintA: { value: new THREE.Color(0x18104a) },
     uTintB: { value: new THREE.Color(0x0a2a3a) },
@@ -53,19 +53,21 @@ export function createScene(ctx) {
   };
 
   const mat = new THREE.ShaderMaterial({
+    glslVersion: THREE.GLSL3,
     uniforms,
     depthTest: false,
     depthWrite: false,
     vertexShader: /* glsl */ `
-      varying vec2 vUv;
+      out vec2 vUv;
       void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
     fragmentShader: /* glsl */ `
       #define STREAK_K ${STREAK_K}
       uniform vec2 uRes;
-      uniform float uTime, uWarp, uHole, uSpeed, uSeed, uSeedB, uDrift, uFlash, uIntensity;
+      uniform float uTime, uWarp, uHole, uSpeed, uSeed, uSeedB, uFlash, uIntensity;
       uniform vec2 uLook;
       uniform vec3 uTintA, uTintB;
-      varying vec2 vUv;
+      in vec2 vUv;
+      out vec4 fragColor;
 
       float h21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float h22x(vec2 p) { return fract(sin(dot(p, vec2(269.5, 183.3))) * 43758.5453); }
@@ -129,18 +131,21 @@ export function createScene(ctx) {
         return mix(uTintA, uTintB, vnoise(o * 0.5)) * n * 0.05;
       }
 
-      // The distant G-type star: limb-darkened disc + thin corona.
+      // The distant G-type star: limb-darkened disc + thin corona. The glare
+      // and corona breathe slowly (two incommensurate periods, a few percent
+      // each) — the one autonomous motion at drift, and not a rotation.
       vec3 sun(vec3 rd, vec3 sdir, float doppler) {
         float ca = dot(rd, sdir);
         float ang = acos(clamp(ca, -1.0, 1.0));
         float R = 0.016;
+        float breathe = 1.0 + 0.08 * sin(uTime * 0.61) + 0.05 * sin(uTime * 1.37);
         vec3 col = vec3(0.0);
         if (ang < R) {
           float mu = sqrt(max(0.0, 1.0 - (ang / R) * (ang / R)));
           col += vec3(1.0, 0.955, 0.90) * (0.35 + 0.65 * mu) * 3.2; // limb darkening
         }
-        col += vec3(1.0, 0.9, 0.78) * exp(-ang * 55.0) * 0.5;  // inner glare
-        col += vec3(1.0, 0.85, 0.7) * exp(-ang * 14.0) * 0.05; // outer corona
+        col += vec3(1.0, 0.9, 0.78) * exp(-ang * 55.0) * 0.5 * breathe;  // inner glare
+        col += vec3(1.0, 0.85, 0.7) * exp(-ang * 14.0) * 0.05 * breathe; // outer corona
         return col * mix(vec3(1.0), vec3(0.75, 0.85, 1.25), clamp(doppler, 0.0, 1.0));
       }
 
@@ -150,8 +155,9 @@ export function createScene(ctx) {
         vec3 fwd = vec3(0.0, 0.0, 1.0);
         vec3 rd = normalize(vec3(sc * 0.62, 1.0));
 
-        // eye direction: slow coast + the hand's look offset
-        float yaw = uDrift + uLook.x;
+        // eye direction: the hand's look offset only — the view never turns
+        // on its own
+        float yaw = uLook.x;
         float pit = uLook.y;
         float cy = cos(yaw), sy = sin(yaw), cp = cos(pit), sp2 = sin(pit);
         rd = vec3(rd.x * cy + rd.z * sy, rd.y, -rd.x * sy + rd.z * cy);
@@ -207,7 +213,7 @@ export function createScene(ctx) {
         col += sun(rd, sdir, v * ahead) * (1.0 - inside) * (1.0 - uWarp * 0.55);
         col += vec3(0.85, 0.93, 1.2) * ring * (1.5 + uFlash * 2.0);
         col += vec3(1.0) * uFlash * 0.12; // strike / transit flash headroom
-        gl_FragColor = vec4(col * uIntensity, 1.0);
+        fragColor = vec4(col * uIntensity, 1.0);
       }`,
   });
 
@@ -224,7 +230,6 @@ export function createScene(ctx) {
   let transit = -1; // -1 idle, else 0..1 script phase
   let seed = 3.7;
   let seedB = 9.2;
-  let drift = 0;
   let flash = 0;
   let lookX = 0;
   let lookY = 0;
@@ -270,7 +275,6 @@ export function createScene(ctx) {
 
       warpT = approach(warpT, warpOn, warpOn ? 1.1 : 0.6, dt);
       flash = Math.max(0, flash - dt * 1.8);
-      drift += dt * (0.006 + warpT * 0.002);
       lookX = approach(lookX, (io.xy.x - 0.5) * 0.5, 0.4, dt);
       lookY = approach(lookY, (io.xy.y - 0.5) * 0.34, 0.4, dt);
 
@@ -279,7 +283,6 @@ export function createScene(ctx) {
       uniforms.uHole.value = approach(uniforms.uHole.value, hole, 0.18, dt);
       uniforms.uSeed.value = seed;
       uniforms.uSeedB.value = seedB;
-      uniforms.uDrift.value = drift;
       uniforms.uFlash.value = flash + io.beat * 0.05;
       uniforms.uLook.value.set(lookX, lookY);
       uniforms.uIntensity.value = io.intensity;

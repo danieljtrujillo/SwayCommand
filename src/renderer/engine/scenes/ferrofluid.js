@@ -15,13 +15,22 @@
 //     foot/apex/sharpTip profile and stillness-on-silence guard, calc(), and
 //     the tangent-frame normal rebuild at inc = 0.005 — is carried over and
 //     installed exactly the way upstream installs it: onBeforeCompile swaps
-//     MeshStandardMaterial's vertexShader for the ported string. ONE
-//     deviation inside the GLSL: upstream declares `uniform float
+//     MeshStandardMaterial's vertexShader for the ported string. TWO
+//     deviations inside the GLSL: (1) upstream declares `uniform float
 //     spikeDensity` but never reads it, so here it scales the phyllotaxis
 //     winding pair as d = spikeDensity / 5.0. At the upstream default of 5.0,
 //     d = 1.0 and the arm expressions are upstream's verbatim; the uniform
 //     merely gains its evidently intended effect so the morphs below can
-//     restructure the field.
+//     restructure the field. (2) The phyllotaxis longitude no longer carries
+//     upstream's `t * 0.08` background drift — see the no-autonomous-rotation
+//     bullet below.
+//   * Shader language: the backdrop is a RawShaderMaterial in GLSL3
+//     (glslVersion: THREE.GLSL3, `in` / `out vec4 fragmentColor`), as upstream
+//     wrote it. The sphere vertex shader above is installed through
+//     onBeforeCompile into three.js's own MeshStandardMaterial program, so
+//     it follows three's built-in shader conventions by necessity (`varying`,
+//     the <chunk> includes); three.js compiles and versions that program
+//     itself.
 //   * Upstream reflects piz_compressed.exr through PMREMGenerator. Scenes may
 //     not load assets, so the chrome reflects ctx.environment — the engine's
 //     shared PMREM-filtered RoomEnvironment — through material.envMap.
@@ -29,8 +38,8 @@
 //     is requested through the engine's per-scene bloom: meta.bloom carries
 //     the base numbers and the live instance.bloom surges with pulse/strikes.
 //   * The camera keeps upstream's 3.3 orbit radius and 65° FOV but is steered
-//     by io.xy (plus a slow autonomous drift); the rim and fill lights are
-//     tinted from io.palette each frame (contract rule 1).
+//     by io.xy alone; the rim and fill lights are tinted from io.palette each
+//     frame (contract rule 1).
 //   * IcosahedronGeometry detail 64 becomes 32/48/64 by quality tier.
 //   * Upstream's calc() returns a perfectly still ball whenever volume is
 //     under 0.01 — right for a reactive art piece, wrong for a VJ scene that
@@ -43,6 +52,13 @@
 //     2.0..0.6 (oily swells → needle forest), PRESS squeezes amplitude toward
 //     0.1 while envMapIntensity rises (crushed chrome), PULSE surges bloom
 //     and amplitude.
+//   * No autonomous rotation (project rule): the slow camera azimuth drift
+//     this port first added (0.05 rad/s on top of the io.xy orbit) is gone,
+//     and upstream's `t * 0.08` longitude drift, which slowly spun the
+//     phyllotaxis spike field around the pole axis by itself, is dropped from
+//     rosensweig(); the audio-reactive beatSpin swing stays. In its place the
+//     idle floor breathes slowly, so the standing field swells and settles
+//     between cues instead of turning.
 
 export const meta = {
   id: 'ferrofluid',
@@ -62,14 +78,16 @@ const NOISE_VISCOSITY = 1.2;
 const IS_FERROFLUID = 1.0;
 
 // Idle floor (adaptation, see header): keeps a standing spike field between
-// cues. Everything above the floor is upstream's own response.
+// cues, breathing slowly (see update()). Everything above the floor is
+// upstream's own response.
 const FLOOR = 0.16;
 
 // STRIKE re-magnetization cycle for spikeDensity.
 const DENSITY_CYCLE = [3, 5, 7, 9];
 
-// Upstream sphere-shader.ts vertex shader, whole. The only deviation is the
-// d = spikeDensity / 5.0 winding factor (see header).
+// Upstream sphere-shader.ts vertex shader, whole. The only deviations are the
+// d = spikeDensity / 5.0 winding factor and the dropped t * 0.08 longitude
+// drift (see header).
 const SPHERE_VS = /* glsl */ `#define STANDARD
 varying vec3 vViewPosition;
 #ifdef USE_TRANSMISSION
@@ -110,9 +128,13 @@ float rosensweig(vec3 p, float t, vec4 audio) {
 
   // 2. Fibonacci / Sunflower phyllotaxis cross-hatching spiral wave grid
   // Introduce a highly dynamic, audio-reactive rotational swing.
-  // Slow background drift + energetic transient rotation on mids (audio.y) and highs (audio.z).
+  // Energetic transient rotation on mids (audio.y) and highs (audio.z).
+  // PORT NOTE: upstream adds a slow background drift here (t * 0.08) that
+  // spins the whole field around the pole axis by itself; the project rules
+  // out autonomous rotation, so that term is dropped and only the audio
+  // swing remains.
   float beatSpin = (audio.y * 1.8 + audio.z * 1.4);
-  float theta = atan(np.z, np.x) + t * 0.08 + beatSpin;  // Longitude angle with reactive spin
+  float theta = atan(np.z, np.x) + beatSpin;  // Longitude angle with reactive spin
   float phi = acos(clamp(np.y, -0.999, 0.999));       // Latitude angle from north pole
 
   // Symmetricize north/south hemispheres for uniform polar alignment
@@ -365,7 +387,6 @@ export function createScene(ctx) {
   let envB = 0;
   let envM = 0;
   let envH = 0;
-  let azDrift = 0;
   let azS = 0;
   let elS = 0;
 
@@ -420,25 +441,28 @@ export function createScene(ctx) {
       orbUniforms.time.value += fdt * 0.015 * (1 + 0.6 * envB);
 
       // Pack the bands into upstream's vec4 layout, over the idle floor
-      // (adaptation, see header). outputData stays zero as in the orb branch.
-      const b = FLOOR + envB;
-      const m = FLOOR * 0.7 + envM;
-      const h = FLOOR * 0.5 + envH;
+      // (adaptation, see header). The floor breathes slowly (±25 %, ~9 s) so
+      // the standing field swells and settles between cues — non-rotational
+      // idle life in place of the drifts this port no longer carries.
+      // outputData stays zero as in the orb branch.
+      const breath = 1 + 0.25 * Math.sin(t * 0.7);
+      const b = FLOOR * breath + envB;
+      const m = FLOOR * 0.7 * breath + envM;
+      const h = FLOOR * 0.5 * breath + envH;
       orbUniforms.inputData.value.set(b, m, h, (b + m + h) / 3);
 
       // Upstream sphere scale.
       orb.scale.setScalar(1 + 0.04 * envB);
 
-      // Camera: upstream's 3.3 orbit, steered by io.xy plus a slow drift.
-      azDrift += dt * 0.05;
+      // Camera: upstream's 3.3 orbit, steered by io.xy alone — no autonomous
+      // drift (project rule: nothing rotates by itself).
       azS = approach(azS, io.xy.x * Math.PI * 2, 0.25, dt);
       elS = approach(elS, (io.xy.y - 0.5) * 2.2, 0.25, dt);
-      const az = azDrift + azS;
       const ce = Math.cos(elS);
       camera.position.set(
-        Math.sin(az) * ce * CAM_RADIUS,
+        Math.sin(azS) * ce * CAM_RADIUS,
         Math.sin(elS) * CAM_RADIUS,
-        Math.cos(az) * ce * CAM_RADIUS
+        Math.cos(azS) * ce * CAM_RADIUS
       );
       camera.lookAt(orb.position);
 

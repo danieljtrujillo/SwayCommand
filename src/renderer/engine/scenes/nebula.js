@@ -1,10 +1,11 @@
 // Nebula — a fullscreen fbm gas cloud turned psychedelic.
 // The original three-layer domain-warp foundation is intact (value-noise fbm
 // layers warping each other into gas folds on one quad), but the field is now
-// mirror-folded into a slowly spinning kaleidoscope, contoured into hard neon
-// filaments, and coloured by a full five-stop palette ramp whose hue travels
-// with density — so the gas reads iridescent and layered instead of a dim teal
-// smudge. Bass stacks concentric shells, mid drives the warp, treble strobes a
+// mirror-folded into a fixed-axis kaleidoscope (the fold breathes open and
+// shut; the mirrors never spin), contoured into hard neon filaments, and
+// coloured by a full five-stop palette ramp whose hue travels with density —
+// so the gas reads iridescent and layered instead of a dim teal smudge. Bass
+// stacks concentric shells, mid drives the warp, treble strobes a
 // scintillation layer, beats punch the domain, and each of the sixteen pads
 // fires its own expanding shockwave from a pad-indexed screen position.
 // Sway is the turbulence morph: one smoothed value re-weights the fbm octave
@@ -19,7 +20,6 @@
 export const meta = { id: 'nebula', name: 'Nebula', mood: 'psychedelic' };
 
 const PADS = 16;
-const TAU = Math.PI * 2;
 const FLOOR = 0.70; // minimum peak channel a palette stop is lifted to
 
 export function createScene(ctx) {
@@ -38,7 +38,9 @@ export function createScene(ctx) {
   const PULSE_N = LOW ? 4 : (HIGH ? 8 : 6);
 
   // fbm octaves and the near layer scale with the tier; every count reaching
-  // the shader is a #define so GLSL1 sees literal, unrollable loop bounds.
+  // the shader is a #define so the GLSL3 compiler sees literal loop bounds it
+  // can unroll (dynamic bounds are legal in ES 3.00, constants still compile
+  // to the tightest code).
   // OCT_MAIN is paid twice per pixel (layers 2 and 3), so it is the single
   // most expensive knob here — med stays at 3 to hold 60 fps at 1080p on an
   // integrated GPU, and the amplitude normalisation below keeps the 0..1
@@ -64,6 +66,7 @@ export function createScene(ctx) {
 
   const geo = new THREE.PlaneGeometry(2, 2);
   const mat = new THREE.ShaderMaterial({
+    glslVersion: THREE.GLSL3,
     depthWrite: false,
     depthTest: false,
     defines,
@@ -72,7 +75,6 @@ export function createScene(ctx) {
       uAspect: { value: ctx.width / ctx.height },
       uPan: { value: new THREE.Vector2(0, 0) },   // hand parallax
       uHue: { value: 0 },     // integrated hue travel (time + level)
-      uRot: { value: 0 },     // kaleidoscope mirror spin, integrated
       uFold: { value: 0.4 },  // 0 = free gas, 1 = hard mandala
       uLevel: { value: 0 },
       uBass: { value: 0 },    // smoothed CPU-side, see update()
@@ -90,20 +92,21 @@ export function createScene(ctx) {
       uPulse: { value: pulses },
     },
     vertexShader: /* glsl */ `
-      varying vec2 vUv;
+      out vec2 vUv;
       void main() {
         vUv = uv;
         gl_Position = vec4(position.xy, 0.0, 1.0); // fullscreen, no matrices
       }`,
     fragmentShader: /* glsl */ `
-      uniform float uTime, uAspect, uHue, uRot, uFold;
+      uniform float uTime, uAspect, uHue, uFold;
       uniform vec2  uPan;
       uniform float uLevel, uBass, uMid, uHigh, uBeat, uKick;
       uniform float uTurb, uIgnite, uIgniteR;
       uniform float uPress, uBloom, uIntensity;
       uniform vec3  uColors[5];
       uniform vec4  uPulse[PULSE_N];
-      varying vec2 vUv;
+      in vec2 vUv;
+      out vec4 fragColor;
 
       const float SEGMENTS = 6.0;                        // mirrored wedges
       const mat2 ROT2 = mat2(0.80, 0.60, -0.60, 0.80);   // decorrelate octaves
@@ -166,17 +169,18 @@ export function createScene(ctx) {
         return mix(c, uColors[0], clamp(t - 4.0, 0.0, 1.0));
       }
 
-      // mirror-fold the domain into SEGMENTS wedges. amt blends the folded
-      // coordinate against the free one, so the field breathes between loose
-      // gas and a hard mandala without the angle ever jumping.
-      vec2 kaleido(vec2 v, float rot, float amt) {
+      // mirror-fold the domain into SEGMENTS wedges about a fixed axis — the
+      // mirrors never turn. amt blends the folded coordinate against the free
+      // one, so the field breathes between loose gas and a hard mandala
+      // without the angle ever jumping.
+      vec2 kaleido(vec2 v, float amt) {
         float r = length(v);
-        // atan(0,0) is undefined in GLSL1 and returns NaN on some drivers, so
-        // the exact centre pixel gets its x nudged to 1.0 (r is 0 there, and
-        // the mix below multiplies the angle out anyway)
-        float a = atan(v.y, v.x + step(r, 1e-6)) - rot;
+        // atan(0,0) is undefined in GLSL (ES 3.00 included) and returns NaN
+        // on some drivers, so the exact centre pixel gets its x nudged to 1.0
+        // (r is 0 there, and the mix below multiplies the angle out anyway)
+        float a = atan(v.y, v.x + step(r, 1e-6));
         float seg = 6.2831853 / SEGMENTS;
-        a = abs(mod(a, seg) - seg * 0.5) + rot;
+        a = abs(mod(a, seg) - seg * 0.5);
         return mix(v, vec2(cos(a), sin(a)) * r, amt);
       }
 
@@ -213,7 +217,7 @@ export function createScene(ctx) {
         // --- domain: beat-lurched, then mirror-folded
         vec2 p = uvc * 3.0;
         p *= 1.0 - uKick * 0.11;            // beat punches the gas toward us
-        p = kaleido(p, uRot, uFold);
+        p = kaleido(p, uFold);
 
         // perspective-ish lens: detail crowds toward the center, which also
         // brightens it later — the cheap read on infinite depth
@@ -324,7 +328,7 @@ export function createScene(ctx) {
         // vignette here — the compositor owns limiting and vignetting.
         col *= 0.76 + depth * 0.30;
 
-        gl_FragColor = vec4(col * uIntensity, 1.0);
+        fragColor = vec4(col * uIntensity, 1.0);
       }`,
   });
   const quad = new THREE.Mesh(geo, mat);
@@ -340,7 +344,6 @@ export function createScene(ctx) {
   let midSm = 0;
   let kick = 0;     // fast beat envelope for the domain lurch
   let hue = 0;      // integrated palette travel
-  let rot = 0;      // kaleidoscope spin
   let fold = 0.4;   // smoothed mirror-fold amount
   let slot = 0;     // shockwave ring write cursor
   let turb = 0;     // smoothed sway -> turbulence morph
@@ -360,9 +363,9 @@ export function createScene(ctx) {
       // beat kick: instant attack, ~0.5 s tail; the visible lurch on the beat
       kick = Math.max(kick * Math.pow(0.002, dt), io.beat);
 
-      // hue travel and mirror spin, wrapped so long sets never lose precision
+      // hue travel, wrapped so long sets never lose precision (the mirror
+      // axis is fixed: nothing here spins)
       hue = (hue + dt * (0.035 + io.level * 0.30)) % 1;
-      rot = (rot + dt * (0.05 + midSm * 0.28)) % TAU;
 
       // mandala breathing: a slow autonomous LFO, opened up by loudness and
       // biased by knob 4 (0.5 = neutral; knobs 0-2 stay engine-reserved)
@@ -424,7 +427,6 @@ export function createScene(ctx) {
 
       u.uTime.value = t;
       u.uHue.value = hue;
-      u.uRot.value = rot;
       u.uFold.value = fold;
       u.uLevel.value = io.level;
       u.uBass.value = bassSm;
