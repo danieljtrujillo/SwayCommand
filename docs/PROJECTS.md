@@ -121,12 +121,14 @@ Clips are kept sorted by start time; validation drops zero-length clips. Editing
 
 ## Templates
 
-Nine templates are bundled as full `.sway` documents at `projects/templates/*.sway`: the eight factory presets of earlier builds, produced from the legacy JSON by `legacyToSway()` (everything the legacy shape did not cover sits at defaults, and `meta.template` is `true`), and `will-i-dream`, an authored project whose timeline carries a linked track — the only template with media, linked by the absolute path of the author's machine, so on any other machine the audio clip loads with a missing-file warning and the scene still plays. They appear at the bottom of the project menu; opening one loads a fresh untitled copy — templates are read-only and are addressed by id through a gated channel, never by path. `projects/templates/index.json` fixes the menu order.
+Eleven templates are bundled as full `.sway` documents at `projects/templates/*.sway`: the eight factory presets of earlier builds, produced from the legacy JSON by `legacyToSway()` (everything the legacy shape did not cover sits at defaults, and `meta.template` is `true`), plus three authored projects: `will-i-dream`, whose timeline carries a linked track — the only template with media, linked by the absolute path of the author's machine, so on any other machine the audio clip loads with a missing-file warning and the scene still plays; `natures-tomb`, which opens on the Nature's Tomb scene with nothing assigned; and `miracle-mile`, which opens on Miracle Mile with nothing assigned. They appear at the bottom of the project menu; opening one loads a fresh untitled copy — templates are read-only and are addressed by id through a gated channel, never by path. `projects/templates/index.json` fixes the menu order.
 
 | Id | Name | Vibe | Scene pool | Start | Auto-VJ | Hold (s) | Fade (s) | BPM hint | Pairs with |
 |---|---|---|---|---|---|---|---|---|---|
 | `first-flight` | First Flight | welcoming | beams, swarm, ribbons, voxels, warp, nebula, mandelbulb, cymatic, vjshader | beams | on | 20–45 | 5 | — | — |
 | `will-i-dream` | Will I Dream | lucid | willidream | willidream | off | 60–120 | 4 | — | the track "Will I Dream" on the audio lane (0:00–3:49) with the scene on the visual lane |
+| `natures-tomb` | Nature's Tomb | cellular | naturestomb | naturestomb | off | 60–120 | 4 | — | — |
+| `miracle-mile` | Miracle Mile | critical | miraclemile | miraclemile | off | 60–120 | 4 | — | — |
 | `hyperspace` | Hyperspace | transluminal | warp, vjshader, mandelbulb, lattice, valley, spectra, swarm | warp | on | 22–46 | 3 | — | — |
 | `chrysanthemum` | Chrysanthemum | hyperreal | mandelbulb, vjshader, ferrofluid, chladni, lattice, nebula, warp, spectra | mandelbulb | on | 26–52 | 6 | — | — |
 | `beam-sixteen` | Beam Sixteen | anthemic | beams, nebula | beams | off | 30–60 | 6 | — | — |
