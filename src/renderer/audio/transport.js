@@ -255,7 +255,17 @@ export function createTransport(ctx, destinationNodes) {
       }
     }
     src.start(when, offset, dur);
-    return { src, gain };
+    const entry = { src, gain, done: false };
+    src.onended = () => {
+      entry.done = true;
+      try {
+        src.disconnect();
+        gain.disconnect();
+      } catch {
+        /* detached */
+      }
+    };
+    return entry;
   }
 
   // Schedules every clip on every track that is still ahead of `position`,
@@ -302,10 +312,7 @@ export function createTransport(ctx, destinationNodes) {
     }
     syncGatePhases(position);
     // Reap finished sources so `live` stays bounded over a long set.
-    live = live.filter((v) => {
-      const done = v.src.playbackState === undefined ? false : false;
-      return !done;
-    });
+    live = live.filter((v) => !v.done);
   }
 
   function scheduleFrom(position) {
