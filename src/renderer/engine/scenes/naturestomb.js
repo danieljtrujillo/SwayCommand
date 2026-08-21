@@ -6,13 +6,20 @@
 // drive its development, one knob picks the species, sway morphs whichever
 // generator is on screen.
 //
-//   ORGANISM    KNOB 6 (io.knobs[5]) picks it in quarter turns — MYCELIUM,
-//               SLIME MOLD, CELL LINE (the 0.5 default lands on it), DOUBLE
-//               HELIX — with a little hysteresis at the band edges. The
-//               selection is smoothed with a 0.15 s time constant, so the
-//               dissolve runs exactly as fast as the knob is turned: a flick
-//               cuts, a slow sweep cross-fades. Only the organisms with weight
-//               run their generators.
+//   COLD OPEN   The plate is DARK until the show starts — the first beat the
+//               analyser hears, the transport playing, or any pad — and then
+//               the molecule comes up and begins to replicate: the double
+//               helix at stage 0 stepping to its replication fork. That is
+//               the opening element; from there the performer develops it
+//               onward (the knob or the strikes), and the next organism on the
+//               knob is the cell.
+//   ORGANISM    KNOB 6 (io.knobs[5]) picks it in quarter turns, IN THE ORDER
+//               OF LIFE — DOUBLE HELIX, CELL LINE, MYCELIUM, SLIME MOLD — with
+//               a little hysteresis at the band edges. The selection is
+//               smoothed with a 0.15 s time constant, so the dissolve runs
+//               exactly as fast as the knob is turned: a flick cuts, a slow
+//               sweep cross-fades. Only the organisms with weight run their
+//               generators.
 //   LEVEL       KNOB 5 (io.knobs[4]) sets the development 0..1 the moment it
 //               moves, and any pad STRIKE steps it ONE STAGE OF THE ORGANISM
 //               ON SCREEN, reversing at the top and at the bottom; the level
@@ -243,7 +250,7 @@ export const meta = {
     ],
     params: [
       { key: 'development', label: 'development', min: 0, max: 1, default: 0 },
-      { key: 'organism', label: 'organism', min: 0, max: 3, default: 2 },
+      { key: 'organism', label: 'organism', min: 0, max: 3, default: 0 },
       { key: 'species', label: 'species', min: 0, max: 7, default: 0 },
       { key: 'morph', label: 'morph', min: 0, max: 1, default: 0 },
       { key: 'squeeze', label: 'squeeze', min: 0, max: 1, default: 0 },
@@ -2611,12 +2618,18 @@ export function createScene(ctx) {
   }
 
   // --- state ------------------------------------------------------------------------
-  const ORG_STAGES = [6, 6, STAGES, 3]; // mycelium, slime mold, cell line, helix
-  const ORG_MYC = 0, ORG_SLIME = 1, ORG_CELL = 2, ORG_HELIX = 3;
+  // The organisms sit on the knob in the ORDER OF LIFE: the molecule first,
+  // then the cell and what it becomes, then the fungus, then the mold.
+  const ORG_HELIX = 0, ORG_CELL = 1, ORG_MYC = 2, ORG_SLIME = 3;
+  const ORG_STAGES = [3, STAGES, 6, 6]; // helix, cell line, mycelium, slime mold
 
   let level = 0, target = 0, dir = 1;
   let knobLvlPrev = null, knobOrgPrev = null, knobSpcPrev = null, strikePrev = 0;
-  let orgTarget = ORG_CELL, orgPos = ORG_CELL;
+  let orgTarget = ORG_HELIX, orgPos = ORG_HELIX;
+  // The cold open: the plate is dark until the show starts — the first beat,
+  // the transport playing, or any pad — and then the molecule comes up and
+  // begins to replicate; everything else is the performer's.
+  let opened = false, openS = 0, tpPrev = false, openAge = 0;
   // the strain the scene comes up on is the one the params declare, so a
   // project that saves species 0 gets species 0 and two launches of the same
   // show match; "no two runs look alike" lives in the seeded table and the
@@ -2663,6 +2676,24 @@ export function createScene(ctx) {
     scene,
     camera,
     update(dt, t, io) {
+      // ---- the cold open
+      if (!opened) {
+        const tp = io.transport || null;
+        const tpNow = !!(tp && tp.playing);
+        const beat = io.beat > 0.6 && io.level > 0.12;
+        if ((tpNow && !tpPrev) || beat || io.strike > 0.12) {
+          opened = true;
+          openAge = 0;
+          // the opening element: the molecule replicating — the fork is stage 1 of the helix
+          if (orgTarget === ORG_HELIX && target < 0.25) { dir = 1; target = 1 / (ORG_STAGES[ORG_HELIX] - 1); }
+        }
+        tpPrev = tpNow;
+      } else {
+        openAge += dt;
+      }
+      openS = approach(openS, opened ? 1 : 0, 0.6, dt);
+      const openDim = Math.max(openS, 0.05 + 0.04 * io.level); // dark, not dead
+
       // ---- the organism: KNOB 6 in quarter turns, with hysteresis at the edges
       const k6 = io.knobs[5];
       if (knobOrgPrev === null) knobOrgPrev = k6;
@@ -2699,7 +2730,7 @@ export function createScene(ctx) {
         dir = k5 >= level ? 1 : -1;
         target = k5;
       }
-      if (io.strike > strikePrev + 0.3) {
+      if (io.strike > strikePrev + 0.3 && openAge > 0.1) {
         if (target >= 1 - 1e-3) dir = -1;
         else if (target <= 1e-3) dir = 1;
         stepLevel(dir);
@@ -2854,7 +2885,7 @@ export function createScene(ctx) {
       U.uBass.value = bass;
       U.uHigh.value = high;
       U.uLevelA.value = lvl;
-      U.uIntensity.value = io.intensity;
+      U.uIntensity.value = io.intensity * openDim;
       U.uPan.value.set(panX, panY);
       U.uOrg.value.set(wMyc, wSlime, wCell, wHelix);
       U.uFlow.value = flow;
@@ -2863,7 +2894,7 @@ export function createScene(ctx) {
       MU.uPress.value = press;
       MU.uBass.value = bass;
       MU.uWeight.value = wMyc;
-      MU.uIntensity.value = io.intensity;
+      MU.uIntensity.value = io.intensity * openDim;
       MU.uBeat.value = pulse;
       MU.uHigh.value = high;
       MU.uTime.value = t;
@@ -2873,7 +2904,7 @@ export function createScene(ctx) {
       HU.uBass.value = bass;
       HU.uWeight.value = wHelix;
       HU.uAzim.value = azim;
-      HU.uIntensity.value = io.intensity;
+      HU.uIntensity.value = io.intensity * openDim;
       HU.uBeat.value = pulse;
       HU.uHigh.value = high;
       HU.uTime.value = t;

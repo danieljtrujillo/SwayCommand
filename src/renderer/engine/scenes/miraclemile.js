@@ -1,11 +1,15 @@
 // Miracle Mile — the atom, and the city it ends. Four acts on one knob, a noir
 // city under all of them, and a deck of sixteen re-entry vehicles over the top.
 //
+//   COLD OPEN   The scene opens DARK on the collider: a faint detector
+//               breathing with the level, nothing else, until the show starts
+//               — the first beat the analyser hears, the transport playing, or
+//               any pad — and then the first collision fires as the opening
+//               element. KNOB 6 / 'act' take over the moment they move.
 //   ACT         KNOB 6 (io.knobs[5]) picks it in quarter turns the moment the
 //               knob moves: 0–¼ COLLIDER, ¼–½ FISSION, ½–¾ DETONATION, ¾–1
-//               SHOCKWAVE — so the 0.5 default rests on the city under its
-//               mature cloud. The 'act' parameter drives the same choice from
-//               any assigned control.
+//               SHOCKWAVE. The 'act' parameter drives the same choice from any
+//               assigned control.
 //   YIELD       KNOB 5 (io.knobs[4]), or the 'yield' parameter: collision
 //               multiplicity, prompt-neutron count, and the size of every
 //               cloud the deck lands.
@@ -126,7 +130,7 @@
 //
 //   MIRV        In the two city acts every pad is an independent re-entry
 //               vehicle with its own place, its own yield and its own cloud;
-//               several fly and several clouds stand at once (six cloud slots
+//               several fly and several clouds stand at once (five cloud slots
 //               on med, eight on high, four on low; slot zero is ground
 //               zero's). A cloud never leaves the frame by winking out: it
 //               thins over its last three and a half seconds, whether its life
@@ -138,13 +142,17 @@
 //               a minute-old ash column stood next to it. The 'full salvo'
 //               action fires exactly as many vehicles as the deck is deep,
 //               spread across the pad map, for the same reason.
-//               PLACE — the Sway's deck is physically two rows of eight, not a
-//               four-by-four, so that is the map: the TOP row (pads 0–7) is
-//               the far half of the city, the BOTTOM row (pads 8–15) the near
-//               half, and the column runs left to right across the boulevard.
-//               Each cell carries a fixed offset of its own so the pattern
-//               never reads as a grid, and the map is deterministic, so it can
-//               be learned.
+//               PLACE — the Sway's deck is physically two rows of eight, and
+//               the rows are two RINGS round the eye: the TOP row (pads 0–7)
+//               the far ring, 600–950 m out across ±48° of the look axis, the
+//               BOTTOM row (pads 8–15) the near ring, 180–380 m out across
+//               ±70° (the eye sees ±40°: the far ring lands across the whole
+//               frame, the near ring wraps past its edges) — the column the
+//               bearing from left to right. So a chord lands all around the
+//               viewer and the near bursts tower over the frame. Each
+//               cell carries a fixed jitter of its own so the pattern never
+//               reads as a grid, and the map is deterministic, so it can be
+//               learned.
 //               YIELD — the pads are chromatic, 0 the lowest note and 15 the
 //               highest, and the yield falls with pitch on 0.30 + 0.70·(1 −
 //               i/15)^1.35. Pad 0 is a city-killer: a cap five hundred metres
@@ -158,23 +166,27 @@
 //               of this scene delivered on the high notes. Cap height and
 //               width, stem width, rise, lifetime, front radius, dust, flash
 //               and flight time all ride the same curve; velocity trims it.
-//               RE-ENTRY — the strike does not begin with the burst. It begins
-//               fifteen hundred metres beyond the far skyline and eight
-//               hundred and eighty up, on the bus's track, and comes in over
-//               the city so the whole descent is inside the frame: a small
-//               extremely bright body inside a plasma sheath on a shallow arc
-//               down the sky, heating as it reaches denser air, its ablation
-//               trail streaming and breaking into puffs behind it,
-//               decelerating, then the terminal dive onto the target — 1.0 s
-//               for the smallest, 1.65 s for the largest, so the trail reads
-//               as flight and not as a spark. The body and its sheath are
-//               sized in ANGLE, not in metres: a two-metre vehicle two
-//               kilometres out is under a pixel, so a physical radius left the
-//               first half of every flight invisible. It is an unresolved
-//               point source and it is drawn as one — hard and small at
-//               release, swelling and whitening as the air thickens. Several
-//               notes at once arrive as one bus's payload, fanned across the
-//               same track. The city and the deck HIDE them: the world quad
+//               RE-ENTRY — the burst lands ON the hit. The strike begins six
+//               hundred metres up and fourteen hundred out to the SIDE of its
+//               target (alternating by pad, a little from beyond), and crosses
+//               the sky diagonally on a shallow twenty-five-degree line in
+//               0.14–0.24 s — a
+//               STREAK, the way a meteor crosses a sky, two kilometres of
+//               track in a fifth of a second — barely an arc, at constant
+//               speed (nothing this fast slows visibly in a quarter of a
+//               second), and the burst is on the ground before the ear has
+//               finished the note. Shallow because that is what the frame can
+//               hold: a steep track from high altitude stayed above the top
+//               of the picture until its last few frames. What the eye
+//               keeps is the LIGHT: a hard white head with a tight violet-white
+//               halo and, behind it, a thin streak of ionised air covering the
+//               last two thirds of the track, white-hot at the head and
+//               thinning to nothing along its length — no puffs, no smoke, no
+//               contrail, which is the signature of a slow object — gone as an
+//               afterimage in under half a second. Head and streak are sized
+//               in ANGLE, not in metres: the thing itself is never resolved at
+//               this speed, only its light. Several notes at once arrive as a
+//               spread. The city and the deck HIDE them: the world quad
 //               writes no depth, so nothing it draws can occlude an impostor
 //               on its own, and a vehicle diving at a target twenty-eight
 //               blocks away was painted flat across the face of the tower in
@@ -267,7 +279,7 @@ export const meta = {
       { key: 'rebuild', label: 're-seed city' },
     ],
     params: [
-      { key: 'act', label: 'act', min: 0, max: 3, default: 2 },
+      { key: 'act', label: 'act', min: 0, max: 3, default: 0 },
       { key: 'yield', label: 'yield', min: 0.05, max: 1, default: 0.5 },
       { key: 'transition', label: 'atom to city', min: 0, max: 1, default: 1 },
       { key: 'cloudScale', label: 'cloud scale', min: 0.35, max: 2.4, default: 1 },
@@ -324,16 +336,34 @@ const ATOM_DIST = 11;
 
 // ground zero, and the front that leaves it
 const GZ_X = 0, GZ_Z = -900;
-const GZ_SCALE = 1.22; // ground zero is the big one: the act's hero cloud
+const GZ_SCALE = 0.95; // ground zero stays the act's hero cloud at the deck's larger scale
 
 // re-entry vehicles and their clouds
 const MAX_RV = 16;
 const TRAIL_SEGS = 22;
-const CLOUD_U = 31;      // metres of cloud scale at full yield
-const PAD_SPREAD = 240;  // half the deck's reach across the ground
-const PAD_Z = [-700, -300];
-const RV_RANGE = 1500;   // downrange distance the bus releases at
-const RV_ALT = 880;
+const CLOUD_U = 40;      // metres of cloud scale at full yield — the bursts are the show
+// The pad map is two rings AROUND THE EYE, not two rows in front of it: the far
+// ring (pads 0–7) at 600–950 m across ±48° of the look axis, the near ring
+// (pads 8–15) at 180–380 m across ±70° — the eye sees ±40°, so the far ring
+// lands across the whole frame and the near ring wraps past its edges, the
+// nearest bursts towering over the top of it. A wider spread was tried first
+// (±75° / ±115°): most of the deck then burst out of frame and the performer
+// saw a glow at the edge and nothing else. The rings are measured from the
+// eye's rest position in DETONATION.
+const EYE_X = 0, EYE_Z = 160;
+const RING_R = [[600, 950], [180, 380]];
+const RING_SPAN = [0.84, 1.22];
+// The streak comes in SHALLOW — six hundred metres up, fourteen hundred out
+// beyond the target, a descent of about twenty degrees — because that is what
+// the eye can see: from sixty metres up looking down the canyon the frame
+// reaches twenty-five degrees of elevation, and a steep track from high
+// altitude (tried first: 1.5 km up over 600 m) stayed above the frame until its
+// last four frames, so the burst arrived without the light that caused it.
+// Shallow, the whole streak crosses the upper frame, and the track is still two
+// kilometres in a fifth of a second — eleven kilometres a second.
+const RV_ALT = 600;
+const RV_OUT = 1400;
+const STREAK_SPAN = 0.62; // the fraction of the track the light streak covers behind the head
 
 const GLSL_COMMON = /* glsl */ `
   // shared helpers
@@ -1557,10 +1587,10 @@ export function createScene(ctx) {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(FOV, ctx.width / Math.max(1, ctx.height), 0.4, 4000);
   const tier = quality.tier;
-  const CLOUD_STEPS = tier === 'low' ? 11 : tier === 'high' ? 34 : 15;
+  const CLOUD_STEPS = tier === 'low' ? 11 : tier === 'high' ? 34 : 12; // 12 on med pays for the near ring filling the frame
   const CITY_STEPS = tier === 'low' ? 26 : tier === 'high' ? 72 : 34;
-  const REF_STEPS = tier === 'low' ? 0 : tier === 'high' ? 22 : 7;
-  const MAX_CLOUDS = tier === 'low' ? 4 : tier === 'high' ? 8 : 6;
+  const REF_STEPS = tier === 'low' ? 0 : tier === 'high' ? 22 : 5;
+  const MAX_CLOUDS = tier === 'low' ? 4 : tier === 'high' ? 8 : 5; // the bigger bursts cost a slot on med
   // A second inlined march costs the whole shader its occupancy — 2.5 ms a
   // frame at 1080p — but without it a cloud in front bites a crescent out of
   // the cloud behind, and clouds standing together is the point of the deck.
@@ -2010,14 +2040,19 @@ export function createScene(ctx) {
   const rvTG = new Float32Array(MAX_RV * 3);
   const pv = new Float32Array(3), pv2 = new Float32Array(3);
 
-  // pad index -> the place it lands. The deck is two rows of eight: the top row
-  // is the far half of the city, the bottom row the near half, columns left to
-  // right across the boulevard, each cell offset by a fixed amount of its own.
+  // pad index -> the place it lands. The deck is two rows of eight, and the
+  // rows are two RINGS round the eye: the top row the far ring, the bottom row
+  // the near ring, the column the bearing from left to right; each cell
+  // carries a fixed jitter of its own so the map never reads as a grid.
   const padX = new Float32Array(16), padZ = new Float32Array(16), padYf = new Float32Array(16);
+  const padAz = new Float32Array(16);
   for (let i = 0; i < 16; i++) {
     const col = i & 7, row = i >> 3;
-    padX[i] = ((col - 3.5) / 3.5) * PAD_SPREAD + (hf(i * 2654435761 + 11) - 0.5) * 74;
-    padZ[i] = PAD_Z[row] + (hf(i * 40503 + 977) - 0.5) * 120;
+    const az = ((col - 3.5) / 3.5) * RING_SPAN[row] + (hf(i * 2654435761 + 11) - 0.5) * 0.22;
+    const r = RING_R[row][0] + (RING_R[row][1] - RING_R[row][0]) * hf(i * 40503 + 977);
+    padAz[i] = az;
+    padX[i] = EYE_X + Math.sin(az) * r;
+    padZ[i] = EYE_Z - Math.cos(az) * r;
     // Low note big, high note small — but the floor is set by the skyline, not
     // by the curve: a burst whose cap tops out under the rooftops is a flash on
     // a wall and nothing else. At 0.30 the highest note still stands a cloud
@@ -2045,12 +2080,17 @@ export function createScene(ctx) {
   const winWarm = new Float32Array(3), winCool = new Float32Array(3);
   const nucPh = new Float32Array(NUCLEONS * 3);
   for (let i = 0; i < NUCLEONS * 3; i++) nucPh[i] = Math.random() * 6.2831853;
-  let act = 2;
+  // The scene OPENS on the collider — act 0, the detector held dark until the
+  // show starts (the first beat, the transport playing, or any pad), and the
+  // first collision fires as the opening element. KNOB 6 / 'act' take over the
+  // moment they move, as before.
+  let act = 0;
   const actW = new Float32Array(4);
-  actW[2] = 1;
+  actW[0] = 1;
+  let opened = false, openS = 0, tpPrev = false, openAge = 0;
   let k5Prev = null, k6Prev = null;
   let yieldTarget = 0.5, cloudScaleP = 1, placeP = 0;
-  let transit = 1, transitTarget = 1;
+  let transit = 0, transitTarget = 0;
   let citySeed = 3;
   let yieldS = 0.5, swayS = 0, pressS = 0, bass = 0, high = 0, pulse = 0, beatPrev = 0, flash = 0;
   let hx = 0.5, hy = 0.5;
@@ -2355,7 +2395,7 @@ export function createScene(ctx) {
     cZ[slot] = z;
     cSc[slot] = Math.max(3, sc);
     cTau[slot] = 1.6 + 8 * yf;            // rise time: the big ones take ten seconds
-    cFireS[slot] = 0.6 + yf * 1.1;
+    cFireS[slot] = 0.8 + yf * 1.4;
     cFade[slot] = 1;
     const dx = camPos.x - x, dz = camPos.z - z;
     const d = Math.sqrt(dx * dx + dz * dz + camPos.y * camPos.y);
@@ -2449,20 +2489,35 @@ export function createScene(ctx) {
     const yf = padYf[idx];
     rvAlive[slot] = 1;
     rvT[slot] = 0;
-    rvDur[slot] = 0.85 + 0.8 * yf;
+    // The flight is a STREAK, not a glide: 0.14–0.24 s from the top of the sky
+    // to the ground, so the burst lands on the hit that launched it. A body
+    // coming in at re-entry speed — eight or nine kilometres a second — crosses
+    // this whole sky in under a second; what the eye keeps is the light.
+    rvDur[slot] = 0.14 + 0.10 * yf;
     rvFade[slot] = 0;
     rvYf[slot] = yf;
     rvSc[slot] = clamp(vel, 0.2, 1);
     for (let k = 0; k < RV_VIS; k++) rvVis[slot * RV_VIS + k] = 1; // released above the skyline
     const tx = padX[idx], tz = padZ[idx];
     rvTG[slot * 3] = tx; rvTG[slot * 3 + 1] = 0; rvTG[slot * 3 + 2] = tz;
-    // The bus's track runs in over the far end of the city, so the whole
-    // descent is inside the frame: a shallow arc down the sky from beyond the
-    // skyline, then the terminal dive. Each cell carries a fixed lateral place
-    // in the spread, so a chord arrives as a fan.
-    const fan = ((idx & 7) - 3.5) * 30;
-    rvP0[slot * 3] = tx + fan; rvP0[slot * 3 + 1] = RV_ALT; rvP0[slot * 3 + 2] = tz - RV_RANGE;
-    rvCP[slot * 3] = tx + fan * 0.25; rvCP[slot * 3 + 1] = RV_ALT * 0.5; rvCP[slot * 3 + 2] = tz - RV_RANGE * 0.18;
+    // The track comes down STEEPLY from high altitude, the way a meteor does —
+    // from far out beyond the target on the side away from the eye, so the
+    // streak crosses the sky toward the viewer and lands in front of, beside
+    // or behind them. Barely an arc: the control point lifts the midpoint a
+    // little so the line reads as ballistic and not ruled. Each cell carries a
+    // fixed lateral fan of its own, so a chord arrives as a spread.
+    // The approach is LATERAL to the line of sight — the streak comes in from
+    // the side (alternating by pad), a little from beyond, and crosses the sky
+    // diagonally to its target. A track laid along the bearing from the eye
+    // was tried first and read as a dot with a tail: seen end-on, a kilometre
+    // of streak foreshortens to nothing. Meteors read long because they cross.
+    const fan = ((idx & 7) - 3.5) * 40;
+    const bx = Math.sin(padAz[idx]), bz = -Math.cos(padAz[idx]);   // eye -> target bearing
+    const side = idx & 1 ? 1 : -1;
+    const px = Math.cos(padAz[idx]) * side, pz = Math.sin(padAz[idx]) * side; // across it
+    const ox = px * 0.85 + bx * 0.35, oz = pz * 0.85 + bz * 0.35;
+    rvP0[slot * 3] = tx + ox * RV_OUT + fan; rvP0[slot * 3 + 1] = RV_ALT; rvP0[slot * 3 + 2] = tz + oz * RV_OUT;
+    rvCP[slot * 3] = tx + ox * RV_OUT * 0.5 + fan * 0.5; rvCP[slot * 3 + 1] = RV_ALT * 0.56; rvCP[slot * 3 + 2] = tz + oz * RV_OUT * 0.5;
   }
   function updateRVs(dt) {
     for (let i = 0; i < MAX_RV; i++) {
@@ -2477,7 +2532,7 @@ export function createScene(ctx) {
       if (rvT[i] < rvDur[i]) {
         rvT[i] += dt;
         const s = clamp(rvT[i] / rvDur[i], 0, 1);
-        u = 1 - Math.pow(1 - s, 1.42); // fast at altitude, decelerating in denser air
+        u = s; // constant speed — nothing this fast slows visibly in a quarter of a second
         if (rvT[i] >= rvDur[i]) {
           const slot = allocCloud();
           burst(slot, rvTG[i * 3], rvTG[i * 3 + 2], rvYf[i], rvSc[i]);
@@ -2487,22 +2542,22 @@ export function createScene(ctx) {
         u = 1;
         live = false;
         rvFade[i] += dt;
-        if (rvFade[i] > 1.4) {
+        if (rvFade[i] > 0.45) {
           rvAlive[i] = 0;
           glows.s[g0 * 4 + 1] = 0; glows.s[(g0 + 1) * 4 + 1] = 0;
           for (let k = 0; k < TRAIL_SEGS; k++) capS[(c0 + k) * 4 + 1] = 0;
           continue;
         }
       }
-      const heat = smooth01((u - 0.10) / 0.42);
-      const dies = live ? 1 : Math.max(0, 1 - rvFade[i] / 1.4);
+      const heat = smooth01((u - 0.04) / 0.25);
+      const dies = live ? 1 : Math.max(0, 1 - rvFade[i] / 0.45); // the afterimage is gone in under half a second
       bez(i, u, pv);
       // Four stations along the track carry the visibility for the whole
       // vehicle: the body takes the head's, and the trail interpolates between
       // them. Each is eased rather than switched, so a body crossing a cornice
       // dims through it instead of blinking.
       for (let k = 0; k < RV_VIS; k++) {
-        const uv = Math.max(0, u - (k / (RV_VIS - 1)) * (TRAIL_SEGS - 1) * (0.017 + heat * 0.017));
+        const uv = Math.max(0, u - (k / (RV_VIS - 1)) * STREAK_SPAN);
         bez(i, uv, pv2);
         const vi = i * RV_VIS + k;
         rvVis[vi] = approach(rvVis[vi], visibleFrom(pv2[0], pv2[1], pv2[2]), 0.06, dt);
@@ -2516,9 +2571,15 @@ export function createScene(ctx) {
       // the air thickens, and the sheath around it likewise.
       const dcx = pv[0] - camPos.x, dcy = pv[1] - camPos.y, dcz = pv[2] - camPos.z;
       const dCam = Math.sqrt(dcx * dcx + dcy * dcy + dcz * dcz);
-      sph(glows, g0, pv[0], pv[1], pv[2], dCam * (0.0072 + 0.0060 * heat), body * (0.8 + heat * 1.3), 4.97, 1);
-      sph(glows, g0 + 1, pv[0], pv[1], pv[2], dCam * (0.013 + 0.030 * heat), body * (0.05 + heat * 0.26), 0.2, 1);
-      const step = 0.017 + heat * 0.017;
+      // The head: a hard white point and a tight violet-white halo — the thing
+      // itself is never resolved at this speed, only its light.
+      sph(glows, g0, pv[0], pv[1], pv[2], dCam * (0.0022 + 0.0012 * heat), body * (1.8 + heat * 1.8), 4.97, 1);
+      sph(glows, g0 + 1, pv[0], pv[1], pv[2], dCam * (0.0050 + 0.0040 * heat), body * (0.12 + heat * 0.22), 0.12, 1);
+      // The streak behind it covers a fixed fraction of the track, whatever the
+      // flight time: a meteor's trail is the ionised air it has just crossed,
+      // bright and thin at the head, thinning to nothing along its length — no
+      // puffs, no smoke, no contrail, which is the signature of a slow object.
+      const step = STREAK_SPAN / TRAIL_SEGS;
       for (let k = 0; k < TRAIL_SEGS; k++) {
         const uA = u - k * step, uB = u - (k + 1) * step;
         if (uB < 0) { capS[(c0 + k) * 4 + 1] = 0; continue; }
@@ -2530,11 +2591,16 @@ export function createScene(ctx) {
         const fv = (k / Math.max(1, TRAIL_SEGS - 1)) * (RV_VIS - 1);
         const fi = Math.min(RV_VIS - 2, fv | 0), ff = fv - fi;
         const vis = rvVis[i * RV_VIS + fi] + (rvVis[i * RV_VIS + fi + 1] - rvVis[i * RV_VIS + fi]) * ff;
-        // the ablation trail: incandescent at the body, breaking into puffs and
-        // dissipating behind it, white-hot cooling through to fire
-        const a = Math.pow(1 - f, 1.7) * (0.55 + heat * 1.35) * (0.65 + nz * 0.7) * dies * vis;
+        // the light streak: sized in ANGLE like the head, white-hot at the head
+        // and fading down its length; the per-segment noise is only a flicker
+        const mx = (pv[0] + pv2[0]) * 0.5 - camPos.x, my = (pv[1] + pv2[1]) * 0.5 - camPos.y, mz = (pv[2] + pv2[2]) * 0.5 - camPos.z;
+        const dSeg = Math.sqrt(mx * mx + my * my + mz * mz);
+        // the capsule radius is in PIXELS (the mesh is screen-space): a few at
+        // the head tapering to a hairline, and bright — the streak is the event
+        const a = Math.pow(1 - f, 1.25) * (1.6 + heat * 1.4) * (0.85 + nz * 0.3) * dies * vis;
         cap(c0 + k, pv[0], pv[1], pv[2], pv2[0], pv2[1], pv2[2],
-          (1.2 + f * 4.6 + heat * 1.6) * (0.7 + nz * 0.6), a, 0.10 + f * 0.85, 1);
+          1.0 + 4.5 * (1 - f) * (0.7 + heat * 0.5), a, 0.02 + f * 0.30, 1);
+        void dSeg;
       }
     }
   }
@@ -2712,6 +2778,24 @@ export function createScene(ctx) {
       else if (key === 'place') placeP = clamp(value, 0, 15);
     },
     update(dt, t, io) {
+      // ---- the cold open: held dark until the first beat, the transport, or a pad
+      if (!opened) {
+        const tp = io.transport || null;
+        const tpNow = !!(tp && tp.playing);
+        const beat = io.beat > 0.6 && io.level > 0.12;
+        if ((tpNow && !tpPrev) || beat || io.strike > 0.12) {
+          opened = true;
+          openAge = 0;
+          fireCollision();
+        }
+        tpPrev = tpNow;
+      } else {
+        openAge += dt;
+      }
+      openS = approach(openS, opened ? 1 : 0, 0.45, dt);
+      // dark, not dead: a faint detector breathing with the level until it opens
+      const openDim = Math.max(openS, 0.07 + 0.05 * io.level);
+
       // ---- KNOB 6 picks the act the moment it moves; KNOB 5 the yield
       const k6 = io.knobs[5];
       if (k6Prev === null) k6Prev = k6;
@@ -2756,7 +2840,7 @@ export function createScene(ctx) {
       // ---- every pad is its own event; the rising edge is the strike
       for (let i = 0; i < 16; i++) {
         const v = io.pads[i];
-        if (v > padPrev[i] + 0.25 && v > 0.12) padEvent(i, v);
+        if (v > padPrev[i] + 0.25 && v > 0.12 && openAge > 0.1) padEvent(i, v);
         padPrev[i] = v;
       }
       if (salvoLeft > 0) {
@@ -2836,7 +2920,7 @@ export function createScene(ctx) {
       const pl = io.palette;
       for (let i = 0; i < 5; i++) { wp[i].value.copy(pl[i]); cp[i].value.copy(pl[i]); sp[i].value.copy(pl[i]); gp[i].value.copy(pl[i]); }
       WU.uTime.value = t;
-      WU.uIntensity.value = io.intensity;
+      WU.uIntensity.value = io.intensity * openDim;
       WU.uFlash.value = Math.min(0.97, flash * flash * 0.9 + cascadeFlash * 0.6);
       WU.uActW.value.set(actW[0], actW[1], actW[2], actW[3]);
       WU.uVertexGlow.value = vertexGlow;
@@ -2846,9 +2930,9 @@ export function createScene(ctx) {
       WU.uPress.value = pressS;
       WU.uRain.value = 0.35 + high * 0.5;
       WU.uFogD.value = 0.0020 + bass * 0.0015;
-      CU.uIntensity.value = io.intensity;
-      solids.U.uIntensity.value = io.intensity;
-      glows.U.uIntensity.value = io.intensity;
+      CU.uIntensity.value = io.intensity * openDim;
+      solids.U.uIntensity.value = io.intensity * openDim;
+      glows.U.uIntensity.value = io.intensity * openDim;
       capAP0.needsUpdate = true; capAP1.needsUpdate = true; capAS.needsUpdate = true;
       solids.aPos.needsUpdate = true; solids.aS.needsUpdate = true; solids.aC.needsUpdate = true;
       glows.aPos.needsUpdate = true; glows.aS.needsUpdate = true; glows.aC.needsUpdate = true;
