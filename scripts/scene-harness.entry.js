@@ -85,13 +85,28 @@ function sceneCtx() {
   return c;
 }
 
+// Per-scene cost of coming up: build (createScene), the synchronous program
+// compile + link, and the FIRST draw — on a cold shader cache the first draw
+// is where the D3D driver's real compile lands, and a shader that unrolls
+// into something huge shows up here as tens of seconds. Run the harness with
+// `"freshCache": true` in the plan to measure it cold.
+const warm = {};
 function instance(id) {
   if (!instances.has(id)) {
     const create = creators[id];
     if (!create) throw new Error(`Unknown scene: ${id}`);
+    const t0 = performance.now();
     const inst = create(sceneCtx());
+    const t1 = performance.now();
     instances.set(id, inst);
     renderer.compile(inst.scene, inst.camera);
+    const t2 = performance.now();
+    renderer.setRenderTarget(null);
+    renderer.render(inst.scene, inst.camera);
+    const gl = renderer.getContext();
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4)); // drain: the first draw must finish
+    const t3 = performance.now();
+    warm[id] = { buildMs: Math.round(t1 - t0), compileMs: Math.round(t2 - t1), firstDrawMs: Math.round(t3 - t2) };
   }
   return instances.get(id);
 }
@@ -186,7 +201,7 @@ function run(id, frames, dt, patch) {
   const { msPerFrame, gpuMs } = timeBurst(inst, dt, 40);
   for (let i = 0; i < 16; i++) io.pads[i] = 0;
   io.strike = 0;
-  return { updateMs, msPerFrame, gpuMs, png };
+  return { updateMs, msPerFrame, gpuMs, png, warm: warm[id] || null };
 }
 
 window.__h = { init, run, logs, ids: () => sceneList.map((s) => s.id) };
