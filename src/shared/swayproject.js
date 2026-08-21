@@ -15,15 +15,27 @@
 const FORMAT = 'sway';
 const FORMAT_VERSION = 1;
 
+const { FX_KINDS, fxDefaults, fxClamp } = require('./trackfx');
+
 const PALETTE_FALLBACK = ['#ff2d95', '#7a0bc0', '#2de1fc', '#f9f871', '#ff6b35'];
 const GESTURE_SOURCES = ['xy:x', 'xy:y', 'gesture:pulse', 'gesture:press', 'gesture:sway'];
-const TARGET_NAMESPACES = ['engine', 'fx', 'synth', 'sampler', 'transport', 'scene'];
-const PAD_ACTION_TYPES = ['sample', 'scene', 'fxPunch', 'sceneAction'];
+// Routes also accept a .gan plugin's control outputs as sources —
+// `gan:<pluginId>:<controlId>` — declared per plugin in project.plugins.
+const GAN_SOURCE = /^gan:[^:]+:[^:]+(:[xyz])?$/; // an xy/xyz control routes per axis
+const TARGET_NAMESPACES = ['engine', 'fx', 'synth', 'sampler', 'transport', 'scene', 'track'];
+const PAD_ACTION_TYPES = ['sample', 'scene', 'fxPunch', 'sceneAction', 'stem', 'trackFx'];
 const CURVES = ['linear', 'detent'];
 const NOTE_ROUTING = ['always', 'unassigned', 'off'];
 const SAMPLER_KNOB_TARGETS = ['sampler:master', 'sampler:cutoff', 'sampler:rate', 'sampler:send'];
+const SNAPS = ['off', 'bar', 'beat', 'half', 'quarter'];
+const QUANTS = ['none', 'beat', 'bar', 'twoBars', 'fourBars'];
+const TRACK_KEYS = ['gain', 'mute', 'solo', 'vstmix'];
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
+function isGestureSource(s) {
+  return typeof s === 'string' && (GESTURE_SOURCES.includes(s) || GAN_SOURCE.test(s));
+}
 
 let uidCounter = 0;
 function uid(prefix) {
@@ -88,16 +100,37 @@ function defaultProject() {
         knobs: { master: 0.5, cutoff: 0.5, rate: 0.5, send: 0.5 },
       },
       timeline: {
+        bpm: 0, // 0 = unknown; detected on the first import, or typed in
+        snap: 'beat',
         loop: { enabled: false, start: 0, end: 0 },
         locators: [],
         tracks: [
-          { id: 'audio-1', type: 'audio', name: 'Audio', gain: 1, muted: false, clips: [] },
+          defaultAudioTrack('audio-1', 'Audio'),
           { id: 'visual-1', type: 'visual', name: 'Scenes', clips: [] },
         ],
       },
+      plugins: [], // linked .gan surfaces: { id, name, path, controls: [{ id, name, kind }] }
       assignments: defaultAssignments(),
       midiOverrides: {},
     },
+  };
+}
+
+// An audio track: clips, a live effect chain, an offline VST chain played as
+// a wet/dry mix, and regions — sections of the track where an effect
+// parameter takes a value (the "effect on a section" of the brief).
+function defaultAudioTrack(id, name) {
+  return {
+    id: id || uid('t'),
+    type: 'audio',
+    name: name || 'Audio',
+    gain: 1,
+    muted: false,
+    solo: false,
+    clips: [],
+    fx: [],
+    vst: { plugins: [], mix: 1, renders: {} },
+    regions: [],
   };
 }
 
@@ -116,6 +149,18 @@ function parseTarget(str) {
     const at2 = key.indexOf(':');
     if (at2 < 1 || at2 === key.length - 1) return null;
     return { ns, scene: key.slice(0, at2), key: key.slice(at2 + 1) };
+  }
+  // Track targets: `track:<trackId>:gain|mute|solo|vstmix`, or
+  // `track:<trackId>:<fxEntryId>:<param|enabled>` for an entry of the chain.
+  if (ns === 'track') {
+    const parts = key.split(':');
+    if (parts.length < 2 || parts.some((p) => !p)) return null;
+    if (parts.length === 2) {
+      if (!TRACK_KEYS.includes(parts[1])) return null;
+      return { ns, track: parts[0], key: parts[1] };
+    }
+    if (parts.length === 3) return { ns, track: parts[0], fx: parts[1], key: parts[2] };
+    return null;
   }
   return { ns, key };
 }
@@ -240,8 +285,23 @@ function validateProject(input) {
   const kn = (p.sampler.knobs = { ...dp.sampler.knobs, ...(isObj(p.sampler.knobs) ? p.sampler.knobs : {}) });
   for (const k of ['master', 'cutoff', 'rate', 'send']) kn[k] = num(kn[k], 0.5, 0, 1);
 
-  // Timeline: exactly one audio track and one visual track in v1.
+  // Linked .gan surfaces — control sources for the route table.
+  const pluginIds = new Set();
+  p.plugins = (Array.isArray(p.plugins) ? p.plugins : []).filter((g) => {
+    if (!isObj(g) || typeof g.id !== 'string' || !g.id || typeof g.path !== 'string' || !g.path) return false;
+    if (pluginIds.has(g.id)) return false;
+    pluginIds.add(g.id);
+    g.name = str(g.name, g.id);
+    g.controls = (Array.isArray(g.controls) ? g.controls : [])
+      .filter((c) => isObj(c) && typeof c.id === 'string' && c.id)
+      .map((c) => ({ id: c.id, name: str(c.name, c.id), kind: str(c.kind, 'value') }));
+    return true;
+  });
+
+  // Timeline: any number of audio tracks (stems) and exactly one visual track.
   const tl = (p.timeline = { ...dp.timeline, ...(isObj(p.timeline) ? p.timeline : {}) });
+  tl.bpm = num(tl.bpm, 0, 0, 400);
+  if (!SNAPS.includes(tl.snap)) tl.snap = 'beat';
   const loop = (tl.loop = { ...dp.timeline.loop, ...(isObj(tl.loop) ? tl.loop : {}) });
   loop.enabled = bool(loop.enabled, false);
   loop.start = num(loop.start, 0, 0);
@@ -252,36 +312,94 @@ function validateProject(input) {
     .map((l) => ({ id: str(l.id, uid('loc')), name: str(l.name, ''), time: num(l.time, 0, 0), color: str(l.color, null) }));
 
   const tracks = Array.isArray(tl.tracks) ? tl.tracks : [];
-  const audioIn = tracks.find((t) => isObj(t) && t.type === 'audio') || dp.timeline.tracks[0];
+  const audioIns = tracks.filter((t) => isObj(t) && t.type === 'audio');
+  if (!audioIns.length) audioIns.push(dp.timeline.tracks[0]);
   const visualIn = tracks.find((t) => isObj(t) && t.type === 'visual') || dp.timeline.tracks[1];
-  const audioTrack = {
-    id: str(audioIn.id, 'audio-1'),
-    type: 'audio',
-    name: str(audioIn.name, 'Audio'),
-    gain: num(audioIn.gain, 1, 0, 2),
-    muted: bool(audioIn.muted, false),
-    clips: (Array.isArray(audioIn.clips) ? audioIn.clips : [])
-      .filter((c) => {
-        if (!isObj(c)) return false;
-        if (typeof c.media !== 'string' || !mediaIds.has(c.media)) {
-          warnings.push('audio clip references unknown media; dropped');
-          return false;
+  const trackIds = new Set();
+  const audioTracks = audioIns.map((audioIn, ti) => {
+    let id = str(audioIn.id, `audio-${ti + 1}`);
+    if (trackIds.has(id)) id = uid('t');
+    trackIds.add(id);
+    const fxIds = new Set();
+    const fx = (Array.isArray(audioIn.fx) ? audioIn.fx : [])
+      .filter((e) => isObj(e) && FX_KINDS[e.kind])
+      .map((e) => {
+        let eid = str(e.id, uid('fx'));
+        if (fxIds.has(eid)) eid = uid('fx');
+        fxIds.add(eid);
+        const params = fxDefaults(e.kind);
+        if (isObj(e.params)) {
+          for (const k of Object.keys(params)) {
+            if (e.params[k] !== undefined) params[k] = fxClamp(e.kind, k, e.params[k]);
+          }
         }
-        return num(c.end, 0, 0) > num(c.start, 0, 0);
-      })
-      .map((c) => ({
-        id: str(c.id, uid('c')),
-        name: str(c.name, ''),
-        media: c.media,
-        start: num(c.start, 0, 0),
-        end: num(c.end, 0, 0),
-        offset: num(c.offset, 0, 0),
-        gain: num(c.gain, 1, 0, 4),
-        fadeIn: num(c.fadeIn, 0, 0, 60),
-        fadeOut: num(c.fadeOut, 0, 0, 60),
-      }))
-      .sort((a, b) => a.start - b.start),
-  };
+        return { id: eid, kind: e.kind, enabled: bool(e.enabled, true), params };
+      });
+    const vstIn = isObj(audioIn.vst) ? audioIn.vst : {};
+    const vst = {
+      plugins: (Array.isArray(vstIn.plugins) ? vstIn.plugins : [])
+        .filter((v) => isObj(v) && typeof v.path === 'string' && v.path)
+        .map((v) => ({
+          path: v.path,
+          name: str(v.name, v.path.split(/[\\/]/).pop()),
+          params: isObj(v.params) ? v.params : {},
+          rawState: str(v.rawState, null),
+        })),
+      mix: num(vstIn.mix, 1, 0, 1),
+      renders: {},
+    };
+    if (isObj(vstIn.renders)) {
+      for (const [src, wet] of Object.entries(vstIn.renders)) {
+        if (mediaIds.has(src) && typeof wet === 'string' && mediaIds.has(wet)) vst.renders[src] = wet;
+      }
+    }
+    return {
+      id,
+      type: 'audio',
+      name: str(audioIn.name, `Audio ${ti + 1}`),
+      gain: num(audioIn.gain, 1, 0, 2),
+      muted: bool(audioIn.muted, false),
+      solo: bool(audioIn.solo, false),
+      clips: (Array.isArray(audioIn.clips) ? audioIn.clips : [])
+        .filter((c) => {
+          if (!isObj(c)) return false;
+          if (typeof c.media !== 'string' || !mediaIds.has(c.media)) {
+            warnings.push('audio clip references unknown media; dropped');
+            return false;
+          }
+          return num(c.end, 0, 0) > num(c.start, 0, 0);
+        })
+        .map((c) => ({
+          id: str(c.id, uid('c')),
+          name: str(c.name, ''),
+          media: c.media,
+          start: num(c.start, 0, 0),
+          end: num(c.end, 0, 0),
+          offset: num(c.offset, 0, 0),
+          gain: num(c.gain, 1, 0, 4),
+          fadeIn: num(c.fadeIn, 0, 0, 60),
+          fadeOut: num(c.fadeOut, 0, 0, 60),
+        }))
+        .sort((a, b) => a.start - b.start),
+      fx,
+      vst,
+      // A region engages one parameter of one chain entry (or the VST mix)
+      // while the playhead is inside it.
+      regions: (Array.isArray(audioIn.regions) ? audioIn.regions : [])
+        .filter((r) => isObj(r) && num(r.end, 0, 0) > num(r.start, 0, 0) && typeof r.fx === 'string' && typeof r.param === 'string')
+        .filter((r) => r.fx === 'vst' || fxIds.has(r.fx))
+        .map((r) => ({
+          id: str(r.id, uid('rg')),
+          start: num(r.start, 0, 0),
+          end: num(r.end, 0, 0),
+          fx: r.fx,
+          param: r.param,
+          value: num(r.value, 1),
+        }))
+        .sort((a, b) => a.start - b.start),
+    };
+  });
+  const audioTrack = audioTracks[0];
   const visualTrack = {
     id: str(visualIn.id, 'visual-1'),
     type: 'visual',
@@ -303,7 +421,8 @@ function validateProject(input) {
       })
       .sort((a, b) => a.start - b.start),
   };
-  tl.tracks = [audioTrack, visualTrack];
+  tl.tracks = [...audioTracks, visualTrack];
+  void audioTrack;
 
   // Assignments.
   const da = defaultAssignments();
@@ -330,6 +449,27 @@ function validateProject(input) {
       if (typeof a.scene !== 'string' || !a.scene) return null;
       if (typeof a.action !== 'string' || !a.action) return null;
       return { type: 'sceneAction', scene: a.scene, action: a.action };
+    }
+    if (a.type === 'stem') {
+      // A stem launched from a pad, phase-locked to the timeline grid.
+      if (typeof a.media !== 'string' || !mediaIds.has(a.media)) {
+        warnings.push(`pad ${i} launches unknown media; cleared`);
+        return null;
+      }
+      return {
+        type: 'stem',
+        media: a.media,
+        quant: QUANTS.includes(a.quant) ? a.quant : 'bar',
+        mode: a.mode === 'gate' ? 'gate' : 'toggle',
+        track: typeof a.track === 'string' && trackIds.has(a.track) ? a.track : null,
+        gain: num(a.gain, 1, 0, 4),
+      };
+    }
+    if (a.type === 'trackFx') {
+      // A held punch on one track-effect parameter (or the VST mix).
+      if (typeof a.track !== 'string' || !trackIds.has(a.track)) return null;
+      if (typeof a.fx !== 'string' || typeof a.param !== 'string' || !a.fx || !a.param) return null;
+      return { type: 'trackFx', track: a.track, fx: a.fx, param: a.param, value: num(a.value, 1) };
     }
     // fxPunch
     if (typeof a.param !== 'string' || !a.param) return null;
@@ -369,7 +509,7 @@ function validateProject(input) {
   });
 
   asg.gestures = (Array.isArray(asg.gestures) ? asg.gestures : []).filter((g) => {
-    if (!isObj(g) || !GESTURE_SOURCES.includes(g.source) || !parseTarget(g.target)) {
+    if (!isObj(g) || !isGestureSource(g.source) || !parseTarget(g.target)) {
       warnings.push('gesture route with invalid source/target dropped');
       return false;
     }
@@ -417,11 +557,15 @@ module.exports = {
   FORMAT_VERSION,
   GESTURE_SOURCES,
   SAMPLER_KNOB_TARGETS,
+  SNAPS,
+  QUANTS,
   defaultProject,
   defaultAssignments,
+  defaultAudioTrack,
   validateProject,
   legacyToSway,
   parseTarget,
+  isGestureSource,
   applyCurve,
   uid,
 };

@@ -9,7 +9,9 @@ SwayCommand is an independent project. It is not affiliated with or endorsed by 
 - A single-page cockpit: the stage renders from boot to quit while the scene bank, transport, timeline, assignment panel, and drawers work on top of it — no screen switching, no interrupted frames.
 - Twenty procedural visual scenes, each driven by audio analysis and gesture input, rendered with three.js on WebGL2 — every shader GLSL3, no autonomous rotation anywhere.
 - Projects as `.sway` files: one JSON document carrying palette, engine settings, effects snapshot, synth patch, linked media, kit, timeline, and every control assignment. Save, open, and recent files live in the project menu; ten bundled templates (three tuned to pair with Audima's official Ableton demo packs — Garage, DNB, Hip Hop) provide starting points.
-- A timeline with an audio lane (waveform clips scheduled sample-accurately on the audio clock) and a visual lane (scene clips with per-clip cut or fade entry), plus loop region, locators, and scrubbing.
+- A timeline with any number of audio tracks (stems — import or drop files and each becomes a track on the grid, tempo detected on the first import; waveform clips scheduled sample-accurately on one audio clock, the loop seam scheduled ahead so everything stays in sync) and a visual lane (scene clips with per-clip cut or fade entry), plus bar / beat grid with snap, loop region, locators, and scrubbing.
+- Live music performance out of the box: every track carries an effect chain (filter, delay, reverb, distortion, bit crusher, trance gate, phaser, flanger, chorus, tremolo, auto filter, compressor, three band eq, pan); any parameter binds to a pad (a held punch), a knob (continuous) or a gesture with one BIND; Shift+drag marks a section of a track where an effect engages by itself; stems launch from pads phase-locked to the grid.
+- theDAW's plugin world: `.gan` web-plugin surfaces from the Foundry load as route sources, and VST3 plugins are hosted through pedalboard in a sidecar and rendered onto tracks with a live wet / dry mix.
 - An on-screen Sway deck — a line-art schematic of the hardware. Click any pad, knob, button, or gesture chip to assign it: pads fire samples, scene switches, a scene's own events, or momentary effect punches; knobs drive any engine, rack, synth, kit, or scene parameter with range and curve; buttons learn a hardware CC and toggle anything; the five gesture dimensions hold modulation routes. Touching a control on the hardware selects it on screen.
 - Automated scene cycling with palette-synchronized crossfades (Auto-VJ), after the pattern established by Keijiro Takahashi's Akvj.
 - A startup system check (the Doctor) that detects the Sway over USB, including firmware-update (DFU) mode, and offers one-click remediation for missing optional components.
@@ -64,8 +66,10 @@ Build-system details: [docs/BUILD.md](docs/BUILD.md). Environment variables and 
 | `Space` | Crossfade to another scene from the project pool |
 | `A` | Toggle Auto-VJ |
 | `Z X C V B N M ,` | Pads 0–7 |
-| `P` / `L` | Play or pause the timeline / toggle the loop |
-| `Delete`, `←` `→` | Remove / nudge the selected timeline clip |
+| `P` / `L` / `I` | Play or pause the timeline / toggle the loop / import stems |
+| `G` | PLUGINS drawer (`.gan` surfaces, VST3 host) |
+| `Delete`, `←` `→` | Remove / nudge the selected timeline clip or section |
+| Timeline | Drop audio files on the band (one track per stem); click a track head to edit its effects and BIND them; Shift+drag on a track marks a section for an effect |
 | `S` / `R` / `E` | Synth / rack / kit drawer |
 | `F` | Toggle fullscreen |
 | `O` | Solo view: hide the rails and bands, stage only |

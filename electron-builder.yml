@@ -18,6 +18,12 @@ files:
 
 asar: true
 
+# The VST3 sidecar is a Python script the interpreter must read from disk, so
+# it ships beside the asar rather than inside it.
+extraResources:
+  - from: src/main/vst-host.py
+    to: vst-host.py
+
 win:
   target:
     - nsis

@@ -55,7 +55,12 @@ export function createProjectStore(deps) {
     for (const t of p.timeline.tracks) {
       if (t.type !== 'audio') continue;
       for (const c of t.clips) clipIds.add(c.media);
+      // VST renders (wet media) play beside their source clips.
+      for (const wet of Object.values((t.vst && t.vst.renders) || {})) clipIds.add(wet);
     }
+    // Stems launched from pads are timeline media too: they must be decoded
+    // for the transport, not the kit.
+    for (const a of p.assignments.pads) if (a && a.type === 'stem') clipIds.add(a.media);
     const wanted = p.media.filter((m) => kitIds.has(m.id) || clipIds.has(m.id));
     state.mediaLoading = wanted.length;
     for (const m of wanted) {

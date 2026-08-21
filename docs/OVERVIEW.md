@@ -12,7 +12,7 @@ The application is one page — the cockpit — and it is always live. There is 
 | Left rail | The SCENES bank — all twenty registry scenes, with digit hints on the first nine of the active pool; a click switches the stage, a drag onto the timeline lays a clip. The AUTO group — RUN toggle, HOLD min–max seconds, FADE seconds |
 | Center | The stage canvas. The blast door covers it at boot and opens once |
 | Right rail | The assignment panel for the selected control, and the INPUT box: the analysis-source button, a level meter, and an audio-reactive band display |
-| Bottom band | The timeline: a ruler (scrub, loop region, locators), a VISUAL lane of scene clips, an AUDIO lane with waveforms, and the playhead |
+| Bottom band | The timeline: a toolbar (IMPORT, + TRACK, BPM, TAP, SNAP), a head column (SCENES, then one head per audio track with M / S), a ruler in bars and beats (scrub, loop region, locators), a VISUAL lane of scene clips, one lane per audio track with waveforms and effect sections, and the playhead |
 | Below the band | The Sway deck: a stroke line-art schematic of the hardware. Clicking any control on it — or touching the control on the hardware, with FOLLOW on — selects it for assignment |
 
 Every region around the stage is adjustable (`src/renderer/ui/layout.js`). Thin grips on the inner edge of each rail, the top edge of the timeline band and of the deck, and the seam between the assignment panel and the INPUT box drag to resize; double-clicking a grip restores that dimension's default. A chevron chip in each region's top corner collapses it to a thin strip — a rail to an 18 px column, a band to its ruler line or an 18 px bar, a right-rail panel to its header line — and expands it again at the size it had. Sizes and collapsed states persist across sessions in the settings file (`layout` key) and compose with solo view: `O` hides everything, and the collapsed states are still there when it returns.
@@ -47,7 +47,9 @@ The Sway is optional at every point. All Sway controls have mouse, keyboard, and
 | template | A read-only bundled project (`projects/templates/*.sway`) reachable from the project menu; the former factory presets. |
 | assignment | What a control does: a pad action (a sample, a scene switch, a scene event, an effect punch), a knob target, a button toggle, or a gesture route. Targets span the engine, the effects rack, the synth, the kit, and any event or parameter a scene declares. Stored in the project. See [STUDIO.md](STUDIO.md). |
 | router | The single dispatch point between the control surface and everything playable (sampler, synth, engine, effects rack, transport): `src/renderer/control/router.js`. |
-| transport | Timeline playback: audio clips scheduled on the `AudioContext` clock, visual clips fired at the router. `src/renderer/audio/transport.js`. |
+| transport | Timeline playback: audio clips on any number of tracks scheduled on the one `AudioContext` clock, each track through its live effect chain, visual clips fired at the router, stems launched from pads on the grid. `src/renderer/audio/transport.js`. |
+| track | One audio lane of the timeline: clips, a live effect chain, a rendered VST3 chain with a wet / dry mix, and sections (regions that engage an effect parameter). See [STUDIO.md](STUDIO.md#tracks-effects-and-sections). |
+| `.gan` | GANTASMO's portable web-plugin (a control surface from theDAW's Foundry); loads into the PLUGINS drawer and contributes route sources. See [STUDIO.md](STUDIO.md#plugins-gan-surfaces-and-vst3). |
 | factory map | The Sway's default MIDI assignments, recovered from Audima's own artifacts. See [SWAY_INTEGRATION.md](SWAY_INTEGRATION.md). |
 | control state | The normalized input snapshot (XY, gestures, knobs, pads) shared between the MIDI layer and the engine. |
 | Auto-VJ | The scheduler that holds a scene for a randomized interval, then crossfades to another scene from the project pool. The AUTO group in the left rail exposes it. |

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; media-src 'self' mediastream:" />
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; media-src 'self' mediastream:; frame-src gan:; worker-src 'self'" />
   <title>SwayCommand</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
@@ -29,6 +29,7 @@
         <button class="cham" data-drawer="synth" title="S">SYNTH</button>
         <button class="cham" data-drawer="rack" title="R">RACK</button>
         <button class="cham" data-drawer="kit" title="E">KIT</button>
+        <button class="cham" data-drawer="plugins" title="G">PLUGINS</button>
         <button class="cham" id="btn-docs" title="D">DOCS</button>
         <button class="cham" id="btn-help" title="H">HELP</button>
       </nav>
@@ -80,10 +81,29 @@
     </aside>
 
     <section id="timeline">
-      <canvas id="tl-ruler"></canvas>
-      <div id="tl-visual" class="tl-lane" data-lane="visual"></div>
-      <canvas id="tl-audio"></canvas>
-      <div id="tl-playhead"></div>
+      <div id="tl-bar">
+        <button class="chip" id="tl-import" title="Import audio — each file becomes a stem on its own track (I)">IMPORT</button>
+        <button class="chip" id="tl-addtrack" title="Add an empty track">+ TRACK</button>
+        <label class="tl-field">BPM <input type="number" id="tl-bpm" min="0" max="400" step="0.1" placeholder="—"></label>
+        <button class="chip" id="tl-tap" title="Tap the tempo">TAP</button>
+        <label class="tl-field">SNAP <select id="tl-snap">
+          <option value="bar">bar</option>
+          <option value="beat" selected>beat</option>
+          <option value="half">1/2</option>
+          <option value="quarter">1/4</option>
+          <option value="off">off</option>
+        </select></label>
+        <span id="tl-hint"></span>
+      </div>
+      <div id="tl-body">
+        <div id="tl-heads"></div>
+        <div id="tl-lanes">
+          <canvas id="tl-ruler"></canvas>
+          <div id="tl-visual" class="tl-lane" data-lane="visual"></div>
+          <canvas id="tl-audio"></canvas>
+          <div id="tl-playhead"></div>
+        </div>
+      </div>
     </section>
 
     <section id="swaydeck"></section>
@@ -120,7 +140,27 @@
           <span class="panel-note" id="kit-note"></span>
         </div>
         <ul class="sample-list" id="sample-list"></ul>
-        <p class="panel-note">Select a sample, then click a pad on the deck to place it. Drag one onto the timeline to lay a backing track. Pad settings live in the pad's panel on the right.</p>
+        <p class="panel-note">Select a sample, then click a pad on the deck to place it. Drag one onto a timeline track to lay it as a clip. Pad settings live in the pad's panel on the right.</p>
+      </div>
+      <div id="deck-plugins" hidden>
+        <div class="deck-controls">
+          <button class="btn btn-primary btn-small" id="btn-gan-load">LOAD .gan</button>
+          <span class="panel-note" id="gan-note"></span>
+        </div>
+        <ul class="sample-list" id="gan-list"></ul>
+        <div class="gan-stage" id="gan-stage" hidden>
+          <div class="kit-label"><span id="gan-stage-name"></span><button class="btn btn-ghost btn-small" id="btn-gan-close">✕</button></div>
+          <iframe id="gan-frame" title="plugin surface" sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock"></iframe>
+        </div>
+        <p class="panel-note">A .gan is a control surface from theDAW’s Foundry. Open one and its knobs, pads and XY fields become route sources: click a control in the list (or move it on the surface) and add routes in the panel on the right.</p>
+        <div class="kit-label" style="margin-top:14px">VST3 <span class="pill pill-dim" id="vst-pill">—</span></div>
+        <div class="deck-controls">
+          <button class="btn btn-ghost btn-small" id="btn-vst-rescan">RESCAN</button>
+          <button class="btn btn-ghost btn-small" id="btn-vst-python">PYTHON…</button>
+          <span class="panel-note" id="vst-note"></span>
+        </div>
+        <ul class="sample-list" id="vst-list"></ul>
+        <p class="panel-note">VST3 plugins are hosted through pedalboard in a sidecar and rendered onto a track: select a track on the timeline, add plugins under VST, press RENDER, and ride the wet/dry mix from any pad or knob.</p>
       </div>
     </div>
   </aside>
@@ -150,8 +190,9 @@
           <tr><td>Pads · knobs · buttons</td><td>fire whatever the deck shows — click any control on the deck, or touch it on the hardware, to change its assignment</td></tr>
           <tr><td>No Sway</td><td>mouse = hand · click = press · wheel = pulse · <b>Z X C V B N M ,</b> = pads</td></tr>
           <tr><td><b>1–9</b> · <b>Space</b> · <b>A</b></td><td>pool scene · next scene · auto rotation</td></tr>
-          <tr><td><b>P</b> · <b>L</b></td><td>play/pause · loop</td></tr>
-          <tr><td><b>S</b> · <b>R</b> · <b>E</b></td><td>synth · rack · kit</td></tr>
+          <tr><td><b>P</b> · <b>L</b> · <b>I</b></td><td>play/pause · loop · import stems</td></tr>
+          <tr><td><b>S</b> · <b>R</b> · <b>E</b> · <b>G</b></td><td>synth · rack · kit · plugins</td></tr>
+          <tr><td>Timeline</td><td>drop audio files onto it (one track per stem) · click a track head to edit its effects and bind them · Shift+drag on a track marks a section for an effect</td></tr>
           <tr><td><b>D</b> · <b>K</b> · <b>F</b> · <b>O</b></td><td>docs · MIDI monitor · fullscreen · solo view</td></tr>
           <tr><td><b>Esc</b></td><td>closes the topmost panel, then clears the selection</td></tr>
         </table>
