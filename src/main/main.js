@@ -67,26 +67,6 @@ function writeSettings(patch) {
   return merged;
 }
 
-function projectsDir() {
-  // package root in dev; resources/app.asar root when packaged
-  return path.join(__dirname, '..', '..', 'projects');
-}
-
-function listProjects() {
-  const dir = projectsDir();
-  const index = JSON.parse(fs.readFileSync(path.join(dir, 'index.json'), 'utf8'));
-  return index.order
-    .map((id) => {
-      try {
-        return JSON.parse(fs.readFileSync(path.join(dir, `${id}.json`), 'utf8'));
-      } catch (err) {
-        console.error(`[projects] failed to load ${id}:`, err.message);
-        return null;
-      }
-    })
-    .filter(Boolean);
-}
-
 // --- audio files ------------------------------------------------------------
 // Stems and one-shots are chosen through the OS file dialog and read in the
 // main process; the renderer receives raw bytes and decodes them itself. The
@@ -171,9 +151,12 @@ function readDoc(id) {
 }
 
 function createWindow() {
+  // Verification hook: AKSWAYJ_WINDOW=960x600 forces an initial size so the
+  // narrow-window layout can be screenshot-tested headlessly.
+  const sizeOverride = /^(\d+)x(\d+)$/.exec(process.env.AKSWAYJ_WINDOW || '');
   win = new BrowserWindow({
-    width: 1440,
-    height: 900,
+    width: sizeOverride ? Number(sizeOverride[1]) : 1440,
+    height: sizeOverride ? Number(sizeOverride[2]) : 900,
     minWidth: 960,
     minHeight: 600,
     backgroundColor: '#05060a',
@@ -292,8 +275,6 @@ app.whenReady().then(() => {
         return { ok: false, detail: `Unknown fix: ${fixId}` };
     }
   });
-
-  ipcMain.handle('projects:list', () => listProjects());
 
   // --- .sway project files ---
   ipcMain.handle('project:openDialog', async () => {

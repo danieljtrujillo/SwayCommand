@@ -1184,6 +1184,7 @@ async function main() {
     openDocs,
     renderPads: refreshDeck,
     renderSamples,
+    renderTimeline: () => ui.timeline.render(),
     transport: state.transport,
     projectStore: state.projectStore,
     router: state.router,

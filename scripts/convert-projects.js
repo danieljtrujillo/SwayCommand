@@ -11,7 +11,12 @@ const root = path.join(__dirname, '..');
 const legacyDir = path.join(root, 'projects');
 const outDir = path.join(legacyDir, 'templates');
 
-const index = JSON.parse(fs.readFileSync(path.join(legacyDir, 'index.json'), 'utf8'));
+const legacyIndex = path.join(legacyDir, 'index.json');
+if (!fs.existsSync(legacyIndex)) {
+  console.log('[convert] no legacy projects/index.json — the conversion already ran; templates/ is the output.');
+  process.exit(0);
+}
+const index = JSON.parse(fs.readFileSync(legacyIndex, 'utf8'));
 fs.mkdirSync(outDir, { recursive: true });
 
 const order = [];
@@ -25,6 +30,16 @@ for (const id of index.order) {
     continue;
   }
   const doc = legacyToSway(legacy);
+  // Right-cluster pads (8-15) come pre-assigned to the template's pool
+  // scenes as instant cuts, so a fresh project answers the hardware
+  // immediately; the left cluster stays free for samples.
+  doc.project.engine.autoVJ.pool.slice(0, 8).forEach((scene, i) => {
+    doc.project.assignments.pads[8 + i] = {
+      type: 'scene',
+      scene,
+      transition: { type: 'cut', duration: 0 },
+    };
+  });
   const outPath = path.join(outDir, `${id}.sway`);
   fs.writeFileSync(outPath, JSON.stringify(doc, null, 2) + '\n');
   order.push(id);

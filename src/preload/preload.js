@@ -17,10 +17,6 @@ contextBridge.exposeInMainWorld('akswayj', {
     },
   },
 
-  projects: {
-    list: () => ipcRenderer.invoke('projects:list'),
-  },
-
   project: {
     openDialog: () => ipcRenderer.invoke('project:openDialog'),
     saveDialog: (name) => ipcRenderer.invoke('project:saveDialog', name),

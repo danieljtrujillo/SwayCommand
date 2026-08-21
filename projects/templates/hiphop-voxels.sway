@@ -117,9 +117,30 @@
         null,
         null,
         null,
-        null,
-        null,
-        null,
+        {
+          "type": "scene",
+          "scene": "voxels",
+          "transition": {
+            "type": "cut",
+            "duration": 0
+          }
+        },
+        {
+          "type": "scene",
+          "scene": "ribbons",
+          "transition": {
+            "type": "cut",
+            "duration": 0
+          }
+        },
+        {
+          "type": "scene",
+          "scene": "nebula",
+          "transition": {
+            "type": "cut",
+            "duration": 0
+          }
+        },
         null,
         null,
         null,

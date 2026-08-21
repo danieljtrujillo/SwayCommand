@@ -119,11 +119,46 @@
         null,
         null,
         null,
-        null,
-        null,
-        null,
-        null,
-        null,
+        {
+          "type": "scene",
+          "scene": "ribbons",
+          "transition": {
+            "type": "cut",
+            "duration": 0
+          }
+        },
+        {
+          "type": "scene",
+          "scene": "valley",
+          "transition": {
+            "type": "cut",
+            "duration": 0
+          }
+        },
+        {
+          "type": "scene",
+          "scene": "lattice",
+          "transition": {
+            "type": "cut",
+            "duration": 0
+          }
+        },
+        {
+          "type": "scene",
+          "scene": "beams",
+          "transition": {
+            "type": "cut",
+            "duration": 0
+          }
+        },
+        {
+          "type": "scene",
+          "scene": "swarm",
+          "transition": {
+            "type": "cut",
+            "duration": 0
+          }
+        },
         null,
         null,
         null
