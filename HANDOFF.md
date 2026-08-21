@@ -11,13 +11,21 @@ Product documentation lives in [`docs/`](docs/) and was regenerated against this
 Version control exists. The working branch is `cockpit`; `main` holds the pre-redesign import. Recent history on `cockpit`:
 
 ```
+353d0fa Wormhole: hard-science space in three regimes; doc updates
+228b9e2 Sway and strike morph the generators: vjshader, spectra
+a6aaf47 Sway and strike morph the generators: nebula, mandelbulb, cymatic
+1c6ee2e Sway and strike morph the generators: beams, swarm, ribbons, warp
+ea3adb2 Cymatic Plate: faithful theDAW cymatics platform
+46bf7c8 Ferrofluid Orb: faithful theDAW port with real reflections
+7b3f0ea Anaglyph and mosaic in the rack; frame-wrecking knob defaults; real valley
+d0c2098 Real Quantum Lattice, HDR pipeline, per-scene UnrealBloom, shared environment
+e8856d9 Rename AKSWAYJ to SwayCommand everywhere
+709d2b3 Regenerate documentation for the cockpit; select audio clips on the band
 710fd61 Retire legacy presets; template scene pads; verification hooks
 bbe9649 Single-surface cockpit
-7e29dd8 Assignment router — one dispatch path for every control
-e2fb1b0 Transport and project store
-b42f1b7 Engine: instant cut, prewarm, ResizeObserver, frame hook, .sway apply
-dabe8a2 Add .sway project IPC surface
 ```
+
+The rename in `e8856d9` is total: product name, wordmarks, `window.swaycommand` (preload API), `window.__swaycommand` (automation handle), the `SWAYCOMMAND_*` env hooks, appId, installer artifact, launcher scripts, and every doc. The Electron userData directory follows the product name, so settings written under the old name (learned MIDI overrides, the legacy kit) did not carry over. The packaged installer in `release/` predates the rename and the visuals pass — cut a fresh one before judging installed behavior.
 
 `node_modules`, `release`, and `dist` are gitignored. Commit in small units; the pre-git era of this project lost history it never had.
 
@@ -52,6 +60,24 @@ Changes in existing modules:
 - **app.js** — rebuilt as cockpit assembly. `window.__swaycommand` is now `{ state, studio, openStudio(tab), openDocs, renderPads, renderSamples, transport, projectStore, router, selectControl, openProject, saveProject }`; `state.screen` no longer exists.
 
 Projects: the 8 legacy presets became bundled templates (`projects/templates/*.sway`, converted via `legacyToSway`), reachable from the project menu. Format reference: [docs/PROJECTS.md](docs/PROJECTS.md).
+
+---
+
+## 2b. The visuals engine pass (same day, after the docs regen)
+
+The user's directive: use the REAL effects and visuals from theDAW, make striking and swaying morph each visual's own generative parameters (never rotate-the-object responses), and put frame-wrecking effects on the knobs.
+
+**Engine (`engine.js`)** — render targets A/B/comp are now half-float (additive HDR survives), a per-scene **UnrealBloomPass** runs over the composite (`meta.bloom { strength, radius, threshold }` or a live `instance.bloom` that `update()` mutates; strength crossfades with the scene mix; skipped when absent), a **PMREM RoomEnvironment** is generated once and handed to scenes as `ctx.environment` (the reflection source that fixed the invisible chrome), and `io.strike` = max pad energy per frame is the strike dimension. Auto-VJ starts disabled at boot until a project decides (boot-race fix).
+
+**Faithful theDAW ports** (upstream at `c:\Users\Cyboman\Documents\Dev\theDAW`): `lattice.js` (full 373-node / 756-beam topology from `lib/quantumLattice.ts`, positions pouring at 0.06/frame, morphEnergy shockwave, per-shape scales and bloom multipliers; strike advances the geometry, sway morphs the filament field), `ferrofluid.js` (`cymatics/sphere-shader.ts` verbatim + RoomEnvironment + three-point rig + backdrop dome; stage luminance ~11% vs the old ~1%; strike cycles spike density, sway glides density/viscosity, press crushes to mirror chrome), `chladni.js` (`cymatics/cymatics-shader.ts` verbatim, spectral-centroid mode index, cover camera; strike jumps the nodal mode with ring-down, sway bows it), `valley.js` (`cymatics/landscape-shader.ts` verbatim + fbm plasma sun + halo + palette point light + 240-star sky; **sway crossfades the whole terrain chrome↔ferrofluid via isFerrofluid**, strike quakes the ridges, press dives between them). All carry Apache-2.0 notices with updated change statements.
+
+**Morph passes over the rest** (voxels untouched — standing constraint): beams (field spread/cross-tilt + phase reseed), swarm (murmuration↔orbiting cells + scatter shock), ribbons (silk↔coils + traveling whipcrack), nebula (fbm spectrum re-weighting + curl rotation + ignition front), mandelbulb (power 6..12 + golden-angle basin jumps), cymatic (resonance-mode lift + jump/ring-down), vjshader (preset-space morph vectors, zero-at-rest; strike kicks + seed-jumps; a Mandelbox scale <~1.6 engulfs the camera — documented in its table), spectra (log↔lin axis warp, fold comb, radial burst; strike = full-band slam through the mel machinery).
+
+**`warp.js` — the Wormhole, redesigned to the user's spec** (hard science, photoreal, one fullscreen quad): three regimes — DRIFT (blackbody starfield via octahedral cell hashing, limb-darkened G-type star with corona under bloom, faint palette nebulosity, slow coast, xy looks around), WARP (STRIKE toggles it; stars streak along great circles toward the travel direction — aberration integration over STREAK_K samples — with Doppler blue/red fore/aft; **SWAY sets velocity**, `2^((sway−0.5)·2.6)`), WORMHOLE (**press ≥ 0.7 held 0.25 s**; thin-lens deflection ~1/b bends the sky around the mouth, Einstein ring at the photon radius, the throat shows a second seed's sky inverted; the ~4.2 s transit swaps seeds — you exit somewhere else — then settles back to drift). Tuning notes: star PSF widens with magnitude and the per-star peak clamps at 1.7 or isolated hot pixels turn UnrealBloom's low mips into squares; bloom base 0.55/0.5/0.7 rising with warp/hole/flash.
+
+**Rack + knobs**: `fxrack.js` gains `anaglyph` (depth-scaled red/cyan stereo in FRAG_FINAL, counter-rotation at high drive) and `mosaic` (grouted tile quantiser in the geometry pass, per-cell brightness hash) — 38 params now, both arm-gated, free at zero. Default knob table: 1 hue (detent), 2 fade length, 3 intensity, 4 glitch, 5 anaglyph, 6 mosaic, 7 echo trails, 8 kit level; **driving any `fx:` target auto-enables the rack** (router `driveTarget` + punches). Templates regenerated with the new knob table.
+
+**Verification state**: every scene screenshot-verified individually by its author at 60 fps (A/B sway/strike pairs), plus a 14-scene sweep probe — all 60 fps. One sweep anomaly was traced to the live hardware: the physical Sway was connected and a pad strike legitimately cut scenes mid-run. **Verification discipline (user request): keep headless app launches RARE — batch probes into one run, prefer build-only checks, never fire per-tweak screenshot loops.**
 
 ---
 
@@ -107,6 +133,8 @@ No test suite. Verification drives the real app headlessly through env vars read
 - **`ELECTRON_RUN_AS_NODE` may be set in agent shells.** Electron then starts as plain Node and dies with `Cannot read properties of undefined (reading 'whenReady')`. Clear it every launch.
 - **`SWAYCOMMAND_SHOT_DELAY` must exceed the probe's own timers**, or the app quits mid-probe and prints nothing.
 - **Env vars leak between runs.** Clear `SWAYCOMMAND_AUTOPLAY` / `SWAYCOMMAND_SCENE` explicitly.
+- **Launch sparingly.** The user has asked for restraint on headless app launches: batch multiple checks into one probe, prefer `node scripts/build-renderer.js` alone for syntax-level verification, and reserve screenshots for milestones.
+- **The hardware may be live.** With the Sway connected, its pad strikes and CCs reach the router during headless runs — a scene changing "by itself" mid-probe is usually a real strike on a template-assigned pad, not a bug.
 - **Do not read the WebGL canvas by drawing it into a 2D canvas** — the renderer runs without `preserveDrawingBuffer` and reads back pure black. Use `SWAYCOMMAND_SHOT` and measure the PNG.
 
 ---
