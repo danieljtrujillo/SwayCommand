@@ -4,10 +4,15 @@
 // so the resonance figure literally re-tunes with the music. The fragment
 // shader re-evaluates the same field per pixel and lights the zero
 // crossings as hair-thin neon nodal lines over a near-black interior.
-// Beats and pads fire travelling ripples, press collapses the resonance
-// back toward a perfect sphere while the lines burn white. A second
-// back-facing shell adds the aura. Two draw calls, everything procedural.
-// See docs/SCENE_CONTRACT.md.
+// Sway is the resonance morph: it re-tunes all four mode numbers at once,
+// gliding the orb from a sparse low-order figure to a dense high-order
+// weave — the standing-wave pattern reorganises, the orb does not spin.
+// A strike (pad rising edge) is a mode jump: the whole mode stack snaps to
+// a fresh figure and the amplitude hit rings down over ~1.2 s, the way a
+// struck bell settles. Beats and pads also fire travelling ripples, press
+// collapses the resonance back toward a perfect sphere while the lines
+// burn white. A second back-facing shell adds the aura. Two draw calls,
+// everything procedural. See docs/SCENE_CONTRACT.md.
 
 export const meta = { id: 'cymatic', name: 'Cymatic Orb', mood: 'resonant' };
 
@@ -360,7 +365,10 @@ export function createScene(ctx) {
   let wtime = 0;                                // wrapped clock for the strobe
   let band = 0;                                 // aura banding phase
   let hue = 0;                                  // slow palette travel
-  let spin = 0;                                 // orb spin, driven by sway
+  let spin = 0;                                 // slow autonomous orb drift
+  let swaySm = 0.5;                             // smoothed sway -> mode morph
+  let ring = 0;                                 // strike ring-down envelope
+  let jumpPhase = 0;                            // mode-jump seed, hopped per strike
   let press = 0, flash = 0, auraScale = 1;
   let prevBeat = 0, beatCount = 0, poleSign = 1;
 
@@ -400,25 +408,66 @@ export function createScene(ctx) {
         Math.cos(drift) * ce * CAM_R);
       camera.lookAt(camTarget);
 
+      // --- pads: rising edge launches a ripple from that pad's own point on
+      // the sphere, flashes the nodal set, and strikes the resonance itself
+      // (the mode jump just below). Runs before the mode block so the jump
+      // can land on the same frame as the hit.
+      let hit = 0;
+      for (let i = 0; i < PADS; i++) {
+        const v = io.pads[i];
+        if (v > 0.1 && v > prevPads[i] + 0.05) {
+          launch(padDir[i], 0.35 + v * 0.65);
+          if (v > hit) hit = v;
+        }
+        prevPads[i] = v;
+      }
+      flash = Math.max(flash * Math.pow(0.04, dt), hit);
+
+      // --- strike: mode jump + ring-down. The jump seed hops by the golden
+      // angle so consecutive strikes never land on neighbouring figures, and
+      // the amplitude hit rings down over ~1.2 s like a struck bell.
+      // io.strike carries the winning pad's energy on the hit frame.
+      ring *= Math.pow(0.04, dt / 1.2);
+      if (hit > 0) {
+        jumpPhase = wrap(jumpPhase + 2.399963229728653);
+        ring = Math.max(ring, 0.45 + io.strike * 0.85);
+      }
+      // jump offsets ride the mode targets below; every sin vanishes at
+      // jumpPhase 0, so the orb boots on the pure band-driven figure
+      const jLo = Math.sin(jumpPhase) * 2.2;
+      const jMi = Math.sin(jumpPhase * 1.7) * 3.5;
+      const jHi = Math.sin(jumpPhase * 2.3) * 5.0;
+      const jZo = Math.sin(jumpPhase * 1.3) * 3.0;
+
       // --- mode numbers: bass picks the coarse figure, mid the middle,
-      // high the fine one. They are fractional and travel continuously, so
-      // the orb morphs between resonances rather than stepping.
-      modeLo += ((1.5 + bass * 5.5) - modeLo) * ks;
-      modeMi += ((3.0 + mid * 8.0) - modeMi) * ks;
-      modeHi += ((6.0 + high * 13.0) - modeHi) * ks;
-      modeZo += ((2.0 + io.level * 7.0) - modeZo) * ks;
+      // high the fine one, and sway is the resonance morph — it lifts all
+      // four orders at once, gliding the orb from a sparse low-order figure
+      // to a dense high-order weave. The numbers are fractional and travel
+      // continuously, so the figure morphs rather than stepping — except on
+      // a strike frame, where km goes to 1 and the jump lands as a jump.
+      swaySm += (io.gestures.sway - swaySm) * Math.min(1, dt * 1.8);
+      const lift = swaySm - 0.5;
+      const km = hit > 0 ? 1 : ks;
+      modeLo += (Math.max(0.6, 1.5 + bass * 5.5 + lift * 3.5 + jLo) - modeLo) * km;
+      modeMi += (Math.max(1.0, 3.0 + mid * 8.0 + lift * 6.0 + jMi) - modeMi) * km;
+      modeHi += (Math.max(2.0, 6.0 + high * 13.0 + lift * 9.0 + jHi) - modeHi) * km;
+      modeZo += (Math.max(1.0, 2.0 + io.level * 7.0 + lift * 5.0 + jZo) - modeZo) * km;
       u.uMode.value.set(modeLo, modeMi, modeHi, modeZo);
 
       // --- amplitudes: each band's energy is that term's contribution, with
-      // an idle floor so a silent mix still shows a slow breathing figure
+      // an idle floor so a silent mix still shows a slow breathing figure.
+      // The ring-down multiplies the whole stack: the strike swells the
+      // displacement and bleeds away, while uNorm carries the same factor so
+      // the nodal lines keep their weight through the ring.
       ampLo += ((0.10 + bass * 0.75) - ampLo) * k;
       ampMi += ((0.08 + mid * 0.55) - ampMi) * k;
       ampHi += ((0.05 + high * 0.40) - ampHi) * k;
       ampZo += ((0.06 + io.level * 0.30) - ampZo) * k;
-      u.uAmp.value.set(ampLo, ampMi, ampHi, ampZo);
+      const rs = 1 + ring * 1.1;
+      u.uAmp.value.set(ampLo * rs, ampMi * rs, ampHi * rs, ampZo * rs);
       // normalise the field by its own budget: the nodal lines then stay a
       // constant thickness instead of flooding the sphere on a quiet bar
-      u.uNorm.value = 1 / Math.max(0.35, ampLo + ampMi + ampHi + ampZo);
+      u.uNorm.value = 1 / Math.max(0.35, (ampLo + ampMi + ampHi + ampZo) * rs);
 
       // --- phases: each term drifts at its own band-driven rate, and the
       // polar phases run counter to the azimuthal ones so the figure churns
@@ -436,19 +485,6 @@ export function createScene(ctx) {
       micA = wrap(micA + dt * 1.3);
       micB = wrap(micB - dt * 0.8);
       u.uMicro.value.set(10 + high * 14, micA, micB);
-
-      // --- pads: rising edge launches a ripple from that pad's own point on
-      // the sphere and flashes the whole nodal set
-      let hit = 0;
-      for (let i = 0; i < PADS; i++) {
-        const v = io.pads[i];
-        if (v > 0.1 && v > prevPads[i] + 0.05) {
-          launch(padDir[i], 0.35 + v * 0.65);
-          if (v > hit) hit = v;
-        }
-        prevPads[i] = v;
-      }
-      flash = Math.max(flash * Math.pow(0.04, dt), hit);
 
       // --- beats: alternate between a pole shock and one thrown from the
       // last pad's position, so a run of beats never looks repetitive
@@ -489,9 +525,10 @@ export function createScene(ctx) {
       u.uNode.value = 0.02 + io.knobs[3] * 0.06 + press * 0.03 + flash * 0.03;
       u.uFlash.value = flash;
 
-      // --- sway spins the orb on its own axis (the field lives in object
-      // space, so the whole figure rides along)
-      spin = wrap(spin + dt * ((io.gestures.sway - 0.5) * 2.4 + 0.12));
+      // --- slow autonomous drift on the orb's axis. Sway stays out of it:
+      // its travel goes into the mode numbers above, which is the difference
+      // between turning a globe and re-striking a bell
+      spin = wrap(spin + dt * 0.12);
       orb.rotation.y = spin;
 
       // --- bass/beat breathe the whole radius a little

@@ -2,18 +2,22 @@
 //
 // Two instruments, two time scales:
 //
-//   PADS SWITCH THE FORMULA. A pad rising edge picks one of six distance
-//   estimators (pad index modulo six) and the switch lands as an event: a
-//   detonation flash plus a scale pulse, both CPU-side scalars with
-//   exponential decay, so the solid changes shape ON the hit instead of
-//   popping silently between frames.
+//   STRIKES JUMP THE FORMULA. A pad rising edge picks one of six distance
+//   estimators (pad index modulo six) AND hops the iteration-constant seed
+//   by the golden angle, so even a strike that lands on the same formula
+//   lands in a new basin — a visibly different fractal — under a detonation
+//   flash. Both event scalars are CPU-side with exponential decay, so the
+//   solid changes shape ON the hit instead of popping silently.
 //
 //   HANDS BEND THE FORMULA. Every continuous gesture runs through heavy
 //   exponential smoothing with long time constants (0.09 s for the treble
-//   shimmer up to 3.0 s for the hand-height offset), so press, sway and hand
-//   height drift the formula's own parameters rather than snapping them.
-//   Bass breathes the primary parameter AROUND whatever the hand set, so the
-//   solid pumps on the beat without ever fighting the player.
+//   shimmer up to 3.0 s for the hand-height offset), so the gestures drift
+//   the formula's own parameters rather than snapping them. Sway owns the
+//   primary parameter — for the bulb that is the power itself, glid across
+//   6..12, the canonical mandelbulb morph — press squeezes the secondary
+//   fold while diving the camera, and bass breathes the primary parameter
+//   AROUND whatever the hand set, so the solid pumps on the beat without
+//   ever fighting the player.
 //
 // Rays that miss still paint neon haze, striped by the active formula's
 // rotational symmetry order, so the frame keeps depth instead of falling to
@@ -58,8 +62,8 @@ const F_SYM = [8.0, 4.0, 8.0, 4.0, 3.0, 6.0];
 // --- smoothing time constants, seconds (63 % settle time).
 //     Structural parameters are slow, the camera is comparatively responsive,
 //     audio envelopes are fast enough to still read as rhythm.
-const TAU_SHAPE = 2.0;   // press  -> primary shape parameter of the formula
-const TAU_FOLD = 2.4;    // sway   -> secondary fold / asymmetry parameter
+const TAU_SHAPE = 2.0;   // sway   -> primary shape parameter (the bulb's power)
+const TAU_FOLD = 1.4;    // press  -> secondary fold / squeeze parameter
 const TAU_DETAIL = 1.2;  // pulse  -> detail (epsilon / bailout) bias
 const TAU_HEIGHT = 3.0;  // xy.y   -> slow formula offset (reshapes the solid)
 const TAU_ORBIT = 0.22;  // xy     -> camera azimuth + elevation
@@ -132,8 +136,8 @@ export function createScene(ctx) {
       uAspect: { value: ctx.width / ctx.height },
       uCamPos: { value: new THREE.Vector3(0, 0, 2.8) }, // orbit, CPU-smoothed
       uFormula: { value: 0 },      // active distance estimator, 0..5 (pads)
-      uParamA: { value: 8 },       // primary shape parameter (press + bass)
-      uParamB: { value: 0 },       // secondary fold / asymmetry (sway)
+      uParamA: { value: 8 },       // primary shape parameter (sway + bass)
+      uParamB: { value: 0 },       // secondary fold / asymmetry (press)
       uOffset: { value: new THREE.Vector3() }, // slow offset (hand height)
       uSolidScale: { value: 1 },   // world -> formula space, with scale pulse
       uRelax: { value: 0.95 },     // per-formula step under-relaxation
@@ -207,7 +211,7 @@ export function createScene(ctx) {
       // point for the pure bulb; uJuliaSel swaps it for the animated constant,
       // which is the only difference between the two formulas, so they share
       // one loop body instead of duplicating the most expensive one twice.
-      // uParamA is the exponent (6.5..9.5), uParamB twists the azimuth.
+      // uParamA is the exponent (6..12), uParamB twists the azimuth.
       float deBulb(vec3 pos) {
         vec3 z = pos;
         vec3 cc = mix(pos, uJuliaC, uJuliaSel) + uOffset;
@@ -532,8 +536,8 @@ export function createScene(ctx) {
   let el = 0;          // smoothed orbit elevation, radians
   let spin = 0;        // integrated solid spin
   let huePhase = 0;    // integrated colour-cycle phase (knob 6 sets the rate)
-  let pressSm = 0;     // slow: press -> primary shape parameter
-  let swaySm = 0.5;    // slow: sway  -> secondary fold parameter
+  let swaySm = 0.5;    // slow: sway  -> primary shape parameter (the power)
+  let pressSm = 0;     // slow: press -> secondary fold squeeze + camera dive
   let pulseSm = 0;     // slow: pulse -> detail bias
   let heightSm = 0.5;  // very slow: hand height -> formula offset
   let k3 = 0.5, k4 = 0.5, k5 = 0.5, k6 = 0.5, k7 = 0.5; // smoothed knobs 3..7
@@ -545,6 +549,7 @@ export function createScene(ctx) {
   let trans = 0;       // formula-change flash, exponential decay
   let swell = 0;       // formula-change scale pulse, exponential decay
   let hitIdx = 0;      // palette slot of the most recent pad hit
+  let basin = 0;       // iteration-constant seed phase, hopped by strikes
   const prevPads = new Float32Array(PADS); // rising-edge detection scratch
 
   const api = {
@@ -580,13 +585,21 @@ export function createScene(ctx) {
       if (padIdx >= 0) {
         deton = Math.max(deton, padMax);
         hitIdx = padIdx % 5;
+        // every strike is a phase jump: the seed phase hops by the golden
+        // angle, relocating the iteration constant (and the julia orbit) to
+        // a new basin, so the strike lands on a visibly different fractal
+        // even when the formula stays the same. Golden-angle steps never
+        // revisit a neighbouring basin two strikes running.
+        basin = (basin + 2.399963229728653) % TAU;
         const next = padIdx % FORMULAS;
         if (next !== formula) {
           formula = next;
           trans = 1;   // bright detonation flash
           swell = 1;   // brief scale pulse: the new solid inflates into place
           api.formulaName = FORMULA_NAMES[formula]; // closure, not `this`
-        }
+        } else {
+          trans = Math.max(trans, 0.55); // same formula, new basin: the jump
+        }                                // still arrives under a glow flash
       }
 
       // ---- beat: brief dolly toward the surface plus a glow spike
@@ -598,19 +611,23 @@ export function createScene(ctx) {
       levelSm = approach(levelSm, io.level, TAU_LEVEL, dt);
 
       // ---- gestures, heavily smoothed: the shape drifts, it never snaps
-      pressSm = approach(pressSm, io.gestures.press, TAU_SHAPE, dt);
-      swaySm = approach(swaySm, io.gestures.sway, TAU_FOLD, dt);
+      swaySm = approach(swaySm, io.gestures.sway, TAU_SHAPE, dt);
+      pressSm = approach(pressSm, io.gestures.press, TAU_FOLD, dt);
       pulseSm = approach(pulseSm, io.gestures.pulse, TAU_DETAIL, dt);
       heightSm = approach(heightSm, io.xy.y, TAU_HEIGHT, dt);
 
       // Normalised shape controls, mapped into each formula's own range below.
       // Smoothing happens here, in normalised space, so a formula switch
       // remaps the range instantly without a jump in the underlying gesture.
-      // Bass rides ON TOP of the gesture value: it breathes the solid around
-      // wherever the hand put it instead of overriding it.
-      const a01 = clamp01(pressSm * 0.78 + (k4 - 0.5) * 0.60 + 0.11
+      // SWAY owns the primary parameter — the formula's own shape glides
+      // across its whole travel, nothing so cheap as a lean — and press owns
+      // the secondary fold: the squeeze tightens the formula while the
+      // camera dives (below). Bass rides ON TOP of the sway value: it
+      // breathes the solid around wherever the hand put it instead of
+      // overriding it.
+      const a01 = clamp01(swaySm * 0.85 + (k4 - 0.5) * 0.60 + 0.06
                           + (bassSm - 0.28) * 0.30);
-      const b01 = clamp01(swaySm * 0.80 + (k5 - 0.5) * 0.60 + 0.10);
+      const b01 = clamp01(pressSm * 0.80 + (k5 - 0.5) * 0.60 + 0.10);
 
       // ---- per-formula parameter mapping
       let pA = 8;
@@ -631,9 +648,13 @@ export function createScene(ctx) {
         pA = 0.85 + a01 * 0.75;              // inversion radius^2
         pB = -0.22 + b01 * 0.44;             // cell offset
       } else {
-        pA = 6.5 + a01 * 3.0;                // bulb / julia exponent
+        // the canonical mandelbulb morph: sway glides the power itself, and
+        // the whole solid re-forms — lobe count, pinch, filigree — as the
+        // exponent travels. Iteration cost is exponent-independent, so the
+        // wider range is free.
+        pA = 6.0 + a01 * 6.0;                // bulb / julia exponent, 6..12
         if (formula === 2) {
-          pB = 0.0;                          // no twist: sway owns c's orbit
+          pB = 0.0;                          // no twist: press owns c's orbit
           juliaR = 0.18 + b01 * 0.55;        // julia c orbit radius
         } else {
           pB = (b01 - 0.5) * 1.8;            // azimuth twist -> asymmetry
@@ -653,19 +674,24 @@ export function createScene(ctx) {
       // silhouette flat against it.
       u.uSolidScale.value = F_SCALE[formula] * (1 + swell * 0.45);
 
-      // the julia constant walks a lissajous at the sway-set radius
+      // the julia constant walks a lissajous at the press-set radius; the
+      // basin phase shears all three component phases, so a strike relocates
+      // c to a different arc of the orbit — a different julia set
       u.uJuliaC.value.set(
-        Math.sin(t * 0.17) * juliaR,
-        Math.sin(t * 0.23 + 1.7) * juliaR * 0.92,
-        Math.cos(t * 0.13) * juliaR * 0.96,
+        Math.sin(t * 0.17 + basin) * juliaR,
+        Math.sin(t * 0.23 + 1.7 + basin * 1.7) * juliaR * 0.92,
+        Math.cos(t * 0.13 + basin * 2.3) * juliaR * 0.96,
       );
 
-      // hand height also reshapes the solid, on the slowest constant of all:
-      // it offsets the formula's constant, which is a structural change
+      // hand height still reshapes the solid on the slowest constant of all,
+      // and the basin phase adds a fixed seed displacement on top: every
+      // sin term vanishes at basin 0, so the scene boots on the pure
+      // formula, and after a strike the constant sits somewhere genuinely
+      // new until the next one moves it again
       u.uOffset.value.set(
-        Math.sin(t * 0.11) * 0.03,
-        (heightSm - 0.5) * 0.22,
-        Math.cos(t * 0.09) * 0.03,
+        Math.sin(t * 0.11 + basin) * 0.03 + Math.sin(basin * 1.9) * 0.10,
+        (heightSm - 0.5) * 0.22 + Math.sin(basin * 2.7) * 0.07,
+        Math.cos(t * 0.09 + basin * 1.3) * 0.03 + Math.sin(basin * 2.2) * 0.10,
       );
 
       // ---- hand orbits the camera: x is azimuth over a full turn, y is
@@ -679,9 +705,13 @@ export function createScene(ctx) {
       // clamped short of the poles so the look-at basis never degenerates
       el += (Math.max(-1.25, Math.min(1.25, (io.xy.y - 0.5) * 2.3)) - el) * kOrbit;
 
-      // knob 3 sets the standoff distance; the floor stays clear of BOUND so
-      // the camera can never end up inside the bounding sphere
-      const rad = (2.15 + k3 * 1.35 - dolly * 0.50 - swell * 0.10) * F_DIST[formula];
+      // knob 3 sets the standoff distance, and press dives the camera toward
+      // the surface — the squeeze is also a dive. The 1.55 floor stays clear
+      // of the 1.40 marching bound for every formula's F_DIST, so the camera
+      // can never end up inside the bounding sphere.
+      const rad = Math.max(1.55,
+        (2.15 + k3 * 1.35 - dolly * 0.50 - swell * 0.10 - pressSm * 0.50)
+        * F_DIST[formula]);
       const ce = Math.cos(el);
       u.uCamPos.value.set(
         Math.sin(az) * ce * rad,
@@ -689,8 +719,10 @@ export function createScene(ctx) {
         Math.cos(az) * ce * rad,
       );
 
-      // ---- slow idle spin, leaned by sway and pushed by loudness
-      spin += dt * (0.07 + levelSm * 0.25 + (swaySm - 0.5) * 0.35);
+      // ---- slow idle spin, pushed by loudness. Sway stays out of it: its
+      //      whole travel goes into the exponent above, where it morphs the
+      //      fractal instead of merely turning it.
+      spin += dt * (0.07 + levelSm * 0.25);
       if (spin > TAU) spin -= TAU; else if (spin < -TAU) spin += TAU;
       u.uSpin.value = spin;
 
