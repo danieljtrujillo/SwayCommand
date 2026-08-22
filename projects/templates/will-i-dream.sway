@@ -9,7 +9,7 @@
     "meta": {
       "id": "will-i-dream",
       "name": "Will I Dream",
-      "description": "The universe begins on the downbeat: dark until play, then the big bang resolves into a straight flight through deep space, set to the track. Warp rides the hand toward the right and close to the sensors; every jump ends at a new celestial object. PAD 0 big bang, PAD 1 hyperspace jump, PAD 2 wormhole, PAD 3 spawn an object, PAD 7 black hole, PAD 8 and PAD 15 bank. The rack stays off.",
+      "description": "The universe begins on the downbeat: dark until play, then the big bang resolves into a straight flight through deep space, set to the track. Warp rides the hand toward the right and close to the sensors; every jump ends at a new arrival that grows in as the star trails slow. PAD 0 big bang, PAD 1 thrust surge, PAD 2 hyperspace jump, PAD 3 spawn an object, PAD 4 wormhole end, PAD 5 tunnel end, PAD 6 wormhole pt 1, PAD 7 black hole, PAD 8 and PAD 15 bank, PAD 9 wormhole transit, PAD 10 relativistic warp. The rack stays off.",
       "author": "",
       "vibe": "lucid",
       "bpmHint": 0,
@@ -147,21 +147,33 @@
         {
           "type": "sceneAction",
           "scene": "willidream",
-          "action": "hyperspace"
+          "action": "thrust"
         },
         {
           "type": "sceneAction",
           "scene": "willidream",
-          "action": "wormhole"
+          "action": "hyperspace"
         },
         {
           "type": "sceneAction",
           "scene": "willidream",
           "action": "spawn"
         },
-        null,
-        null,
-        null,
+        {
+          "type": "sceneAction",
+          "scene": "willidream",
+          "action": "wormholeEnd"
+        },
+        {
+          "type": "sceneAction",
+          "scene": "willidream",
+          "action": "tunnelEnd"
+        },
+        {
+          "type": "sceneAction",
+          "scene": "willidream",
+          "action": "wormholePt1"
+        },
         {
           "type": "sceneAction",
           "scene": "willidream",
@@ -172,8 +184,16 @@
           "scene": "willidream",
           "action": "bankLeft"
         },
-        null,
-        null,
+        {
+          "type": "sceneAction",
+          "scene": "willidream",
+          "action": "wormhole"
+        },
+        {
+          "type": "sceneAction",
+          "scene": "willidream",
+          "action": "warp"
+        },
         null,
         null,
         null,

@@ -16,6 +16,32 @@ const { APP } = require('../shared/constants');
 
 let win = null;
 
+// --- the shader cold-compile switches ---------------------------------------
+// Both were measured on this machine with the scene harness (scripts/
+// scene-harness.js, "electronArgs" in the plan); the numbers are the FIRST DRAW
+// of Nature's Tomb and Miracle Mile, whose shaders are by far the biggest.
+//
+// GPU PROGRAM CACHE SIZE. Chromium's default program cache is a couple of
+// megabytes. These two scenes' compiled binaries do not both fit, so they
+// evicted each other and NEITHER was ever cached: a relaunch recompiled them
+// from scratch, 131 s and 99 s, every single time. Measured: with the default
+// cache, a second run of the same profile still cost 131 s / 99 s; with the
+// cache raised, 2.9 s / 1.6 s. (Alone in a profile either scene cached fine —
+// which is why this looked like a compile problem rather than an eviction one.)
+//
+// ANGLE BACKEND. On the default D3D11 backend every shader goes through fxc,
+// which fully unrolls constant-trip loops and inlines every call site; the
+// first compile of Nature's Tomb costs 132 s. ANGLE's OpenGL backend does not
+// use fxc: the same shader compiles in 12 s, and even a cache-warm first draw
+// falls from 2.9 s to 0.29 s. The trade is a small runtime cost — measured at
+// 1080p tier med, between −0.1 and +1.9 ms a frame across nine scene states,
+// worst on the heaviest ones. A hundred-second freeze on a stage is worse than
+// a millisecond a frame, so GL is the default; SWAYCOMMAND_ANGLE overrides it
+// (`d3d11` restores the old behaviour, or any backend ANGLE accepts).
+const ANGLE_BACKEND = process.env.SWAYCOMMAND_ANGLE || 'gl';
+if (ANGLE_BACKEND !== 'default') app.commandLine.appendSwitch('use-angle', ANGLE_BACKEND);
+app.commandLine.appendSwitch('gpu-program-cache-size-kb', '524288');
+
 // gan:// serves unpacked .gan web-plugins to the renderer's plugin frame; a
 // privileged scheme has to be declared before the app is ready.
 ganfile.registerScheme();

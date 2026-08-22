@@ -29,7 +29,7 @@
       "autoVJ": {
         "enabled": true,
         "pool": [
-          "warp",
+          "willidream",
           "swarm",
           "mandelbulb",
           "beams"
@@ -39,7 +39,7 @@
         "fadeTime": 2
       },
       "start": {
-        "scene": "warp"
+        "scene": "willidream"
       }
     },
     "fx": {
@@ -120,7 +120,7 @@
         null,
         {
           "type": "scene",
-          "scene": "warp",
+          "scene": "willidream",
           "transition": {
             "type": "cut",
             "duration": 0
