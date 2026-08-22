@@ -1,178 +1,132 @@
-// Weather Systems — five weather systems on one scene, one knob to pick them,
-// one knob for their strength, and a dissolve between them: a TORNADO on a
-// farm plain at dusk, a HURRICANE from orbit, a LIGHTNING cell over wet flats
-// at night, a WILDFIRE front crossing a forest at night, and a SANDSTORM wall
-// swallowing a desert city.
+// Nature's Tomb — the weather systems. A scene-private module (never
+// registered, no meta): the five systems that were the Weather Systems scene
+// — TORNADO, HURRICANE, LIGHTNING, WILDFIRE, SANDSTORM — ported whole into
+// Nature's Tomb as its weather plates, with the hurricane and the wildfire
+// raised. The factory builds the world quad and its three impostor meshes
+// and returns them with an update the Tomb drives; the Tomb owns the knob,
+// the cold open, the strikes and the dissolve between plates, and this
+// module owns everything inside the weather: the two-eye dissolve between
+// its own systems, the CPU systems (bolts as L-systems on capsules, the
+// ignition circles, the trees, the debris flecks and embers, the flashes),
+// the builds, calm.
 //
-//   COLD OPEN   The scene holds DARK-ish until the show starts — the first
-//               beat the analyser hears, the transport playing, or any pad: a
-//               calm sky over the selected system's ground, a faint cloud base
-//               breathing with the level, nothing else. Then the selected
-//               system BUILDS from nothing — the supercell thickens and the
-//               funnel grows down from its base, the bands wind in round the
-//               eye, the storm cell darkens and closes, the fire spreads from
-//               its ignition, the wall rises far out over the desert — and the
-//               opening strike fires its main event.
-//   SYSTEM      KNOB 6 (io.knobs[5]) picks it in fifths with a little
-//               hysteresis at the band edges — TORNADO, HURRICANE, LIGHTNING,
-//               WILDFIRE, SANDSTORM — and the 'system' parameter drives the
-//               same choice from any assigned control. The change is a
-//               DISSOLVE: the two systems render side by side through their
-//               own eyes for half a second and cross-fade. A system that has
-//               built stays built while another is on screen.
-//   INTENSITY   KNOB 5 (io.knobs[4]) or the 'intensity' parameter: the
-//               system's strength — how far the funnel hangs, its width, spin
-//               and rain; how tight the eye is and how fast the bands run; the
-//               bolt rate and the cell's mass; the fire's spread and flame
-//               height; the wall's height and speed.
-//   PADS        Any pad strike fires the system on screen's main event (the
-//               no-assignment fallback): TOUCHDOWN, EYEWALL, STRIKE, FLARE UP,
-//               GUST. The declared actions bind each event to any control:
-//                 strike     a cloud-to-ground bolt — in ANY system
-//                 touchdown  the funnel drops to the ground / lifts again
-//                 gust       a gust front: the wall surges, the bands race
-//                 flareUp    the fire spots ahead of itself
-//                 eyewall    the hurricane runs an eye replacement cycle
-//                 calm       everything stands down over ten seconds
+//   PLATES      The Tomb hands in which system it wants (its organism bands
+//               10..14 are LIGHTNING, TORNADO, HURRICANE, WILDFIRE,
+//               SANDSTORM) and the weight the weather as a whole has on the
+//               plate. A change of system inside the weather is the DISSOLVE
+//               Weather Systems had: both systems render through their own
+//               eyes (two camera frames in one world quad) and cross-fade
+//               over half a second, each marching a shorter step budget while
+//               it shares the frame; a change between the weather and another
+//               plate is the Tomb's 0.15 s knob dissolve, both quads drawn
+//               weighted and added.
+//   INTENSITY   The Tomb's development level — how far the funnel hangs, its
+//               width, spin and rain; how tight the eye is and how fast the
+//               bands run; the bolt rate and the cell's mass; the fire's
+//               spread and flame height; the wall's height and speed.
+//   EVENTS      mainEvent() fires the system on screen's main event (a pad on
+//               a weather plate): TOUCHDOWN, EYEWALL, STRIKE, FLARE UP, GUST.
+//               event(key) takes the declared actions — strike (a bolt in ANY
+//               system), touchdown, gust, flareUp, eyewall, calm (everything
+//               stands down over ten seconds).
 //   GESTURES    SWAY morphs one generative parameter per system — funnel
-//               tortuosity, band tightness, bolt branching, fire spread
-//               (the wind that drives it), dust density; PRESS squeezes — the
-//               funnel thins, the eye contracts and its wall steepens, the
-//               cloud base drops, the flames crush low, the wall's face
-//               steepens. The hand is the ONLY camera motion: X pans the eye,
-//               Y lifts it (the hurricane's eye rides from six hundred to
-//               eleven hundred metres up). Nothing orbits by itself.
-//   AUDIO       The cloud decks, the flames and the dust breathe with the
-//               bands (bass thickens cloud and dust, mid lifts the flames,
-//               treble drives the rain and the grit); the beat flickers the
-//               fire and the cloud-lit glow of every storm.
+//               tortuosity, band tightness, bolt branching, the wind that
+//               drives the fire, dust density; PRESS squeezes — the funnel
+//               thins, the eye contracts and its wall steepens, the cloud base
+//               drops, the flames crush low, the wall's face steepens. The
+//               hand is the ONLY camera motion: X pans the eye, Y lifts it.
+//   COLD OPEN   The Tomb's: a weather plate selected while the plate is dark
+//               shows its calm sky faintly (a thin stratus, a haze, a faint
+//               cloud base breathing with the level) and BUILDS when the show
+//               starts — the supercell thickens and the funnel grows down, the
+//               bands wind in round the eye, the cell closes, the fire spreads
+//               from its ignition, the wall rises far out — and the opening
+//               fires its main event.
 //
-//   TORNADO     A supercell over farm country at dusk: fields in strips, a
-//               road running under the storm with power poles and their wires
-//               beside it, a farm (barn, house, silo) as silhouettes, the dusk
-//               band burning on the horizon to the right. The deck is a
-//               marched slab whose noise domain FLOWS round the mesocyclone
-//               (a bounded flow-map advection, fastest at the axis) and whose
-//               texture near the axis is STRIATED — arcs wound round the
-//               rotation — so the base looks like it turns while no object
-//               rotates; a wall cloud lowers out of it round the funnel, a
-//               shelf cloud lowers on the rain side, mammatus pouches hang
-//               from the base, lightning flickers inside the cell. The funnel
-//               is a marched tube from the base to the ground — a wedge that
-//               narrows toward the ground and flares into the wall cloud at
-//               the top, its axis wandering with height by sway's tortuosity
-//               (anchored at the base, free at the ground), its surface a
-//               helical noise domain that flows round and down it (the
-//               rotating look, without rotation), lit warm on the sun side.
-//               It GROWS down from the base as the system builds and hangs
-//               lower the stronger the storm; on 'touchdown' it reaches the
-//               ground, where a debris cloud boils at the foot (a marched
-//               dust dome on the funnel's flow, plus instanced flecks lofting
-//               on a helical field, fastest near the axis). A rain curtain
-//               hangs on the shelf side; rain streaks the eye. PRESS thins
-//               the funnel.
-//   HURRICANE   The storm from orbit, the eye under the camera. The deck is a
-//               HEIGHTFIELD of cloud tops marched from above and refined by
-//               bisection — spiral rain bands on log-spiral iso-lines whose
-//               noise texture flows ALONG the bands (the domain advects about
-//               the centre at a rate that falls with radius — flow, not a
-//               turning whole), a central dense overcast, a ring of towers at
-//               the eyewall, a clear eye with the sea visible in it and the
-//               wall sloping outward going up (the stadium). The tops are
-//               shaded by their slope toward the sun and by two shadow taps
-//               toward it — the towers cast shadows across the bands — and
-//               the sea below is deep blue with sun glitter, whitecaps round
-//               the eye and the clouds' shadow on it. Intensity tightens the
-//               eye; SWAY tightens the bands; PRESS contracts the eye and
-//               steepens the wall; 'eyewall' runs an eye replacement cycle
-//               (an outer ring forms and contracts while the inner weakens and
-//               the eye fills, then clears).
-//   LIGHTNING   A night storm cell over wet flats. The cell is a finite
-//               marched deck, black underneath, lit only by the flashes
-//               inside it — its lumps and its ragged base show in every flash;
-//               the flats REFLECT the sky and the deck (a second, shorter
-//               trace of the mirrored ray, smeared by puddle noise). Bolts are
-//               CPU-built L-systems — a leader that walks from the base toward
-//               the ground with noise-jittered heading, FORKS once into a
-//               second main channel and throws branches and twigs at a rate
-//               SWAY raises, revealed top-down in the leader phase, then the
-//               RETURN STROKE: the channel jumps to full brightness, its flash
-//               lights the whole cloud belly, the ground and the rain, and it
-//               restrikes two or three times in a quarter of a second before
-//               it fades — drawn as screen-space capsules with a hot white
-//               core and a wide coloured halo. Sheet flashes (cloud-to-cloud)
-//               light the bellies between strikes; the storm strikes on its
-//               own at a rate the intensity sets and on 'strike'. PRESS
-//               lowers the base. Rain shows in the flashes. Silent.
-//   WILDFIRE    A fire front crossing forest at night. The fire is a set of
-//               ignition circles growing at the intensity's rate (SWAY is the
-//               wind, which offsets each circle downwind as it grows so the
-//               front runs ahead on the lee side and the flames lean); the
-//               FRONT is the band where the burnt radius meets the ground:
-//               flames as a marched slab of flowing noise along it, in
-//               TONGUES that rise and fall, white-hot at the root and red at
-//               the tips; a smoke column marched above to great height, lit
-//               orange from below and black against the stars; the burnt
-//               ground behind glows with embers that fade with depth; the
-//               unburnt ground ahead and the trees are lit by the front; the
-//               sky glows toward the fire. 'flareUp' spots a new ignition
-//               ahead of the front. Embers loft on instanced impostors from
-//               the front, orange and STREAKED along their motion. The trees
-//               are instanced silhouette impostors — a stand far out and big
-//               ones in the foreground — that CATCH as the front reaches
-//               them, glow, char and shrink to stumps. When the front has
-//               crossed the whole stand the fire burns out and the forest
-//               grows back for the next one. PRESS crushes the flames low;
-//               mid lifts them; the beat flickers them.
-//   SANDSTORM   A haboob coming in over a desert city — a skyline of flat
-//               roofs, towers, minarets and tents, the sun low ahead. The
-//               wall is a marched slab of density ahead of its front, five
-//               times the tallest tower at full strength: lobes roll up its face (lit on their
-//               tops by the sky, dark in their overhangs — the face's slope
-//               shades it), the base bulges forward, the rounded top rim
-//               catches the sun behind it; extinction through it is per
-//               channel so the sun dims to a RED DISK and the sky browns; the
-//               city is swallowed as the wall reaches it; sand streams across
-//               the ground toward the eye and grit streaks the eye as the
-//               wall nears. The wall advances at the intensity's rate, 'gust'
-//               throws it forward with a surge, it passes over the eye (the
-//               whole view goes to dust), and a new wall builds far out. SWAY
-//               is the dust density; PRESS steepens the face.
+//   TORNADO     As it was: a supercell over farm country at dusk — fields in
+//               strips, a road with power poles and wires, a farm and a
+//               windbreak as silhouettes, the dusk band on the horizon; a
+//               marched deck whose noise domain FLOWS round the mesocyclone
+//               (a bounded flow-map advection) and is striated near the axis,
+//               a wall cloud lowering round the funnel, a shelf cloud on the
+//               rain side, mammatus pouches, lightning in the cell; the
+//               funnel a marched wedge whose axis wanders with height by
+//               sway's tortuosity and whose surface is a helical noise domain
+//               flowing round and down it (the rotating look, no rotation);
+//               on touchdown a debris cloud boils at the foot (a marched dust
+//               dome plus instanced flecks lofting on a helical field).
+//   HURRICANE   From orbit, the eye under the camera, RAISED: the cloud tops
+//               a heightfield marched from above and refined by bisection,
+//               now with a fine CELLULAR octave in the spiral's own
+//               coordinates (elongated along the arms and drifting along them
+//               — a flow, not a turn) that reads as convective cells and
+//               streaks rather than smooth bands, whose peaks stand up as HOT
+//               TOWERS — tallest on the eyewall ring, pulsing with the bass —
+//               that the two shadow taps see, so the towers shadow the bands
+//               and the wall shadows the eye; the eye's STADIUM in terraces,
+//               the sea glittering in it on a finer facet field; LIGHTNING in
+//               the eyewall (the flashes sit under the tops and light them
+//               from within); a CIRRUS OUTFLOW canopy above the deck, thin
+//               and sun-lit, spiralling the other way and spreading outward;
+//               gaps between the bands showing the sea with the clouds'
+//               shadows on it; aerial perspective toward the limb; and a SUN
+//               TERMINATOR across the storm, so one side reads in low light
+//               where the flashes show. The log-spiral flow, the eye
+//               replacement cycle and the sun-glitter sea as before.
+//   LIGHTNING   As it was: a night cell over wet flats, the flats reflecting
+//               sky and deck through a second shorter trace of the mirrored
+//               ray, bolts as CPU L-systems (a leader that forks once and
+//               throws branches and twigs at a rate sway raises, revealed
+//               top-down, then the return stroke and its restrikes) on
+//               screen-space capsules; sheet flashes between strikes.
+//   WILDFIRE    RAISED: the flame tongues carry a third octave and their tops
+//               are RAGGED — a fine fast noise tears the tips into tatters
+//               that lift off as embers; a PYROCUMULUS stands over the front:
+//               the smoke column rising into a cauliflower cap lit orange
+//               underneath by the fire's glow SCATTERED up the column (falling
+//               off with height) and grey-white on top; HEAT SHIMMER — the
+//               view through the hot air over the front and the burnt ground
+//               is refracted, a screen-space warp of the ray by a flowing
+//               noise, strongest low over the fire; more embers, longer
+//               streaks along the wind, some lofted high in the column; SPOT
+//               FIRES — embers that land ahead of the front start small fires;
+//               FIRE WHIRLS — one or two rotating columns of flame on the
+//               front, their rotation a FLOW of the noise domain round and up
+//               the column as the funnel does it, no object rotates; CROWN
+//               FIRE on the trees — a flash running up the crown as the front
+//               reaches it, then a standing torch, then the char; litter and
+//               rock in the ground lit by the front, embers in the burnt
+//               ground at two depths; a smoke veil in the sky toward the fire.
+//               The wind (sway), the spread, the burnout / regrowth cycle as
+//               before.
+//   SANDSTORM   As it was: a haboob over a desert city — a marched slab of
+//               density ahead of its front, lobes rolling up the face, the
+//               base bulging forward, the rim catching the sun behind it,
+//               per-channel extinction so the sun dims to a red disk and the
+//               sky browns, the city swallowed as the wall reaches it, sand
+//               streaming across the ground and grit streaking the eye; gust
+//               throws it forward, it passes over the eye and a new wall
+//               builds far out.
 //
 // Nothing rotates by itself: the eyes are the hand's; the funnel's spin, the
-// mesocyclone's turn and the bands' run are flows of the noise domain; debris
-// and embers travel paths; fronts and walls advance. Four draw calls: the
-// world quad (sky, ground, sea, every marched volume and the screen rain and
-// grit), one instanced mesh of solid impostors (debris flecks and trees,
+// mesocyclone's turn, the whirls' turn and the bands' run are flows of the
+// noise domain; debris and embers travel paths; fronts and walls advance.
+// Four draw calls: the world quad (sky, ground, sea, every marched volume and
+// the screen rain and grit — drawn additively, weighted by the Tomb's plate
+// weight), one instanced mesh of solid impostors (debris flecks and trees,
 // normal-blended over the world), one of additive impostors (ember streaks),
-// and one of screen-space capsules (bolts). Live bloom rides the flashes and
-// the fire. Step budgets come off ctx.quality.tier. All colour derives from
-// io.palette, copied per frame: 0 the hot core, the cloud tops and the bolt,
-// 1 fire and dusk, 2 the cool sky, sea and cloud shade, 3 the dusk accent and
-// the flash tint, 4 dust, ash and ground — structural colour pulled toward
-// its own luminance.
-
-export const meta = {
-  id: 'weather',
-  name: 'Weather Systems',
-  mood: 'elemental',
-  controls: {
-    actions: [
-      { key: 'strike', label: 'lightning strike' },
-      { key: 'touchdown', label: 'touchdown' },
-      { key: 'gust', label: 'gust front' },
-      { key: 'flareUp', label: 'flare up' },
-      { key: 'eyewall', label: 'eyewall cycle' },
-      { key: 'calm', label: 'calm' },
-    ],
-    params: [
-      { key: 'system', label: 'system', min: 0, max: 4, default: 0 },
-      { key: 'intensity', label: 'intensity', min: 0, max: 1, default: 0.5 },
-      { key: 'morph', label: 'morph', min: 0, max: 1, default: 0 },
-      { key: 'squeeze', label: 'squeeze', min: 0, max: 1, default: 0 },
-    ],
-  },
-};
+// one of screen-space capsules (bolts). The impostors project through the
+// module's OWN perspective camera (uView / uProj) because the Tomb's scene
+// camera is orthographic. Its programs are separate from the Tomb's organism
+// quad and from the other plates (cold-compile hygiene); the heavy marches
+// keep their step budgets off ctx.quality.tier. Live bloom rides the flashes
+// and the fire and is handed back for the Tomb to weight. All colour derives
+// from io.palette, copied per frame and assigned BY ROLE so the fire is a
+// fire and the sea a sea under any palette: the hot core, the cloud tops and
+// the bolt take the palette's warmest stop lifted to white, fire and dusk its
+// warmest, the cool sky, sea and cloud shade its coolest, the dusk accent and
+// the flash tint its second warmest, dust, ash and ground its second warmest
+// greyed toward its own luminance.
 
 const SYSTEMS = 5; // tornado, hurricane, lightning, wildfire, sandstorm
 const SYS_FADE = 0.55;
@@ -187,10 +141,11 @@ const HUR_X = 0, HUR_Z = -300;
 const L_CB = 58;
 const LIT_X = 0, LIT_Z = -240;
 // the wildfire stand
-const FIRE_MAX = 6;        // ignition circles
+const FIRE_MAX = 8;        // ignition circles (the spot fires need the room)
 const FIRE_W = 3;          // the front's width
 const STAND_Z0 = -300, STAND_Z1 = -40, STAND_X = 140;
 const FORE_TREES = 26;     // the big trees in the foreground
+const WHIRLS = 2;          // fire whirls on the front
 // the sandstorm
 const WALL_FAR = -950;
 const WALL_DEPTH = 190;
@@ -241,7 +196,12 @@ const GLSL_COMMON = /* glsl */ `
 const WORLD_FRAG = /* glsl */ `
   ${GLSL_COMMON}
   uniform vec2 uRes;
-  uniform float uTanHalf, uTime, uIntensity, uOpen, uLevel;
+  // the step budgets as UNIFORMS: a constant trip count is fully unrolled by
+  // the D3D compiler (and render() is inlined twice, once per eye), which is
+  // what made the cold first draw take a minute; a uniform bound is a loop
+  uniform ivec4 uStepsA;   // deck, hurricane, funnel, wall
+  uniform ivec4 uStepsB;   // flames (×2 + 2), smoke (+6), reflection, -
+  uniform float uTanHalf, uTime, uIntensity, uOpen, uLevel, uWeight;
   uniform vec4 uBreath;   // bass, mid, high, beat pulse
   uniform int uSysA, uSysB;
   uniform vec2 uW;
@@ -265,6 +225,8 @@ const WORLD_FRAG = /* glsl */ `
   uniform vec4 uFireP;    // storm, wind, press, intensity
   uniform vec4 uFire[${FIRE_MAX}];   // cx, cz, radius, alive
   uniform int uFireN;
+  uniform vec4 uFireW;    // whirl strength (max), -, -, -
+  uniform vec4 uWhirl[${WHIRLS}];    // x, z, radius, strength
   // sandstorm
   uniform vec4 uSand;     // wall z, height, density, press
   uniform vec4 uSandB;    // gust surge, storm, grit, intensity
@@ -275,15 +237,20 @@ const WORLD_FRAG = /* glsl */ `
   #define T_TH 16.0
   #define H_CB 40.0
   #define H_TOP 130.0
+  #define H_CIR 212.0
   #define L_CB ${L_CB.toFixed(1)}
   #define L_TH 32.0
   #define F_H 9.0
-  #define S_H 150.0
+  #define S_H 190.0
+  #define S_CAP0 70.0
+  #define S_CAP1 130.0
   #define W_DEPTH ${WALL_DEPTH.toFixed(1)}
   #define CITY_Z ${CITY_Z.toFixed(1)}
+  #define FIRE_W ${FIRE_W.toFixed(1)}
   #define T_SUN vec3(0.6212, 0.0601, -0.7815)
   #define T_SUNH vec2(0.6224, -0.7827)
   #define H_SUN vec3(0.4924, 0.7385, -0.4605)
+  #define H_DAY vec2(0.80, 0.60)
   #define S_SUN vec3(0.1798, 0.1698, -0.9689)
 
   // the flashes: point lights with a soft 1/r² falloff, no shadowing
@@ -415,7 +382,7 @@ const WORLD_FRAG = /* glsl */ `
     float t0 = max((y0 - ro.y) / rd.y, 0.0), t1 = (y1 - ro.y) / rd.y;
     if (t1 <= t0) return res;
     t1 = min(t1, t0 + 900.0);
-    float nS = max(floor(float(DECK_STEPS) * gStepK), 4.0);
+    float nS = max(floor(float(uStepsA.x) * gStepK), 4.0);
     float dtv = (t1 - t0) / nS;
     vec3 p = ro + rd * (t0 + dtv * jit);
     float T = 1.0; vec3 acc = vec3(0.0);
@@ -427,7 +394,7 @@ const WORLD_FRAG = /* glsl */ `
     // the warm light; the rest of the base is cool grey-blue, darkest under
     // the mesocyclone
     float sunSide = 0.5 + 0.5 * dot(rd, T_SUN);
-    for (int i = 0; i < DECK_STEPS; i++) {
+    for (int i = 0; i < uStepsA.x; i++) {
       if (float(i) >= nS) break;
       float d = torDens(p);
       if (d > 0.002) {
@@ -459,7 +426,7 @@ const WORLD_FRAG = /* glsl */ `
     if (abs(rd.y) > 1e-4) { float ta = -ro.y / rd.y, tb = (T_CB - ro.y) / rd.y; t0 = max(t0, min(ta, tb)); t1 = min(t1, max(ta, tb)); }
     else if (ro.y < 0.0 || ro.y > T_CB) return res;
     if (t1 <= t0) return res;
-    float nS = max(floor(float(FUN_STEPS) * gStepK), 6.0);
+    float nS = max(floor(float(uStepsA.z) * gStepK), 6.0);
     float dtv = (t1 - t0) / nS;
     vec3 p = ro + rd * (t0 + dtv * jit);
     float T = 1.0; vec3 acc = vec3(0.0);
@@ -470,7 +437,7 @@ const WORLD_FRAG = /* glsl */ `
     vec3 wallC = grey(mix(uPal2, uPal4, 0.4), 0.5) * 0.2;
     float spinT = uTime * uTorB.z * 2.4;
     float thin = (1.0 - 0.5 * uTor.z) * (0.7 + 0.5 * uTorB.x);
-    for (int i = 0; i < FUN_STEPS; i++) {
+    for (int i = 0; i < uStepsA.z; i++) {
       if (float(i) >= nS) break;
       float yn = clamp(p.y / T_CB, 0.0, 1.0);
       vec2 ax = torAxis(p.y);
@@ -609,8 +576,11 @@ const WORLD_FRAG = /* glsl */ `
   }
 
   // ============================================================== HURRICANE
-  // the cloud tops as a field over the sea: coverage (0 clear .. ~2 at the
-  // eyewall towers) and the top height that follows it
+  // the terminator runs across the storm: the side toward H_DAY is day, the
+  // far side night, so one half reads in low light where the flashes show
+  float hurDay(vec2 xz) { vec2 rel = xz - uHurC; return clamp(0.55 + dot(rel, H_DAY) / (uHur.x * 5.5), 0.06, 1.0); }
+  // the cloud tops as a field over the sea: coverage (0 clear .. ~2.4 at the
+  // eyewall's hot towers) and the top height that follows it
   float hurCov(vec2 xz) {
     vec2 rel = xz - uHurC;
     float r = max(length(rel), 1.0);
@@ -629,12 +599,16 @@ const WORLD_FRAG = /* glsl */ `
     // the convective texture: broad cells that flow along the bands, finer
     // cells on them, streaks drawn along the arms
     float n = flowNoise2(rel, om, 0.008) * 0.55 + 0.45 * vnoise2(rel * 0.022 + 3.1);
-    float cdo = smoothstep(eyeR * 3.4, eyeR * 1.3, r);
-    float reach = smoothstep(eyeR * 9.5, eyeR * 2.5, r);
+    float cdo = smoothstep(eyeR * 2.8, eyeR * 1.3, r);
+    float reach = smoothstep(eyeR * 10.5, eyeR * 2.2, r);
     float body = cdo * 1.2 + arm * reach * 1.15 + 0.15 * reach;
     float cov = body * (n * 1.6 - 0.25) + cdo * 0.35;
-    // the stadium: the wall slopes outward going up; press steepens it
+    // the stadium: the wall slopes outward going up, in TERRACES (steps cut
+    // into the slope between the eye and the wall's crest); press steepens it
     float eyeIn = smoothstep(eyeR * (0.96 - 0.08 * uHurB.z), eyeR * (1.14 - 0.1 * uHurB.z), r);
+    float ter = smoothstep(0.35, 0.65, 0.5 + 0.5 * sin(r / eyeR * 44.0));
+    float terZone = smoothstep(eyeR * 0.9, eyeR * 1.0, r) * smoothstep(eyeR * 1.45, eyeR * 1.2, r);
+    eyeIn *= 1.0 - 0.22 * ter * terZone;
     float wall = exp(-pow((r - eyeR * 1.18) / (eyeR * 0.28), 2.0)) * 1.1;
     if (uHur.w > 0.0) {
       // eye replacement: an outer ring forms and contracts while the inner weakens
@@ -647,10 +621,20 @@ const WORLD_FRAG = /* glsl */ `
       eyeIn = mix(eyeIn, 1.0, 0.6 * sn);
     }
     cov = (cov + wall * (0.7 + 0.5 * n)) * eyeIn;
+    // convective cells and HOT TOWERS: a fine cellular octave in the spiral's
+    // own coordinates — elongated along the arms and drifting along them (a
+    // flow, not a turn) — whose peaks stand up as towers, tallest on the
+    // eyewall ring, pulsing with the bass
+    // (sampled on a circle in the spiral phase, so there is no seam where the
+    // angle wraps)
+    float cellN = vnoise3(vec3(cos(s) * 4.0, sin(s) * 4.0, log(r) * 9.0 - uTime * 0.07) + 2.7);
+    float ring = exp(-pow((r - eyeR * 1.22) / (eyeR * 0.36), 2.0));
+    float tower = smoothstep(0.56, 0.86, cellN) * (0.45 + 1.3 * ring) * (1.0 + 0.5 * uBreath.x);
+    cov += (0.30 * cellN * cellN + 0.65 * tower) * smoothstep(0.12, 0.5, cov) * eyeIn;
     cov = cov * storm + (1.0 - storm) * 0.3 * (n * 1.6 - 0.55);  // calm: a thin haze
     return max(cov, 0.0);
   }
-  float hurH(float cov) { return H_CB + (H_TOP - H_CB) * min(cov, 1.7) / 1.4; }
+  float hurH(float cov) { return H_CB + (H_TOP - H_CB) * min(cov, 2.4) / 1.4; }
   // the tops' texture: streaks drawn along the arms and finer cells on them
   float hurTex(vec2 xz) {
     vec2 rel = xz - uHurC;
@@ -658,22 +642,42 @@ const WORLD_FRAG = /* glsl */ `
     float phi = atan(rel.y, rel.x);
     float b = mix(0.30, 0.16, uHur.y);
     float s = log(r / uHur.x) / b - phi;
-    return 0.6 * vnoise2(vec2(s * 3.0, log(r) * 3.0 - uTime * 0.1)) + 0.4 * vnoise2(rel * 0.06 + vec2(uTime * 0.05, 0.0));
+    return 0.6 * vnoise3(vec3(cos(s) * 3.0, sin(s) * 3.0, log(r) * 3.0 - uTime * 0.1)) + 0.4 * vnoise2(rel * 0.06 + vec2(uTime * 0.05, 0.0));
+  }
+  // lightning in the eyewall: the flashes sit under the tops and light them
+  // from within — a local glow through the cloud, on top of the point light
+  vec3 hurFlashGlow(vec3 p) {
+    float s = 0.0;
+    for (int i = 0; i < ${FLASHES}; i++) {
+      vec4 f = uFlash[i];
+      if (f.w > 0.001) { vec3 d = p - f.xyz; s += f.w * exp(-dot(d, d) / 2600.0) * 1.8; }
+    }
+    return uFlashCol * s;
   }
   vec3 hurSea(vec3 hp, vec3 rd) {
+    float day = hurDay(hp.xz);
     float n = vnoise2(hp.xz * 0.008 + uTime * 0.02);
-    vec3 c = grey(uPal2, 0.05) * 0.09 * (0.75 + 0.4 * n);
+    vec3 c = grey(uPal2, 0.05) * 0.09 * (0.75 + 0.4 * n) * (0.25 + 0.75 * day);
     // the sun's glitter: a broad lobe on a gentle swell
     float g1 = vnoise2(hp.xz * 0.004 + uTime * 0.03), g2 = vnoise2(hp.xz * 0.0045 + 9.0 - uTime * 0.025);
     vec3 nrm = normalize(vec3((g1 - 0.5) * 0.25, 1.0, (g2 - 0.5) * 0.25));
     float spec = pow(max(dot(reflect(rd, nrm), H_SUN), 0.0), 10.0);
-    c += mix(uPal0, vec3(1.0), 0.6) * spec * 0.5;
+    c += mix(uPal0, vec3(1.0), 0.6) * spec * 0.5 * day;
     float r = length(hp.xz - uHurC);
+    // the sea glittering in the eye: a finer facet field inside the stadium
+    float inEye = smoothstep(uHur.x * 1.1, uHur.x * 0.6, r);
+    if (inEye > 0.01) {
+      float g3 = vnoise2(hp.xz * 0.03 + uTime * 0.12), g4 = vnoise2(hp.xz * 0.033 + 4.0 - uTime * 0.1);
+      vec3 n2 = normalize(vec3((g3 - 0.5) * 0.5, 1.0, (g4 - 0.5) * 0.5));
+      float sp2 = pow(max(dot(reflect(rd, n2), H_SUN), 0.0), 40.0);
+      c += mix(uPal0, vec3(1.0), 0.8) * sp2 * 0.9 * inEye * day;
+    }
     float caps = smoothstep(0.6, 0.8, vnoise2(hp.xz * 0.05 + uTime * 0.2)) * smoothstep(uHur.x * 2.4, uHur.x * 0.7, r) * uHur.z;
-    c += vec3(0.8) * caps * 0.18;
-    // the clouds' shadow on the sea
+    c += vec3(0.8) * caps * 0.18 * (0.3 + 0.7 * day);
+    // the clouds' shadow on the sea, in the gaps between the bands
     vec2 sp = hp.xz - H_SUN.xz / H_SUN.y * 70.0;
-    c *= 1.0 - 0.55 * smoothstep(0.05, 0.6, hurCov(sp));
+    c *= 1.0 - 0.55 * smoothstep(0.05, 0.6, hurCov(sp)) * day;
+    c += flashLight(hp) * 0.15;
     return c;
   }
   vec3 hurricane(vec3 ro, vec3 rd, vec2 uv, float jit) {
@@ -683,19 +687,20 @@ const WORLD_FRAG = /* glsl */ `
     vec3 breath = uPal2 * 0.06 * uLevel;
     if (rd.y >= -1e-4) return sky;
     float tsea = -ro.y / rd.y;
-    // the cloud tops: march the heightfield from the top of the deck down to
-    // its base, refine the hit by bisection, shade by slope and shadow taps
-    float yTop = H_TOP + 30.0;
+    // the cloud tops: march the heightfield from above the tallest tower down
+    // to the deck's base, refine the hit by bisection, shade by slope and the
+    // shadow taps
+    float yTop = H_TOP + 70.0;
     float t0 = max((yTop - ro.y) / rd.y, 0.0), t1 = (H_CB - ro.y) / rd.y;
     float alpha = 0.0;
     vec3 cc = vec3(0.0);
     if (t1 > t0) {
-      float nS = max(floor(float(HUR_STEPS) * gStepK), 6.0);
+      float nS = max(floor(float(uStepsA.y) * gStepK), 6.0);
       float dtv = (t1 - t0) / nS;
       float t = t0 + dtv * 0.5, tp = t0;   // no per-pixel jitter: a surface, not a volume
       bool hit = false;
       float covH = 0.0;
-      for (int i = 0; i < HUR_STEPS; i++) {
+      for (int i = 0; i < uStepsA.y; i++) {
         if (float(i) >= nS) break;
         vec3 P = ro + rd * t;
         float c = hurCov(P.xz);
@@ -711,19 +716,26 @@ const WORLD_FRAG = /* glsl */ `
           if (Pm.y < hurH(c)) { tb = tm; covH = c; } else ta = tm;
         }
         vec3 P = ro + rd * tb;
-        float e = 14.0;
+        float e = 12.0;
         float h0 = hurH(covH);
         float cx = hurCov(P.xz + vec2(e, 0.0)), cz = hurCov(P.xz + vec2(0.0, e));
         vec3 N = normalize(vec3(h0 - hurH(cx), e, h0 - hurH(cz)));
         float ndl = max(dot(N, H_SUN), 0.0);
-        // the towers' shadows across the bands: two soft taps toward the sun
-        vec3 q1 = P + H_SUN * 16.0, q2 = P + H_SUN * 40.0;
-        float sh = clamp(1.0 - (hurH(hurCov(q1.xz)) - q1.y) / 16.0, 0.6, 1.0) * clamp(1.0 - (hurH(hurCov(q2.xz)) - q2.y) / 20.0, 0.7, 1.0);
+        // self-shadowing: two soft taps toward the sun — the towers shadow the
+        // bands, the wall shadows the eye
+        vec3 q1 = P + H_SUN * 14.0, q2 = P + H_SUN * 38.0;
+        float sh = clamp(1.0 - (hurH(hurCov(q1.xz)) - q1.y) / 14.0, 0.45, 1.0) * clamp(1.0 - (hurH(hurCov(q2.xz)) - q2.y) / 20.0, 0.6, 1.0);
         float hn = clamp((P.y - H_CB) / (H_TOP - H_CB), 0.0, 1.0);
         float tex = hurTex(P.xz);
-        vec3 lit = mix(uPal0, vec3(1.0), 0.6) * 1.2;
-        vec3 shade = grey(uPal2, 0.3) * 0.55;
-        cc = mix(shade, lit, clamp(0.35 + 0.65 * ndl * sh, 0.0, 1.0)) * (0.65 + 0.35 * hn) * (0.55 + 0.8 * tex) + flashLight(P) * 0.5 + breath;
+        float day = hurDay(P.xz);
+        vec3 lit = mix(uPal0, vec3(1.0), 0.6) * 1.05;
+        vec3 shade = grey(uPal2, 0.3) * 0.42;
+        vec3 nightC = grey(uPal2, 0.2) * 0.16;   // the night side: the tops in moonlight
+        vec3 sunlit = mix(shade, lit, clamp(0.22 + 0.78 * ndl * sh, 0.0, 1.0)) * (0.6 + 0.4 * hn) * (0.5 + 0.85 * tex);
+        cc = mix(nightC * (0.6 + 0.6 * tex) * (0.7 + 0.3 * hn), sunlit, day);
+        cc += flashLight(P) * 0.5 + hurFlashGlow(P) + breath;
+        // aerial perspective toward the limb
+        cc = mix(cc, hor * (0.3 + 0.7 * day), 1.0 - exp(-tb * 0.00035));
         alpha = smoothstep(0.08, 0.4, covH);
       }
     }
@@ -731,8 +743,23 @@ const WORLD_FRAG = /* glsl */ `
     if (alpha < 0.98) {
       vec3 hp = ro + rd * tsea;
       vec3 sea = hurSea(hp, rd);
-      sea = mix(sea, hor, 1.0 - exp(-tsea * 0.00012));
+      sea = mix(sea, hor * (0.3 + 0.7 * hurDay(hp.xz)), 1.0 - exp(-tsea * 0.00014));
       col = mix(sea, cc, alpha);
+    }
+    // the CIRRUS OUTFLOW canopy: a thin sun-lit sheet above the deck that
+    // spirals the other way (anticyclonic) and spreads outward from the top
+    if (ro.y > H_CIR) {
+      float tc = (H_CIR - ro.y) / rd.y;
+      vec3 cp = ro + rd * tc;
+      vec2 rel = cp.xz - uHurC;
+      float r = max(length(rel), 1.0);
+      float phi = atan(rel.y, rel.x);
+      float s2 = log(r / uHur.x) / -0.55 - phi;
+      float cn = 0.6 * vnoise3(vec3(cos(s2) * 2.6, sin(s2) * 2.6, log(r) * 4.5 - uTime * 0.04)) + 0.4 * vnoise2(rel * 0.012 + vec2(uTime * 0.012, 0.0));
+      float cir = smoothstep(0.46, 0.78, cn) * smoothstep(uHur.x * 0.9, uHur.x * 2.2, r) * smoothstep(uHur.x * 10.0, uHur.x * 4.0, r) * uHur.z;
+      float day = hurDay(cp.xz);
+      vec3 cirC = mix(uPal0, vec3(1.0), 0.7) * (0.35 + 0.9 * day) + flashLight(cp) * 0.2;
+      col = mix(col, cirC, cir * 0.42);
     }
     return col;
   }
@@ -767,7 +794,7 @@ const WORLD_FRAG = /* glsl */ `
     vec3 breath = uPal2 * 0.05 * uLevel;
     float fa = min(flashSum(), 3.0);
     vec3 amb = uFlashCol * fa * 0.035;
-    for (int i = 0; i < DECK_STEPS; i++) {
+    for (int i = 0; i < steps; i++) {
       if (float(i) >= nS) break;
       float d = litDens(p);
       if (d > 0.002) {
@@ -799,7 +826,7 @@ const WORLD_FRAG = /* glsl */ `
       float wet = 0.5 + 0.5 * smoothstep(0.3, 0.7, vnoise2(hp.xz * 0.06));
       rr.xz += (vnoise2(hp.xz * 0.3 + uTime * 0.5) - 0.5) * 0.06;
       rr = normalize(rr);
-      vec4 rdk = litDeck(hp, rr, REF_STEPS, jit);
+      vec4 rdk = litDeck(hp, rr, uStepsB.z, jit);
       vec3 refl = litSky(rr) * rdk.a + rdk.rgb;
       float fres = 0.2 + 0.8 * pow(clamp(1.0 + rd.y, 0.0, 1.0), 3.0);
       float gn = vnoise2(hp.xz * 0.4);
@@ -807,7 +834,7 @@ const WORLD_FRAG = /* glsl */ `
       col = ground + refl * fres * wet * 0.9;
       col = mix(col, sky, 1.0 - exp(-tg * 0.003));
     } else col = sky;
-    vec4 dk = litDeck(ro, rd, DECK_STEPS, jit);
+    vec4 dk = litDeck(ro, rd, uStepsA.x, jit);
     col = col * dk.a + dk.rgb;
     col += mix(uPal2, vec3(1.0), 0.5) * rainScreen(uv, 6.0) * uLit.w * (0.03 + 0.2 * min(fl, 1.2));
     return col;
@@ -831,22 +858,47 @@ const WORLD_FRAG = /* glsl */ `
     float d = burn(p.xz);
     float n = vnoise2(p.xz * 0.35);
     float fl = 0.85 + 0.15 * uBreath.w;
-    vec3 grass = mix(grey(uPal4, 0.4), uPal2, 0.25) * 0.09 * (0.6 + 0.6 * n);
-    vec3 ash = grey(uPal4, 0.85) * 0.035;
+    // litter and rock under the stand, lit by the front
+    float rock = smoothstep(0.62, 0.78, vnoise2(p.xz * 0.7 + 9.0));
+    float litter = 0.6 + 0.6 * vnoise2(p.xz * 2.6 + 1.0);
+    vec3 grass = mix(grey(uPal4, 0.4), uPal2, 0.25) * 0.09 * (0.6 + 0.6 * n) * litter;
+    grass = mix(grass, grey(uPal4, 0.6) * 0.14, rock * 0.6);
+    vec3 ash = grey(uPal4, 0.85) * 0.035 * (0.7 + 0.5 * rock);
+    // the burnt ground: embers at two depths — a fine crust that fades fast
+    // behind the front, and heavier logs that glow on far back into the burn
     float speck = smoothstep(0.45, 0.85, vnoise2(p.xz * 2.2 + 3.0)) * (0.6 + 0.4 * vnoise2(p.xz * 5.0 + uTime * 0.6));
-    float glowF = exp(-max(d, 0.0) / 28.0) * (0.2 + 0.8 * speck) * fl;
-    vec3 ember = uPal1 * glowF * 1.1 * smoothstep(-${FIRE_W.toFixed(1)}, 0.5, d) * uFireP.x;
+    float speck2 = smoothstep(0.55, 0.92, vnoise2(p.xz * 0.9 + 17.0)) * (0.5 + 0.5 * vnoise2(p.xz * 3.0 - uTime * 0.4));
+    float dp = max(d, 0.0);
+    float glowF = (exp(-dp / 28.0) * (0.2 + 0.8 * speck) + 0.55 * exp(-dp / 90.0) * speck2) * fl;
+    vec3 ember = uPal1 * glowF * 1.1 * smoothstep(-FIRE_W, 0.5, d) * uFireP.x;
     vec3 g = mix(grass, ash, smoothstep(-1.5, 1.5, d)) + ember;
     // the front lights the ground on both sides of itself
     float lt = 1.0 / (1.0 + d * d / 900.0);
-    g += mix(uPal1, uPal0, 0.3) * 0.6 * lt * uFireP.x * fl * (0.7 + 0.3 * n);
+    g += mix(uPal1, uPal0, 0.3) * 0.6 * lt * uFireP.x * fl * (0.7 + 0.3 * n) * (0.7 + 0.5 * rock);
     return g;
+  }
+  // a FIRE WHIRL: a rotating column of flame on the front — the rotation is a
+  // FLOW of the noise domain round and up the column, as the funnel's is; no
+  // object rotates
+  float whirlDens(vec3 p, vec4 wh, float fh) {
+    if (wh.w < 0.01) return 0.0;
+    vec2 rel = p.xz - wh.xy;
+    float rw = length(rel);
+    if (rw > wh.z * 1.6) return 0.0;
+    float yn = clamp(p.y / (fh * 2.8), 0.0, 1.0);
+    float th = atan(rel.y, rel.x);
+    float sp = th + uTime * 7.0 + yn * 9.0;
+    vec3 q = vec3(cos(sp) * 2.2, p.y * 0.45 - uTime * 6.0, sin(sp) * 2.2);
+    float n = vnoise3(q) * 0.6 + 0.4 * vnoise3(q * 2.3 + 1.7);
+    float rr = wh.z * (0.3 + 0.7 * (1.0 - yn)) * (0.6 + 0.4 * wh.w);
+    return smoothstep(rr * 1.2, rr * 0.3, rw + (n - 0.5) * rr * 0.9) * smoothstep(1.0, 0.7, yn) * wh.w;
   }
   vec4 flames(vec3 ro, vec3 rd, float tg, float jit) {
     vec4 res = vec4(0.0, 0.0, 0.0, 1.0);
     if (uFireP.x < 0.01 || abs(rd.y) < 1e-4) return res;
     float fh = F_H * (1.0 - 0.45 * uFireP.z) * (0.6 + 0.7 * uFireP.w) * (1.0 + 0.3 * uBreath.y);
-    float ta = -ro.y / rd.y, tb = (fh * 1.4 - ro.y) / rd.y;
+    float top = fh * (1.4 + 1.6 * uFireW.x);   // the slab reaches up to the whirls when they stand
+    float ta = -ro.y / rd.y, tb = (top - ro.y) / rd.y;
     float t0 = max(min(ta, tb), 0.0), t1 = min(max(ta, tb), tg);
     if (t1 <= t0) return res;
     t1 = min(t1, t0 + 420.0);
@@ -854,20 +906,23 @@ const WORLD_FRAG = /* glsl */ `
     // strides by the distance to the front (a Lipschitz bound in xz) and
     // only steps finely inside the band
     float T = 1.0; vec3 acc = vec3(0.0);
-    float w = ${FIRE_W.toFixed(1)} + 2.0 * uFireP.w;
+    float w = FIRE_W + 2.0 * uFireP.w;
     vec3 hot = mix(uPal1, uPal0, 0.3) * (1.2 + 0.4 * uBreath.w);
     vec3 warm = uPal1 * (1.0 + 0.35 * uBreath.w);
     vec3 tip = grey(mix(uPal1, uPal4, 0.5), 0.5) * 0.12;   // soot at the tips
+    vec3 core = mix(hot, vec3(1.0), 0.25);
     float horiz = max(length(rd.xz), 0.2);
     float fine = 1.2;
     float tc = t0;
     bool inBand = false;
-    for (int i = 0; i < FLAME_STEPS * 2 + 2; i++) {
+    bool whirls = uFireW.x > 0.01;
+    for (int i = 0; i < uStepsB.x; i++) {
       if (tc > t1) break;
       vec3 p = ro + rd * tc;
       float d = burn(p.xz);
       float ad = abs(d);
-      if (ad > w * 1.6) { tc += max(ad - w * 1.2, 2.0) / horiz; inBand = false; continue; }
+      bool nearW = whirls && (length(p.xz - uWhirl[0].xy) < uWhirl[0].z * 1.6 || length(p.xz - uWhirl[1].xy) < uWhirl[1].z * 1.6);
+      if (ad > w * 1.6 && !nearW) { tc += max(ad - w * 1.2, 2.0) / horiz; inBand = false; continue; }
       if (!inBand) { inBand = true; tc += fine * jit; p = ro + rd * tc; d = burn(p.xz); }
       float m = exp(-d * d / (w * w));
       vec2 lean = p.xz - vec2(uFireP.y * p.y * 0.6, 0.0);
@@ -875,11 +930,17 @@ const WORLD_FRAG = /* glsl */ `
       float tongue = vnoise2(lean * 0.45 + vec2(0.0, uTime * 0.6)) * 0.7 + 0.3 * vnoise2(lean * 1.3 - uTime * 1.1);
       float hl = fh * (0.3 + 1.3 * tongue);
       float yn = clamp(p.y / hl, 0.0, 1.0);
-      float n = fbm3(vec3(lean.x * 0.5, p.y * 0.22 - uTime * 3.0, lean.y * 0.5));
-      float dens = m * smoothstep(0.0, 0.3, n * 1.7 - 0.25 - yn * 0.95) * (1.0 - yn * 0.6) * uFireP.x * 1.5;
+      float n = fbm3c(vec3(lean.x * 0.5, p.y * 0.22 - uTime * 3.0, lean.y * 0.5));
+      // ragged tops: a fine fast noise tears the tips into tatters that lift off
+      float tear = vnoise3(vec3(lean.x * 1.8, p.y * 0.8 - uTime * 6.5, lean.y * 1.8));
+      float dens = m * smoothstep(0.0, 0.3, n * 1.75 - 0.25 - yn * 0.85 - yn * yn * 0.8 * tear) * (1.0 - yn * 0.55) * uFireP.x * 1.5;
+      float wd = 0.0;
+      if (whirls) { wd = whirlDens(p, uWhirl[0], fh) + whirlDens(p, uWhirl[1], fh); dens += wd * 1.8 * uFireP.x; }
       if (dens > 0.003) {
         float yh = clamp(p.y / fh, 0.0, 1.0);
         vec3 c = mix(mix(warm, hot, pow(1.0 - yh, 2.0) * 0.85), tip, smoothstep(0.4, 1.0, yn));
+        // the whirl's core burns hotter and holds its colour up the column
+        if (wd > 0.001) c = mix(c, core, clamp(wd * 1.8 / max(dens, 1e-3), 0.0, 1.0) * 0.8);
         float a = 1.0 - exp(-dens * fine * 0.6);
         acc += c * a * T; T *= 1.0 - a;
         if (T < 0.03) break;
@@ -899,28 +960,41 @@ const WORLD_FRAG = /* glsl */ `
     // the column stands over the front, so the march strides by the distance
     // to the front (in xz) and steps finely only inside the column
     float T = 1.0; vec3 acc = vec3(0.0);
-    float w = (${FIRE_W.toFixed(1)} + 2.0 * uFireP.w) * 2.8;
+    float w = (FIRE_W + 2.0 * uFireP.w) * 2.8;
     vec3 darkS = grey(mix(uPal4, uPal2, 0.4), 0.6) * 0.03;
     vec3 litS = uPal1 * (1.1 + 0.3 * uBreath.w);
+    vec3 capTop = grey(mix(uPal2, vec3(1.0), 0.55), 0.6) * 0.26;
     float horiz = max(length(rd.xz), 0.15);
     float fine = 13.0;
     float tc = t0 + fine * jit * 0.4;
-    for (int i = 0; i < SMOKE_STEPS + 6; i++) {
+    for (int i = 0; i < uStepsB.y; i++) {
       if (tc > t1) break;
       vec3 p = ro + rd * tc;
-      // the column leans downwind and widens going up
+      // the column leans downwind, widens going up and, past the condensation
+      // level, blossoms into the PYROCUMULUS cap
       float up = p.y - fh;
       vec2 q = p.xz - vec2(uFireP.y * up * 0.5, 0.0);
       float d = burn(q);
-      float ww = w * (1.0 + up / 50.0);
+      float capF = smoothstep(S_CAP0, S_CAP1, p.y) * (0.4 + 0.6 * uFireP.w);
+      float ww = w * (1.0 + up / 50.0) + w * 6.0 * capF;
       float ad = abs(d);
       if (ad > ww * 1.6) { tc += max(ad - ww * 1.3, 3.0) / horiz; continue; }
       float m = exp(-d * d / (ww * ww));
       float n = fbm3(vec3(q.x * 0.04, p.y * 0.03 - uTime * 0.35, q.y * 0.04));
-      float dens = m * max(n * 1.6 - 0.45, 0.0) * uFireP.x * (0.5 + uFireP.w) * smoothstep(S_H, S_H * 0.3, p.y) * smoothstep(0.0, 12.0, up) * 1.4;
+      float shape = max(n * 1.6 - 0.45, 0.0);
+      float nc = 0.0;
+      if (capF > 0.01) {
+        // cauliflower: a sharper threshold on a finer second sample
+        nc = vnoise3(vec3(q.x * 0.075, p.y * 0.06 - uTime * 0.25, q.y * 0.075) + 3.1);
+        shape = mix(shape, smoothstep(0.40, 0.62, n * 0.65 + nc * 0.5) * 1.4, capF);
+      }
+      float dens = m * shape * uFireP.x * (0.5 + uFireP.w) * smoothstep(S_H, S_H * 0.72, p.y) * smoothstep(0.0, 12.0, up) * 1.4;
       if (dens > 0.003) {
-        float near = exp(-d * d / (w * w)) * exp(-up / 22.0);
-        vec3 c = mix(darkS, litS, clamp(near, 0.0, 1.0)) + uPal1 * 0.08 * exp(-up / 70.0);
+        // the front's glow SCATTERED up the column, falling off with height; the
+        // cap's top goes grey-white where it faces the sky
+        float near = exp(-d * d / (w * w * 3.0)) * exp(-up / 34.0);
+        vec3 c = mix(darkS, litS, clamp(near * 1.3, 0.0, 1.0)) + uPal1 * 0.10 * exp(-up / 60.0);
+        c += capTop * capF * smoothstep(0.35, 0.85, nc) * smoothstep(S_CAP0, S_H, p.y);
         float a = 1.0 - exp(-dens * fine * 0.25);
         acc += c * a * T; T *= 1.0 - a;
         if (T < 0.03) break;
@@ -929,13 +1003,28 @@ const WORLD_FRAG = /* glsl */ `
     }
     return vec4(acc, T);
   }
-  vec3 wildfire(vec3 ro, vec3 rd, vec2 uv, float jit) {
-    // the sky glows toward the fire
+  vec3 wildfire(vec3 ro, vec3 rd, vec3 right, vec3 up, vec2 uv, float jit) {
+    // HEAT SHIMMER: the view through the hot air over the front and the burnt
+    // ground is refracted — a screen-space warp of the ray by a flowing noise,
+    // strongest low over the fire
+    if (uFireP.x > 0.01 && rd.y < -1e-4) {
+      float tg0 = -ro.y / rd.y;
+      float d0 = burn((ro + rd * tg0).xz);
+      float heat = uFireP.x * (exp(-abs(d0) / 30.0) + 0.35 * smoothstep(0.0, 6.0, d0) * exp(-d0 / 140.0)) * smoothstep(0.45, -0.3, uv.y) * (0.6 + 0.4 * uFireP.w);
+      if (heat > 0.002) {
+        float aspect = uRes.x / uRes.y;
+        vec2 wv = vec2(vnoise2(vec2(uv.x * 26.0 * aspect, uv.y * 9.0 + uTime * 4.5)), vnoise2(vec2(uv.x * 19.0 * aspect + 3.0, uv.y * 13.0 + uTime * 6.0))) - 0.5;
+        rd = normalize(rd + (right * wv.x + up * wv.y) * heat * 0.035);
+      }
+    }
+    // the sky glows toward the fire, under a smoke veil that dims the stars
     float toward = 0.5;
     if (uFireN > 0) { vec2 fd = uFire[0].xy - ro.xz; toward = 0.5 + 0.5 * dot(normalize(rd.xz + vec2(1e-4, 0.0)), normalize(fd + vec2(1e-4, 0.0))); }
     vec3 sky = grey(uPal2, 0.5) * 0.05 + uPal1 * 0.34 * uFireP.x * (0.8 + 0.2 * uBreath.w) * exp(-max(rd.y, 0.0) * 3.0) * (0.35 + 0.65 * toward);
+    float veil = uFireP.x * (0.25 + 0.75 * toward) * smoothstep(0.6, 0.0, rd.y) * 0.6;
     float st = h31(floor(rd * 700.0));
-    sky += vec3(0.35) * step(0.9985, st) * smoothstep(0.04, 0.2, rd.y);
+    sky += vec3(0.35) * step(0.9985, st) * smoothstep(0.04, 0.2, rd.y) * (1.0 - veil);
+    sky = mix(sky, grey(mix(uPal4, uPal1, 0.35), 0.45) * 0.07 * (0.8 + 0.2 * uBreath.w), veil * 0.7);
     float tg = rd.y < -1e-4 ? -ro.y / rd.y : 1e9;
     vec3 col;
     if (tg < 1e8) {
@@ -982,7 +1071,7 @@ const WORLD_FRAG = /* glsl */ `
     else if (rd.y < -1e-4) t0 = max(t0, (Hmax - ro.y) / rd.y);
     if (t1 <= t0) return res;
     t1 = min(t1, t0 + 600.0);
-    float nS = max(floor(float(WALL_STEPS) * gStepK), 4.0);
+    float nS = max(floor(float(uStepsA.w) * gStepK), 4.0);
     float dtv = (t1 - t0) / nS;
     vec3 p = ro + rd * (t0 + dtv * jit);
     float T = 1.0; vec3 acc = vec3(0.0);
@@ -991,7 +1080,7 @@ const WORLD_FRAG = /* glsl */ `
     vec3 skyL = grey(mix(uPal4, uPal2, 0.3), 0.2) * 0.8;
     float H = uSand.y * (0.85 + 0.3 * fbm2(vec2(p.x * 0.01 + uTime * 0.05, 0.3)));
     float n, lit;
-    for (int i = 0; i < WALL_STEPS; i++) {
+    for (int i = 0; i < uStepsA.w; i++) {
       if (float(i) >= nS) break;
       float d = sandDens(p, H, n, lit);
       if (d > 0.003) {
@@ -1063,7 +1152,7 @@ const WORLD_FRAG = /* glsl */ `
     if (s == 0) c = tornado(ro, rd, uv, jit);
     else if (s == 1) c = hurricane(ro, rd, uv, jit);
     else if (s == 2) c = lightning(ro, rd, uv, jit);
-    else if (s == 3) c = wildfire(ro, rd, uv, jit);
+    else if (s == 3) c = wildfire(ro, rd, right, up, uv, jit);
     else c = sandstorm(ro, rd, uv, jit);
     return c;
   }
@@ -1074,15 +1163,26 @@ const WORLD_FRAG = /* glsl */ `
     vec3 col = vec3(0.0);
     if (uW.x > 0.002) { gStepK = clamp(uW.x * 1.6, 0.55, 1.0); col += render(uSysA, uPosA, uFwdA, uRightA, uUpA, uv, jit) * uW.x; }
     if (uW.y > 0.002) { gStepK = clamp(uW.y * 1.6, 0.55, 1.0); col += render(uSysB, uPosB, uFwdB, uRightB, uUpB, uv, jit) * uW.y; }
-    fragColor = vec4(col * uIntensity, 1.0);
+    fragColor = vec4(col * uIntensity * uWeight, 1.0);
   }
 `;
+// the quads' vertex shader: the 2-px patch for the warm frames (see uWarm)
+const QUAD_VERT = /* glsl */ `
+  uniform float uWarm;
+  out vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = uWarm > 0.5 ? vec4(position.xy * 0.002 - 0.998, 0.0, 1.0) : vec4(position.xy, 0.0, 1.0);
+  }`;
+
 // ------------------------------------------------------------------- impostors
-// A camera-facing quad per instance. aS = (radius, alpha, shape, seed), aC =
-// (rgb, canopy) for the solids, (velocity, heat) for the glows. Solids are
-// normal-blended over the world (debris flecks, trees standing on their
-// foot); glows are additive (ember streaks stretched along their motion).
+// A camera-facing quad per instance, projected through the module's own
+// perspective camera (uView / uProj — the Tomb's scene camera is
+// orthographic). aS = (radius, alpha, shape, seed), aC = (rgb, canopy) for the
+// solids, (velocity, heat) for the glows. Shapes: 0 a fleck, 1..2 a tree (the
+// fraction is how far the crown fire has run up it), 3 an ember streak.
 const SPH_VERT = /* glsl */ `
+  uniform mat4 uView, uProj;
   in vec2 aQuad;
   in vec3 aPos;
   in vec4 aS;
@@ -1091,24 +1191,24 @@ const SPH_VERT = /* glsl */ `
   out vec4 vC;
   out float vA, vShape, vSeed;
   void main() {
-    vec4 mv = viewMatrix * vec4(aPos, 1.0);
+    vec4 mv = uView * vec4(aPos, 1.0);
     float vis = step(0.001, aS.y);
     vec2 off;
-    if (aS.z > 1.5) {
+    if (aS.z > 2.5) {
       // an ember streak: the quad stretched along the projected velocity
-      vec3 vv = (viewMatrix * vec4(aC.xyz, 0.0)).xyz;
+      vec3 vv = (uView * vec4(aC.xyz, 0.0)).xyz;
       vec2 dir = vv.xy;
       float L = length(dir);
       dir = L > 1e-4 ? dir / L : vec2(0.0, 1.0);
       vec2 nrm = vec2(-dir.y, dir.x);
-      float len = aS.x + min(L * 0.12, aS.x * 6.0);
+      float len = aS.x + min(L * 0.2, aS.x * 10.0);
       off = dir * aQuad.y * len + nrm * aQuad.x * aS.x;
     } else {
       float tree = step(0.5, aS.z);
       off = mix(aQuad * aS.x, vec2(aQuad.x * aS.x * 0.8, (aQuad.y * 0.5 + 0.5) * aS.x * 2.6), tree);
     }
     mv.xy += off;
-    gl_Position = vis > 0.5 ? projectionMatrix * mv : vec4(0.0, 0.0, 2.0, 1.0);
+    gl_Position = vis > 0.5 ? uProj * mv : vec4(0.0, 0.0, 2.0, 1.0);
     vQ = aQuad;
     vA = aS.y;
     vShape = aS.z;
@@ -1118,13 +1218,15 @@ const SPH_VERT = /* glsl */ `
 `;
 const SPH_FRAG_SOLID = /* glsl */ `
   ${GLSL_COMMON}
-  uniform float uIntensity;
+  uniform float uIntensity, uWeight;
+  uniform vec3 uPal0, uPal1, uPal2, uPal3, uPal4;
   in vec2 vQ;
   in vec4 vC;
   in float vA, vShape, vSeed;
   out vec4 fragColor;
   void main() {
     float a;
+    vec3 rgb = vC.rgb;
     if (vShape < 0.5) {
       // a fleck: a soft irregular disc
       float d = length(vQ) * (0.85 + 0.3 * vnoise2(vQ * 3.0 + vSeed * 7.0));
@@ -1141,13 +1243,21 @@ const SPH_FRAG_SOLID = /* glsl */ `
       hw *= (0.85 + 0.3 * vnoise2(vec2(y * 9.0 + vSeed * 10.0, x * 4.0))) * vC.a;
       float canopy = step(abs(x), hw) * step(0.02, vC.a);
       a = max(trunk, canopy);
+      // CROWN FIRE: as the front arrives a flash runs up the crown — a bright
+      // front climbing the canopy — and then the whole crown stands as a torch
+      float torch = fract(vShape);
+      if (torch > 0.01) {
+        float yf = 0.3 + 0.75 * torch;
+        float lit = smoothstep(yf + 0.06, yf - 0.12, y) * canopy * smoothstep(0.0, 0.2, torch);
+        rgb = mix(rgb, mix(uPal1, uPal0, 0.3) * 1.9 * (0.8 + 0.4 * vnoise2(vec2(y * 14.0 + vSeed * 9.0, x * 6.0))), lit);
+      }
     }
     if (a < 0.01) discard;
-    fragColor = vec4(vC.rgb * uIntensity, a * vA);
+    fragColor = vec4(rgb * uIntensity, a * vA * uWeight);
   }
 `;
 const SPH_FRAG_GLOW = /* glsl */ `
-  uniform float uIntensity;
+  uniform float uIntensity, uWeight;
   uniform vec3 uPal0, uPal1;
   in vec2 vQ;
   in vec4 vC;
@@ -1159,16 +1269,18 @@ const SPH_FRAG_GLOW = /* glsl */ `
     float g = exp(-d2 * 3.0) * (1.0 - d2 * 0.3);
     // an ember: orange, yellow-hot while young
     vec3 c = uPal1 * (1.3 + 0.7 * vC.a) + mix(uPal0, uPal1, 0.5) * vC.a * 0.5;
-    fragColor = vec4(c * g * vA * uIntensity, 1.0);
+    fragColor = vec4(c * g * vA * uIntensity * uWeight, 1.0);
   }
 `;
 
 // ------------------------------------------------------ capsules: the bolts
-// Endpoints in world units projected by the scene camera; the quad is built in
-// screen space so a channel is a constant-width capsule at any depth, with
-// room round the core for a wide halo. aS = (core radius px, alpha, heat, -).
+// Endpoints in world units projected by the module's camera; the quad is
+// built in screen space so a channel is a constant-width capsule at any
+// depth, with room round the core for a wide halo. aS = (core radius px,
+// alpha, heat, -).
 const CAP_VERT = /* glsl */ `
   uniform vec2 uRes;
+  uniform mat4 uView, uProj;
   in vec2 aQuad;
   in vec3 aP0;
   in vec3 aP1;
@@ -1176,7 +1288,7 @@ const CAP_VERT = /* glsl */ `
   out vec2 vQ;
   out float vLenR, vA, vHeat;
   vec2 toScreen(vec3 p, out float w) {
-    vec4 c = projectionMatrix * viewMatrix * vec4(p, 1.0);
+    vec4 c = uProj * uView * vec4(p, 1.0);
     w = c.w;
     return c.xy / max(c.w, 0.001) * vec2(uRes.x / uRes.y, 1.0) * 0.5;
   }
@@ -1201,7 +1313,7 @@ const CAP_VERT = /* glsl */ `
 `;
 const CAP_FRAG = /* glsl */ `
   uniform vec3 uBoltCol;
-  uniform float uIntensity;
+  uniform float uIntensity, uWeight;
   in vec2 vQ;
   in float vLenR, vA, vHeat;
   out vec4 fragColor;
@@ -1214,15 +1326,17 @@ const CAP_FRAG = /* glsl */ `
     float core = exp(-d2 * 0.7);
     float halo = exp(-dd * 0.42) * 0.6;
     vec3 col = vec3(1.0) * core * (1.2 + 1.3 * vHeat) + uBoltCol * halo * (0.5 + 1.0 * vHeat);
-    fragColor = vec4(col * vA * uIntensity, 1.0);
+    fragColor = vec4(col * vA * uIntensity * uWeight, 1.0);
   }
 `;
 
-export function createScene(ctx) {
-  const { THREE, quality } = ctx;
-  const tier = quality.tier;
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(FOV, ctx.width / ctx.height, 0.1, 4000);
+// S is the Tomb's per-frame state for its plates: { dt, t, weight, sys,
+// intensity, sway, press, hx, hy, opened, openNow, openS, openDim, bass,
+// mid, high, pulse, level, warm }.
+export function createWeather(THREE, ctx) {
+  const tier = ctx.quality.tier;
+  // the module's own eye: the impostors and the bolts project through it
+  const camera = new THREE.PerspectiveCamera(FOV, ctx.width / Math.max(1, ctx.height), 0.1, 4000);
 
   // step budgets and pools by tier
   const DECK_STEPS = tier === 'low' ? 8 : tier === 'high' ? 16 : 11;
@@ -1233,7 +1347,7 @@ export function createScene(ctx) {
   const SMOKE_STEPS = tier === 'low' ? 6 : tier === 'high' ? 12 : 10;
   const REF_STEPS = tier === 'low' ? 5 : tier === 'high' ? 9 : 7;
   const DEBRIS = tier === 'low' ? 320 : tier === 'high' ? 1100 : 640;
-  const EMBERS = tier === 'low' ? 260 : tier === 'high' ? 800 : 500;
+  const EMBERS = tier === 'low' ? 400 : tier === 'high' ? 1200 : 760;
   const TREES = tier === 'low' ? 100 : tier === 'high' ? 240 : 170;
   const N_SOLID = DEBRIS + TREES;
   const N_GLOW = EMBERS;
@@ -1245,15 +1359,24 @@ export function createScene(ctx) {
   const pal5 = () => Array.from({ length: 5 }, () => ({ value: new THREE.Color(1, 1, 1) }));
   const wp = pal5(), gp = pal5();
   const palUniforms = (p) => ({ uPal0: p[0], uPal1: p[1], uPal2: p[2], uPal3: p[3], uPal4: p[4] });
+  const viewU = { value: new THREE.Matrix4() };
+  const projU = { value: new THREE.Matrix4() };
+  const weightU = { value: 1 };
+  const intensityU = { value: 1 };
 
   // --- the world quad -----------------------------------------------------------------
   const flashU = new Float32Array(FLASHES * 4);
   const fireU = new Float32Array(FIRE_MAX * 4);
+  const whirlU = new Float32Array(WHIRLS * 4);
   const WU = {
     uRes: { value: new THREE.Vector2(ctx.width, ctx.height) },
     uTanHalf: { value: Math.tan((FOV * Math.PI) / 360) },
+    uStepsA: { value: new THREE.Vector4(DECK_STEPS, HUR_STEPS, FUN_STEPS, WALL_STEPS) },
+    uStepsB: { value: new THREE.Vector4(FLAME_STEPS * 2 + 2, SMOKE_STEPS + 6, REF_STEPS, 0) },
     uTime: { value: 0 },
-    uIntensity: { value: 1 },
+    uIntensity: intensityU,
+    uWeight: weightU,
+    uWarm: { value: 1 },
     uOpen: { value: 0 },
     uLevel: { value: 0 },
     uBreath: { value: new THREE.Vector4() },
@@ -1275,6 +1398,8 @@ export function createScene(ctx) {
     uFireP: { value: new THREE.Vector4(0, 0, 0, 0.5) },
     uFire: { value: fireU },
     uFireN: { value: 0 },
+    uFireW: { value: new THREE.Vector4(0, 0, 0, 0) },
+    uWhirl: { value: whirlU },
     uSand: { value: new THREE.Vector4(WALL_FAR, 0, 0, 0) },
     uSandB: { value: new THREE.Vector4(0, 0, 0, 0.5) },
     ...palUniforms(wp),
@@ -1282,19 +1407,18 @@ export function createScene(ctx) {
   const worldMat = new THREE.ShaderMaterial({
     glslVersion: THREE.GLSL3,
     uniforms: WU,
-    defines: { DECK_STEPS, HUR_STEPS, FUN_STEPS, WALL_STEPS, FLAME_STEPS, SMOKE_STEPS, REF_STEPS },
-    vertexShader: /* glsl */ `
-      out vec2 vUv;
-      void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+    defines: {},
+    vertexShader: QUAD_VERT,
     fragmentShader: WORLD_FRAG,
+    transparent: true,
     depthTest: false,
     depthWrite: false,
+    blending: THREE.AdditiveBlending,
   });
-  worldMat.name = 'weather-world';
+  worldMat.name = 'tomb-weather-world';
   const world = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), worldMat);
   world.frustumCulled = false;
-  world.renderOrder = 0;
-  scene.add(world);
+  world.renderOrder = 1;
 
   // --- one quad geometry for every instanced system ----------------------------------
   const quadPos = new Float32Array([-1, 0, 0, 1, 0, 0, -1, 1, 0, 1, 1, 0]);
@@ -1309,7 +1433,7 @@ export function createScene(ctx) {
   }
   const dyn = (arr, n) => { const a = new THREE.InstancedBufferAttribute(arr, n); a.setUsage(THREE.DynamicDrawUsage); return a; };
 
-  function sphereSystem(n, frag, solid, order) {
+  function sphereSystem(n, frag, solid, order, name) {
     const geo = instancedQuad(sphUV);
     const pos = new Float32Array(n * 3);
     const s = new Float32Array(n * 4);
@@ -1319,21 +1443,20 @@ export function createScene(ctx) {
     geo.setAttribute('aS', aS);
     geo.setAttribute('aC', aC);
     geo.instanceCount = n;
-    const U = { uIntensity: { value: 1 }, ...palUniforms(gp) };
+    const U = { uIntensity: intensityU, uWeight: weightU, uView: viewU, uProj: projU, ...palUniforms(gp) };
     const mat = new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3, uniforms: U, vertexShader: SPH_VERT, fragmentShader: frag,
       transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide,
       blending: solid ? THREE.NormalBlending : THREE.AdditiveBlending,
     });
-    mat.name = solid ? 'weather-solids' : 'weather-glows';
+    mat.name = name;
     const mesh = new THREE.Mesh(geo, mat);
     mesh.frustumCulled = false;
     mesh.renderOrder = order;
-    scene.add(mesh);
     return { geo, mat, mesh, pos, s, c, aPos, aS, aC, U };
   }
-  const solids = sphereSystem(N_SOLID, SPH_FRAG_SOLID, true, 1);
-  const glows = sphereSystem(N_GLOW, SPH_FRAG_GLOW, false, 2);
+  const solids = sphereSystem(N_SOLID, SPH_FRAG_SOLID, true, 5, 'tomb-weather-solids');
+  const glows = sphereSystem(N_GLOW, SPH_FRAG_GLOW, false, 6, 'tomb-weather-glows');
   const sph = (sys, i, x, y, z, r, alpha, shape, seed) => {
     const o = i * 3, q = i * 4;
     sys.pos[o] = x; sys.pos[o + 1] = y; sys.pos[o + 2] = z;
@@ -1354,29 +1477,24 @@ export function createScene(ctx) {
   capGeo.setAttribute('aP1', capAP1);
   capGeo.setAttribute('aS', capAS);
   capGeo.instanceCount = N_CAPS;
-  const CU = { uRes: { value: new THREE.Vector2(ctx.width, ctx.height) }, uIntensity: { value: 1 }, uBoltCol: { value: new THREE.Color(1, 1, 1) } };
+  const CU = { uRes: { value: new THREE.Vector2(ctx.width, ctx.height) }, uIntensity: intensityU, uWeight: weightU, uView: viewU, uProj: projU, uBoltCol: { value: new THREE.Color(1, 1, 1) } };
   const capMat = new THREE.ShaderMaterial({
     glslVersion: THREE.GLSL3, uniforms: CU, vertexShader: CAP_VERT, fragmentShader: CAP_FRAG,
     transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
   });
-  capMat.name = 'weather-bolts';
+  capMat.name = 'tomb-weather-bolts';
   const caps = new THREE.Mesh(capGeo, capMat);
   caps.frustumCulled = false;
-  caps.renderOrder = 3;
-  scene.add(caps);
+  caps.renderOrder = 7;
 
   // --- state -------------------------------------------------------------------------
-  let opened = false, openS = 0, tpPrev = false, openAge = 0;
   let sysTarget = 0;
   const sysW = new Float32Array(SYSTEMS);
   sysW[0] = 1;
   const build = new Float32Array(SYSTEMS);    // each system's build, 0 → 1 once it has run
-  let k5Prev = null, k6Prev = null;
-  let intensityP = 0.5, morphP = 0, squeezeP = 0;
-  let intS = 0.5, swayS = 0, pressS = 0, hx = 0.5, hy = 0.5;
-  let bass = 0, mid = 0, high = 0, pulse = 0, beatPrev = 0;
-  let calmS = 0;
-  const padPrev = new Float32Array(16);
+  let swayS = 0, pressS = 0, hx = 0.5, hy = 0.5;
+  let bass = 0, mid = 0, high = 0, pulse = 0;
+  let calmS = 0, openS = 0, opened = false;
   // per-system eyes, smoothed separately so a dissolve never flies one camera between worlds
   const eyePos = [], eyeTgt = [];
   for (let i = 0; i < SYSTEMS; i++) { eyePos.push(new THREE.Vector3()); eyeTgt.push(new THREE.Vector3()); }
@@ -1425,8 +1543,7 @@ export function createScene(ctx) {
       const a = Math.random() * Math.PI * 2, r = 40 + Math.random() * 120;
       flash(TOR_X + Math.cos(a) * r, T_CB + 4 + Math.random() * 14, TOR_Z + Math.sin(a) * r, 0.7 + Math.random() * 0.7, 0.25);
     }
-    const u = WU.uTor.value;
-    u.set(drop, swayS, pressS, b * openS);
+    WU.uTor.value.set(drop, swayS, pressS, b * openS);
     WU.uTorB.value.set(intensity, (0.3 + 0.7 * intensity) * b * openS * (0.7 + 0.6 * high), 0.4 + 1.6 * intensity, touched);
     // the debris cloud: a helical flow field, fastest near the axis, recycled at the top
     const tort = swayS;
@@ -1461,9 +1578,10 @@ export function createScene(ctx) {
     hurFlashT -= dt * (0.4 + 1.6 * intensity) * b;
     const eyeR = ((130 - 55 * intensity) * (1 - 0.3 * pressS) * (1 - 0.5 * calmS) + 40 * calmS) * (0.25 + 0.75 * smooth01(b));
     if (hurFlashT <= 0) {
-      hurFlashT = 0.5 + Math.random() * 1.5;
-      const a = Math.random() * Math.PI * 2, r = eyeR * (1.05 + Math.random() * 0.25);
-      flash(HUR_X + Math.cos(a) * r, 60 + Math.random() * 50, HUR_Z + Math.sin(a) * r, 0.6 + Math.random() * 0.6, 0.22);
+      // lightning in the eyewall and along the inner bands, under the tops
+      hurFlashT = 0.4 + Math.random() * 1.3;
+      const a = Math.random() * Math.PI * 2, r = eyeR * (1.05 + Math.random() * 0.35);
+      flash(HUR_X + Math.cos(a) * r, 70 + Math.random() * 50, HUR_Z + Math.sin(a) * r, 0.7 + Math.random() * 0.7, 0.22);
     }
     WU.uHur.value.set(eyeR, swayS, b * openS, ercOn ? erc : 0);
     WU.uHurB.value.set(intensity, (0.4 + 1.6 * intensity + gustH * 2) * (1 - 0.6 * calmS), pressS, 0);
@@ -1612,7 +1730,8 @@ export function createScene(ctx) {
   const emX = new Float32Array(EMBERS), emY = new Float32Array(EMBERS), emZ = new Float32Array(EMBERS);
   const emVX = new Float32Array(EMBERS), emVY = new Float32Array(EMBERS), emVZ = new Float32Array(EMBERS);
   const emLife = new Float32Array(EMBERS), emMax = new Float32Array(EMBERS), emSd = new Float32Array(EMBERS);
-  let emNext = 0, emAcc = 0;
+  const emKind = new Uint8Array(EMBERS);   // 0 a front ember, 1 lofted in the column, 2 a spotting ember carried ahead
+  let emNext = 0, emAcc = 0, spotT = 0;
   const trX = new Float32Array(TREES), trZ = new Float32Array(TREES), trH = new Float32Array(TREES), trSd = new Float32Array(TREES);
   for (let i = 0; i < TREES; i++) {
     if (i < FORE_TREES) {
@@ -1622,21 +1741,25 @@ export function createScene(ctx) {
     } else { trX[i] = (Math.random() - 0.5) * 2 * STAND_X; trZ[i] = STAND_Z0 + Math.random() * (STAND_Z1 - STAND_Z0); trH[i] = 3 + Math.random() * 5; }
     trSd[i] = Math.random();
   }
-  function ignite(x, z) {
+  // the fire whirls: each rides the front of a circle at an angle, builds, stands, dies, rests
+  const whA = new Float32Array(WHIRLS), whR = new Float32Array(WHIRLS), whS = new Float32Array(WHIRLS), whT = new Float32Array(WHIRLS);
+  const whOn = new Uint8Array(WHIRLS), whK = new Int32Array(WHIRLS), whHold = new Float32Array(WHIRLS);
+  for (let i = 0; i < WHIRLS; i++) { whT[i] = 4 + Math.random() * 6 + i * 5; whR[i] = 4 + Math.random() * 3; }
+  function ignite(x, z, r0) {
     let slot = -1;
     for (let i = 0; i < FIRE_MAX; i++) if (!fOn[i]) { slot = i; break; }
     if (slot < 0) return;
-    fOn[slot] = 1; fC[slot * 2] = x; fC[slot * 2 + 1] = z; fR[slot] = 0.5;
+    fOn[slot] = 1; fC[slot * 2] = x; fC[slot * 2 + 1] = z; fR[slot] = r0;
     if (slot >= fireN) fireN = slot + 1;
   }
-  function resetFire() { for (let i = 0; i < FIRE_MAX; i++) fOn[i] = 0; fireN = 0; }
+  function resetFire() { for (let i = 0; i < FIRE_MAX; i++) fOn[i] = 0; fireN = 0; for (let i = 0; i < WHIRLS; i++) whOn[i] = 0; }
   function flareUp() {
     // a spot fire ahead of the front: beyond the nearest front toward the eye, off to one side
     let best = -1, bestD = 1e9;
     for (let i = 0; i < fireN; i++) if (fOn[i]) { const d = Math.abs(fC[i * 2 + 1] + fR[i]); if (d < bestD) { bestD = d; best = i; } }
-    if (best < 0) { ignite((Math.random() - 0.5) * 60, STAND_Z0 + 60); return; }
+    if (best < 0) { ignite((Math.random() - 0.5) * 60, STAND_Z0 + 60, 0.5); return; }
     const z = clamp(fC[best * 2 + 1] + fR[best] + 30 + Math.random() * 40, STAND_Z0, -60);
-    ignite(fC[best * 2] + (Math.random() - 0.5) * 160, z);
+    ignite(fC[best * 2] + (Math.random() - 0.5) * 160, z, 0.5);
   }
   function burnAt(x, z, wind) {
     let m = -1e3;
@@ -1653,22 +1776,50 @@ export function createScene(ctx) {
     const wind = swayS * 12;
     // the fronts grow at the intensity's rate; when the stand has burnt the fire dies back
     const rate = (2 + 7.5 * intensity) * b * (1 - calmS) * fireCycle;
-    let rmax = 0;
-    for (let i = 0; i < fireN; i++) if (fOn[i]) { fR[i] += dt * rate; if (fR[i] > rmax) rmax = fR[i]; }
+    let rmax = 0, kmax = -1;
+    for (let i = 0; i < fireN; i++) if (fOn[i]) { fR[i] += dt * rate; if (fR[i] > rmax) { rmax = fR[i]; kmax = i; } }
     if (rmax > 440 && fireCycle > 0.99) fireCycle = 0.98;
     if (fireCycle < 0.99) {
       fireCycle = Math.max(0, fireCycle - dt / 6);
       if (fireCycle <= 0) { resetFire(); fireCycle = 1; build[3] = 0; }
     }
-    if (b > 0.05 && fireN === 0 && opened) ignite((Math.random() - 0.5) * 40, -180 + (Math.random() - 0.5) * 30);
+    if (b > 0.05 && fireN === 0 && opened) ignite((Math.random() - 0.5) * 40, -180 + (Math.random() - 0.5) * 30, 0.5);
     const storm = b * openS * fireCycle;
     WU.uFireP.value.set(storm, wind, pressS, intensity);
     WU.uFireN.value = fireN;
     for (let i = 0; i < FIRE_MAX; i++) { fireU[i * 4] = fC[i * 2]; fireU[i * 4 + 1] = fC[i * 2 + 1]; fireU[i * 4 + 2] = fR[i]; fireU[i * 4 + 3] = fOn[i]; }
     const show = w > 0.002;
-    // embers loft from the fronts
+    // the FIRE WHIRLS: one or two rotating columns on the front of the biggest
+    // circle, on the side toward the eye; each builds over a second and a
+    // half, stands for some seconds, dies, and rests before the next
+    let whMax = 0;
+    for (let i = 0; i < WHIRLS; i++) {
+      if (!whOn[i]) {
+        whS[i] = Math.max(0, whS[i] - dt / 2);
+        whT[i] -= dt * (storm > 0.3 && kmax >= 0 ? 1 : 0);
+        if (whT[i] <= 0 && kmax >= 0 && fR[kmax] > 30) {
+          whOn[i] = 1; whK[i] = kmax; whHold[i] = 4 + Math.random() * 5;
+          const cx = fC[kmax * 2], cz = fC[kmax * 2 + 1];
+          whA[i] = Math.atan2(-cz, -cx) + (Math.random() - 0.5) * 1.4;   // toward the eye, roughly
+          whR[i] = 4 + Math.random() * 3.5;
+        }
+      } else {
+        whS[i] = approach(whS[i], 1, 1.2, dt);
+        whHold[i] -= dt;
+        if (whHold[i] <= 0 || !fOn[whK[i]] || storm < 0.2) { whOn[i] = 0; whT[i] = 3 + Math.random() * 7; }
+      }
+      const k = whK[i];
+      const onF = fOn[k] ? 1 : 0;
+      const x = fC[k * 2] + wind * fR[k] * 0.04 + Math.cos(whA[i]) * fR[k], z = fC[k * 2 + 1] + Math.sin(whA[i]) * fR[k];
+      const s = whS[i] * onF * storm;
+      whirlU[i * 4] = x; whirlU[i * 4 + 1] = z; whirlU[i * 4 + 2] = whR[i]; whirlU[i * 4 + 3] = s;
+      if (s > whMax) whMax = s;
+    }
+    WU.uFireW.value.set(whMax, 0, 0, 0);
+    // embers loft from the fronts — most from the flames, some high in the
+    // column, a few carried far ahead on the wind to SPOT new fires
     if (show && storm > 0.2 && fireN > 0) {
-      emAcc += dt * (50 + 220 * intensity) * storm;
+      emAcc += dt * (70 + 300 * intensity) * storm;
       while (emAcc >= 1) {
         emAcc -= 1;
         let k = (Math.random() * fireN) | 0;
@@ -1676,26 +1827,50 @@ export function createScene(ctx) {
         if (!fOn[k]) break;
         const a = Math.random() * Math.PI * 2, r = fR[k] - Math.random() * FIRE_W;
         const i = emNext; emNext = (emNext + 1) % EMBERS;
+        const kind = Math.random() < 0.2 ? 1 : Math.random() < 0.12 ? 2 : 0;
+        emKind[i] = kind;
         emX[i] = fC[k * 2] + wind * fR[k] * 0.04 + Math.cos(a) * r; emZ[i] = fC[k * 2 + 1] + Math.sin(a) * r; emY[i] = 0.5 + Math.random() * 4;
-        emVX[i] = wind * 0.25 + (Math.random() - 0.5) * 3; emVY[i] = 4 + Math.random() * 7; emVZ[i] = (Math.random() - 0.5) * 3;
-        emLife[i] = 0; emMax[i] = 1.5 + Math.random() * 3; emSd[i] = Math.random();
+        if (kind === 1) { emVX[i] = wind * 0.15 + (Math.random() - 0.5) * 2; emVY[i] = 11 + Math.random() * 9; emVZ[i] = (Math.random() - 0.5) * 2; emMax[i] = 3 + Math.random() * 3; }
+        else if (kind === 2) { emVX[i] = wind * 0.9 + 6 + Math.random() * 6; emVY[i] = 6 + Math.random() * 5; emVZ[i] = (Math.random() - 0.5) * 4; emMax[i] = 4 + Math.random() * 3; }
+        else { emVX[i] = wind * 0.25 + (Math.random() - 0.5) * 3; emVY[i] = 4 + Math.random() * 7; emVZ[i] = (Math.random() - 0.5) * 3; emMax[i] = 1.5 + Math.random() * 3; }
+        emLife[i] = 0; emSd[i] = Math.random();
       }
     }
+    spotT = Math.max(0, spotT - dt);
     for (let i = 0; i < EMBERS; i++) {
       if (!show || emLife[i] >= emMax[i]) { glows.s[i * 4 + 1] = 0; emLife[i] = emMax[i]; continue; }
       emLife[i] += dt;
-      emVY[i] += dt * (1.5 - emVY[i] * 0.25);
-      emVX[i] += dt * (Math.sin(t * 3 + emSd[i] * 20) * 3 + wind * 0.3 - emVX[i] * 0.3);
-      emVZ[i] += dt * (Math.cos(t * 2.3 + emSd[i] * 17) * 3 - emVZ[i] * 0.3);
+      const kind = emKind[i];
+      if (kind === 1) {
+        // lofted in the column: the updraught holds it up and the wind leans it
+        emVY[i] += dt * (3.0 - emVY[i] * 0.12);
+        emVX[i] += dt * (wind * 0.5 - emVX[i] * 0.2);
+        emVZ[i] += dt * (Math.cos(t * 1.7 + emSd[i] * 17) * 2 - emVZ[i] * 0.2);
+      } else if (kind === 2) {
+        // carried ahead: it arcs over and comes down
+        emVY[i] -= dt * 4.5;
+        emVX[i] += dt * (wind * 0.4 - emVX[i] * 0.05);
+      } else {
+        emVY[i] += dt * (1.5 - emVY[i] * 0.25);
+        emVX[i] += dt * (Math.sin(t * 3 + emSd[i] * 20) * 3 + wind * 0.3 - emVX[i] * 0.3);
+        emVZ[i] += dt * (Math.cos(t * 2.3 + emSd[i] * 17) * 3 - emVZ[i] * 0.3);
+      }
       emX[i] += emVX[i] * dt; emY[i] += emVY[i] * dt; emZ[i] += emVZ[i] * dt;
+      if (kind === 2 && emY[i] < 0.2 && emLife[i] > 0.8) {
+        // SPOTTING: an ember landing ahead of the front starts a small fire
+        emLife[i] = emMax[i];
+        if (spotT <= 0 && storm > 0.4 && burnAt(emX[i], emZ[i], wind) < -14 && emZ[i] > STAND_Z0 && emZ[i] < -50) { ignite(emX[i], emZ[i], 0.5); spotT = 2.5; }
+        glows.s[i * 4 + 1] = 0;
+        continue;
+      }
       const lf = 1 - emLife[i] / emMax[i];
       const flick = 0.6 + 0.4 * Math.sin(t * 11 + emSd[i] * 40);
       const ex = emX[i] - camera.position.x, ey = emY[i] - camera.position.y, ez = emZ[i] - camera.position.z;
       const dist = Math.sqrt(ex * ex + ey * ey + ez * ez);
-      sph(glows, i, emX[i], emY[i], emZ[i], Math.max(0.16 + emSd[i] * 0.2, dist * 0.004), lf * flick * w * 1.1, 2, emSd[i]);
+      sph(glows, i, emX[i], emY[i], emZ[i], Math.max(0.16 + emSd[i] * 0.2, dist * 0.004), lf * flick * w * 1.1, 3, emSd[i]);
       sphC(glows, i, emVX[i], emVY[i], emVZ[i], lf * lf * (0.3 + 0.7 * flick));
     }
-    // the trees catch, glow, char and shrink to a stump
+    // the trees catch — the crown fire runs up them — torch, char and shrink to a stump
     const p1 = gp[1].value, p4 = gp[4].value, p2 = gp[2].value, p0 = gp[0].value;
     for (let i = 0; i < TREES; i++) {
       const si = DEBRIS + i;
@@ -1704,11 +1879,11 @@ export function createScene(ctx) {
       const bb = d / FIRE_W;
       // the stand grows back as the next fire builds
       const regrow = fireCycle < 0.99 ? fireCycle : 1;
-      let r, g, bl, canopy;
+      let r, g, bl, canopy, torch = 0;
       // unburnt trees are silhouettes, faintly lit by the front as it nears
       const lt = 0.12 / (1 + d * d / 900) * storm;
       const silR = p4.r * 0.05 + p2.r * 0.02 + p1.r * lt, silG = p4.g * 0.05 + p2.g * 0.02 + p1.g * lt, silB = p4.b * 0.05 + p2.b * 0.02 + p1.b * lt;
-      if (bb < -0.4) { r = silR; g = silG; bl = silB; canopy = 1; }
+      if (bb < -0.6) { r = silR; g = silG; bl = silB; canopy = 1; }
       else {
         const flick = 0.7 + 0.3 * Math.sin(t * 9 + trSd[i] * 30) + 0.2 * pulse;
         const burnI = smooth01((bb + 0.4) / 1.2) * (1 - smooth01((bb - 1.2) / 3.5));
@@ -1716,9 +1891,11 @@ export function createScene(ctx) {
         const heat = (burnI * 1.8 + ember) * flick * storm;
         r = silR + p1.r * heat + p0.r * burnI * 0.5 * storm; g = silG + p1.g * heat + p0.g * burnI * 0.5 * storm; bl = silB + p1.b * heat + p0.b * burnI * 0.5 * storm;
         canopy = 1 - 0.75 * smooth01((bb - 0.6) / 2.5);
+        // the crown fire: the flash climbs the crown as the front arrives, stands, dies with the char
+        torch = smooth01((bb + 0.6) / 0.7) * (1 - smooth01((bb - 1.4) / 1.8)) * storm * 0.99;
       }
-      const charred = bb < -0.4 ? 0 : smooth01((bb - 0.6) / 2.5);
-      sph(solids, si, trX[i], 0, trZ[i], trH[i] * 0.42 * regrow * (1 - 0.55 * charred), w, 1, trSd[i]);
+      const charred = bb < -0.6 ? 0 : smooth01((bb - 0.6) / 2.5);
+      sph(solids, si, trX[i], 0, trZ[i], trH[i] * 0.42 * regrow * (1 - 0.55 * charred), w, 1 + torch, trSd[i]);
       sphC(solids, si, r, g, bl, canopy);
     }
   }
@@ -1751,7 +1928,7 @@ export function createScene(ctx) {
   function rig(sys) {
     const x = hx - 0.5, y = hy;
     if (sys === 0) { wantPos.set(x * 60, 6 + y * 12, 0); wantTgt.set(TOR_X + x * 15, 22, TOR_Z); }
-    else if (sys === 1) { wantPos.set(HUR_X + x * 500, 620 + y * 500 - pressS * 150, HUR_Z + 320); wantTgt.set(HUR_X + x * 100, 60, HUR_Z - 40); }
+    else if (sys === 1) { wantPos.set(HUR_X + x * 600, 1050 + y * 750 - pressS * 300, HUR_Z + 420); wantTgt.set(HUR_X + x * 120, 60, HUR_Z - 60); }
     else if (sys === 2) { wantPos.set(x * 50, 2 + y * 12, 0); wantTgt.set(x * 10, 22, LIT_Z); }
     else if (sys === 3) { wantPos.set(x * 80, 4 + y * 16, 0); wantTgt.set(x * 20, 6, -120); }
     else { wantPos.set(x * 40, 3 + y * 20, 0); wantTgt.set(x * 10, 40, -400); }
@@ -1774,7 +1951,8 @@ export function createScene(ctx) {
     fwd.set(-e[8], -e[9], -e[10]);
   }
 
-  function mainEvent(sys) {
+  function mainEvent() {
+    const sys = sysTarget;
     if (sys === 0) tdTarget = tdTarget ? 0 : 1;
     else if (sys === 1) { ercOn = true; erc = 0; }
     else if (sys === 2) strikeAt(2);
@@ -1782,17 +1960,20 @@ export function createScene(ctx) {
     else { gustS = 1; gustPush = Math.min(90, Math.max(0, 160 - wallZ)); }
   }
   function setSystem(next) {
-    next = clamp(next | 0, 0, SYSTEMS - 1);
-    sysTarget = next;
+    sysTarget = clamp(next | 0, 0, SYSTEMS - 1);
   }
-  const bloom = { strength: 0.3, radius: 0.5, threshold: 0.6 };
+  const bloom = { strength: 0, radius: 0.5, threshold: 0.6 };
   const white = new THREE.Color(1, 1, 1);
+  let shown = true; // the meshes' visibility the last frame, so hiding is done once
 
   return {
-    scene,
-    camera,
+    objects: [world, solids.mesh, glows.mesh, caps],
     bloom,
-    action(key) {
+    camera,
+    get system() { return sysTarget; },
+    setSystem,
+    mainEvent,
+    event(key) {
       if (key === 'strike') strikeAt(sysTarget);
       else if (key === 'touchdown') tdTarget = tdTarget ? 0 : 1;
       else if (key === 'gust') { gustS = 1; gustPush = Math.min(90, Math.max(0, 160 - wallZ)); gustH = 1; }
@@ -1800,52 +1981,32 @@ export function createScene(ctx) {
       else if (key === 'eyewall') { ercOn = true; erc = 0; }
       else if (key === 'calm') { calmS = 1; tdTarget = 0; }
     },
-    setParam(key, value) {
-      if (key === 'system') setSystem(Math.round(value));
-      else if (key === 'intensity') intensityP = clamp(value, 0, 1);
-      else if (key === 'morph') morphP = clamp(value, 0, 1);
-      else if (key === 'squeeze') squeezeP = clamp(value, 0, 1);
-    },
-    update(dt, t, io) {
-      // ---- the cold open: dark-ish until the first beat, the transport, or a pad
-      let openNow = false;
-      if (!opened) {
-        const tp = io.transport || null;
-        const tpNow = !!(tp && tp.playing);
-        const beat = io.beat > 0.6 && io.level > 0.12;
-        if ((tpNow && !tpPrev) || beat || io.strike > 0.12) { opened = true; openAge = 0; openNow = true; }
-        tpPrev = tpNow;
-      } else openAge += dt;
-      openS = approach(openS, opened ? 1 : 0, 0.6, dt);
-      const openDim = Math.max(openS, 0.07 + 0.05 * io.level);
-
-      // ---- KNOB 6 picks the system in fifths with hysteresis; KNOB 5 the intensity
-      const k6 = io.knobs[5];
-      if (k6Prev === null) k6Prev = k6;
-      if (Math.abs(k6 - k6Prev) > 1 / 256) {
-        k6Prev = k6;
-        const b = clamp(Math.floor(k6 * 5), 0, 4);
-        if (b !== sysTarget && (k6 < sysTarget * 0.2 - 0.02 || k6 > (sysTarget + 1) * 0.2 + 0.02)) setSystem(b);
+    update(S, io) {
+      const dt = S.dt, t = S.t;
+      WU.uWarm.value = S.warm ? 1 : 0;
+      // off the weather plates nothing runs: the builds, the flashes and the
+      // bolts freeze where they are (a system that has built stays built)
+      let anyBolt = false;
+      for (let i = 0; i < MAX_BOLTS; i++) if (bAge[i] < bLife[i]) anyBolt = true;
+      if (S.weight <= 0.002 && !S.warm) {
+        if (shown) { world.visible = false; solids.mesh.visible = false; glows.mesh.visible = false; caps.visible = false; shown = false; }
+        bloom.strength = 0;
+        return;
       }
-      const k5 = io.knobs[4];
-      if (k5Prev === null) k5Prev = k5;
-      if (Math.abs(k5 - k5Prev) > 0.004) intensityP = k5;
-      k5Prev = k5;
+      shown = true;
+      world.visible = true;
+      if (sysTarget !== S.sys) setSystem(S.sys);
+      opened = S.opened;
+      openS = S.openS;
 
-      // ---- gestures and audio
-      intS = approach(intS, intensityP, 0.4, dt);
-      swayS = approach(swayS, Math.max(io.gestures.sway, morphP), 0.4, dt);
-      pressS = approach(pressS, Math.max(io.gestures.press, squeezeP), 0.15, dt);
-      hx = approach(hx, io.xy.x, 0.3, dt);
-      hy = approach(hy, io.xy.y, 0.3, dt);
-      bass = approach(bass, io.bands.bass, 0.12, dt);
-      mid = approach(mid, io.bands.mid, 0.12, dt);
-      high = approach(high, io.bands.high, 0.1, dt);
-      if (io.beat > beatPrev + 0.3) pulse = 1;
-      beatPrev = io.beat;
-      pulse = Math.max(0, pulse - dt * 3.5);
+      // ---- gestures and audio (the Tomb's smoothed values)
+      swayS = S.sway;
+      pressS = S.press;
+      hx = S.hx;
+      hy = S.hy;
+      bass = S.bass; mid = S.mid; high = S.high; pulse = S.pulse;
       calmS = Math.max(0, calmS - dt / 10);
-      const intensity = intS * (1 - calmS);
+      const intensity = S.intensity * (1 - calmS);
 
       // ---- the systems' weights and builds: the one on screen builds once the show is on
       for (let i = 0; i < SYSTEMS; i++) sysW[i] = approach(sysW[i], i === sysTarget ? 1 : 0, SYS_FADE / 3, dt);
@@ -1856,13 +2017,8 @@ export function createScene(ctx) {
       const norm = wa + wb;
       const wA = norm > 1e-6 ? wa / norm : 1, wB = norm > 1e-6 ? wb / norm : 0;
 
-      // ---- pads: any strike fires the system on screen's main event; the opening strike too
-      for (let i = 0; i < 16; i++) {
-        const v = io.pads[i];
-        if (v > padPrev[i] + 0.25 && v > 0.12 && (openAge > 0.1 || openNow)) mainEvent(sysTarget);
-        padPrev[i] = v;
-      }
-      if (openNow && io.strike <= 0.12) mainEvent(sysTarget);
+      // ---- the opening: the show starting on a weather plate fires its main event
+      if (S.openNow && S.weight > 0.5) mainEvent();
 
       // ---- the eyes: the system on screen's and the outgoing one's
       eye(sysTarget, dt);
@@ -1872,6 +2028,8 @@ export function createScene(ctx) {
       camera.position.copy(eyePos[sysTarget]);
       camera.lookAt(eyeTgt[sysTarget]);
       camera.updateMatrixWorld();
+      viewU.value.copy(camera.matrixWorldInverse);
+      projU.value.copy(camera.projectionMatrix);
 
       // ---- the flashes decay (with a flicker)
       for (let i = 0; i < FLASHES; i++) {
@@ -1884,9 +2042,29 @@ export function createScene(ctx) {
         if (flI[i] < 0.003) { flI[i] = 0; flAmp[i] = 0; }
       }
 
-      // ---- the systems (the CPU objects only when their system shows)
-      const pl = io.palette;
-      for (let i = 0; i < 5; i++) { wp[i].value.copy(pl[i]); gp[i].value.copy(pl[i]); }
+      // ---- the systems (the CPU objects only when their system shows).
+      // The palette by ROLE, so the fire is a fire and the sea a sea under any
+      // palette: slot 0 (the hot core, the cloud tops, the bolt) is the
+      // WARMEST stop lifted to white, 1 (fire and dusk) the WARMEST, 2 (the
+      // cool sky, sea and cloud shade) the COOLEST, 3 (the dusk accent and the
+      // flash tint) the second warmest, 4 (dust, ash and ground) the second
+      // warmest greyed — the Tomb hands the palette sorted cool → warm in
+      // S.order
+      const pl = io.palette, ord = S.order;
+      // the hot core is the fire's colour pushed to white (the lightest stop
+      // could be a cold one, and a blue-white fire is not a fire); the dust is
+      // the second warmest stop greyed toward its own luminance (the least
+      // saturated stop could be a cold one too, and blue sand is not sand)
+      wp[0].value.copy(pl[ord[4]]).lerp(white, 0.55);
+      wp[1].value.copy(pl[ord[4]]);
+      wp[2].value.copy(pl[ord[0]]);
+      wp[3].value.copy(pl[ord[3]]);
+      {
+        const c = pl[ord[3]];
+        const L = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
+        wp[4].value.setRGB(c.r + (L - c.r) * 0.45, c.g + (L - c.g) * 0.45, c.b + (L - c.b) * 0.45);
+      }
+      for (let i = 0; i < 5; i++) gp[i].value.copy(wp[i].value);
       updateTornado(dt, t, sysTarget === 0 ? wA : sysB === 0 ? wB : 0, intensity);
       updateHurricane(dt, t, sysTarget === 1 ? wA : sysB === 1 ? wB : 0, intensity);
       updateLightning(dt, t, sysTarget === 2 ? wA : sysB === 2 ? wB : 0, intensity);
@@ -1896,30 +2074,28 @@ export function createScene(ctx) {
       // ---- uniforms and buffers
       let flSum = 0;
       for (let i = 0; i < FLASHES; i++) { flashU[i * 4] = flX[i]; flashU[i * 4 + 1] = flY[i]; flashU[i * 4 + 2] = flZ[i]; flashU[i * 4 + 3] = flI[i]; flSum += flI[i]; }
-      WU.uFlashCol.value.copy(pl[0]).lerp(white, 0.5).lerp(pl[3], 0.15);
-      CU.uBoltCol.value.copy(pl[2]).lerp(pl[3], 0.3).lerp(white, 0.25);
+      WU.uFlashCol.value.copy(wp[0].value).lerp(white, 0.5).lerp(wp[3].value, 0.15);
+      CU.uBoltCol.value.copy(wp[2].value).lerp(wp[3].value, 0.3).lerp(white, 0.25);
       WU.uTime.value = t;
-      WU.uIntensity.value = io.intensity * openDim;
+      intensityU.value = io.intensity * S.openDim;
+      weightU.value = S.warm ? 0 : S.weight;
       WU.uOpen.value = openS;
       WU.uLevel.value = io.level;
       WU.uBreath.value.set(bass, mid, high, pulse);
       WU.uSysA.value = sysTarget;
       WU.uSysB.value = sysB < 0 ? sysTarget : sysB;
       WU.uW.value.set(wA, wB);
-      CU.uIntensity.value = io.intensity * openDim;
-      solids.U.uIntensity.value = io.intensity * openDim;
-      glows.U.uIntensity.value = io.intensity * openDim;
       capAP0.needsUpdate = true; capAP1.needsUpdate = true; capAS.needsUpdate = true;
       solids.aPos.needsUpdate = true; solids.aS.needsUpdate = true; solids.aC.needsUpdate = true;
       glows.aPos.needsUpdate = true; glows.aS.needsUpdate = true; glows.aC.needsUpdate = true;
       const showTor = sysTarget === 0 || sysB === 0, showFire = sysTarget === 3 || sysB === 3;
       solids.mesh.visible = (showTor && touched > 0.01) || showFire;
       glows.mesh.visible = showFire;
-      let anyBolt = false;
+      anyBolt = false;
       for (let i = 0; i < MAX_BOLTS; i++) if (bAge[i] < bLife[i]) anyBolt = true;
       caps.visible = anyBolt;
       bloomS = Math.max(0.3, bloomS - dt * 2.5);
-      bloom.strength = bloomS + Math.min(flSum, 2) * 0.3 + (sysTarget === 3 ? 0.25 * build[3] : 0);
+      bloom.strength = (bloomS + Math.min(flSum, 2) * 0.3 + (sysTarget === 3 ? 0.25 * build[3] : 0)) * S.weight;
     },
     resize(w, h) {
       camera.aspect = w / Math.max(1, h);

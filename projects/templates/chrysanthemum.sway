@@ -35,7 +35,7 @@
           "chladni",
           "lattice",
           "nebula",
-          "warp",
+          "willidream",
           "spectra"
         ],
         "minHold": 26,
@@ -172,7 +172,7 @@
         },
         {
           "type": "scene",
-          "scene": "warp",
+          "scene": "willidream",
           "transition": {
             "type": "cut",
             "duration": 0

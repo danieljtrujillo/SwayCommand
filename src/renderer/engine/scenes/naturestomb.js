@@ -1,12 +1,20 @@
-// Nature's Tomb — seven organisms under dark-field light on one plate, in the
-// order of life and then its end: a DOUBLE HELIX of B-form DNA, a CELL LINE
-// that cleaves from a zygote to a blastula and then morphs on through the
-// single-celled protists into primitive multicellular colonies, a MYCELIUM
-// growing out from a spore, a SLIME MOLD foraging across its dish — and then
-// the TOXIN wrecking the molecule, PHAGOCYTOSIS consuming the cell, and
-// DECOMPOSITION taking the body. One knob picks the organism, one knob and the
-// strikes drive its development, one knob picks the species, sway morphs
-// whichever generator is on screen.
+// Nature's Tomb — fifteen plates on one knob: seven organisms under dark-field
+// light, in the order of life and then its end — a DOUBLE HELIX of B-form
+// DNA, a CELL LINE that cleaves from a zygote to a blastula and then morphs on
+// through the single-celled protists into primitive multicellular colonies, a
+// MYCELIUM growing out from a spore, a SLIME MOLD foraging across its dish —
+// and then the TOXIN wrecking the molecule, PHAGOCYTOSIS consuming the cell,
+// DECOMPOSITION taking the body; and then THE WORLD — MICROSCOPY (the slide
+// refocused), OCEAN CURRENTS (the flow field of drifting pressure systems),
+// THE DAY (sunrise to storm over the sea), and the five weather systems,
+// LIGHTNING, TORNADO, HURRICANE, WILDFIRE, SANDSTORM. One knob picks the
+// plate, one knob and the strikes drive its development, one knob picks the
+// species, sway morphs whichever generator is on screen. The world plates
+// live in scene-private modules under ./naturestomb/ (weather.js — the five
+// systems, ported whole from the Weather Systems scene with the hurricane and
+// the wildfire raised; microscopy.js, sea.js, currents.js — three CodePen
+// ports, MIT, each carrying its notice); each owns its own programs, so the
+// organism quad is not one mega-shader.
 //
 //   COLD OPEN   The plate is DARK until the show starts — the first beat the
 //               analyser hears, the transport playing, or any pad — and then
@@ -14,23 +22,45 @@
 //               helix at stage 0 stepping to its replication fork. That is
 //               the opening element; from there the performer develops it
 //               onward (the knob or the strikes), and the next organism on the
-//               knob is the cell.
-//   ORGANISM    KNOB 6 (io.knobs[5]) picks it in seven bands, IN THE ORDER OF
-//               LIFE AND THEN ITS END — DOUBLE HELIX, CELL LINE, MYCELIUM,
-//               SLIME MOLD, TOXIN, PHAGOCYTOSIS, DECOMPOSITION — with
-//               a little hysteresis at the band edges. The selection is
-//               smoothed with a 0.15 s time constant, so the dissolve runs
-//               exactly as fast as the knob is turned: a flick cuts, a slow
-//               sweep cross-fades. Only the organisms with weight run their
-//               generators.
+//               knob is the cell. A weather plate selected while dark shows
+//               its calm sky faintly and BUILDS when the show starts (the
+//               opening fires its main event); the other world plates come up
+//               faint and breathe with the level until then.
+//   PLATE       KNOB 6 (io.knobs[5]) picks it in FIFTEEN bands with a little
+//               hysteresis at the band edges, in this order: 0 DOUBLE HELIX,
+//               1 CELL LINE, 2 MYCELIUM, 3 SLIME MOLD, 4 TOXIN,
+//               5 PHAGOCYTOSIS, 6 DECOMPOSITION — the order of life and then
+//               its end — then the world: 7 MICROSCOPY, 8 OCEAN CURRENTS,
+//               9 THE DAY, 10 LIGHTNING, 11 TORNADO, 12 HURRICANE,
+//               13 WILDFIRE, 14 SANDSTORM. The selection is smoothed with a
+//               0.15 s time constant, so the dissolve runs exactly as fast as
+//               the knob is turned: a flick cuts, a slow sweep cross-fades.
+//               Only the plates with weight run their generators, and at most
+//               two run at once; every quad draws weighted and adds, so a
+//               dissolve between different programs is a cross-fade of two
+//               finished images. Inside the weather the change between two
+//               systems is Weather Systems' own two-eye dissolve. The
+//               microscope's plate dissolves run through a focus pull.
 //   LEVEL       KNOB 5 (io.knobs[4]) sets the development 0..1 the moment it
-//               moves, and any pad STRIKE steps it ONE STAGE OF THE ORGANISM
-//               ON SCREEN, reversing at the top and at the bottom; the level
+//               moves, and any pad STRIKE steps it ONE STAGE OF THE PLATE ON
+//               SCREEN, reversing at the top and at the bottom; the level
 //               eases over ~1.3 s so every stage plays out. Driving it DOWN
-//               reverses the development. The stage count is the organism's
-//               own — sixteen for the cell line, three for the helix, six for
-//               each simulation and for each of the three end stages — so one
-//               strike always means one step of what you are looking at.
+//               reverses the development. The stage count is the plate's own
+//               — sixteen for the cell line, three for the helix, six for each
+//               simulation and for each of the three end stages, four for the
+//               microscope's focus, six for the currents' regimes, five for
+//               the day's phases — so one strike always means one step of
+//               what you are looking at. ON A WEATHER PLATE a pad fires the
+//               system's MAIN EVENT instead (touchdown / eyewall cycle /
+//               strike / flare up / gust — what a performer wants from a pad
+//               on a storm) and the level is the system's intensity; the
+//               develop up / down actions still step it. Per world plate the
+//               level is: MICROSCOPY the focus (out of focus → focused →
+//               through focus, the layers taking it with their depth); OCEAN
+//               CURRENTS the regime (calm → levante → mistral → tramontana →
+//               sirocco → winter storm, the tables interpolated so the knob
+//               morphs the field); THE DAY the time of day (DAWN → MIDDAY →
+//               DUSK → NIGHT → STORM).
 //   SPECIES     KNOB 7 (io.knobs[6]) picks one of eight seeded parameter sets
 //               for the organism on screen (quantized with hysteresis, so the
 //               knob is a selector, not a smear). It is the "no two runs look
@@ -289,20 +319,40 @@
 //               molecule's azimuth. Bass swells the cytoplasm and the veins,
 //               the beat pulses them, treble shimmers the granules, the level
 //               lifts the plate's rim glow.
+//   THE WORLD   the eight world plates' gestures: on the weather SWAY is the
+//               system's morph (funnel tortuosity, band tightness, bolt
+//               branching, the wind, dust density) and PRESS its squeeze, the
+//               hand pans and lifts the eye; MICROSCOPY sway is magnification,
+//               press the aperture, the hand pans the slide; OCEAN CURRENTS
+//               sway is the field gain and wander, press the system radius,
+//               the hand pans the map; THE DAY sway is the storm amount and
+//               wave amplitude, press the camera down to the water, the hand
+//               yaws the look and sets the height. Species: the currents'
+//               layout and wander, the day's swells and cloud, the
+//               microscope's cell scale, the weather as its own seeds allow.
+//               The hand is the ONLY camera motion anywhere.
 //   ASSIGNMENT  meta.controls exposes the whole surface to the assignment
-//               panel: actions to pick each of the seven organisms, step the
-//               development up or down and re-seed the simulations; params for
-//               development, organism (0..6), species, morph and squeeze.
-//               The raw knob reads above
-//               stay as the no-assignment fallback — whichever moved last
-//               wins — and morph/squeeze take the larger of the gesture and
-//               the assigned control, so assigning one never kills the other.
+//               panel: actions to pick each of the fifteen plates, step the
+//               development up or down, re-seed the simulations, and the
+//               weather's events (strike in ANY weather plate, touchdown,
+//               gust, flare up, eyewall cycle, calm); params for development,
+//               organism (0..14), species, morph and squeeze. The raw knob
+//               reads above stay as the no-assignment fallback — whichever
+//               moved last wins — and morph/squeeze take the larger of the
+//               gesture and the assigned control, so assigning one never kills
+//               the other.
 //
-// Three draw calls: the quad (the cell-line raymarch, the plasmodium's plate,
-// the mycelium's plate and spore, the helix's dark-field column, the
+// Draw calls: the organism quad (the cell-line raymarch, the plasmodium's
+// plate, the mycelium's plate and spore, the helix's dark-field column, the
 // macrophage, the dead mass and its plate — whichever organisms have weight,
-// blended by it), the hyphae mesh (the fungus, or the mould on the corpse) and
-// the helix mesh (the molecule, and the toxin's molecules with it). GLSL3.
+// blended by it), the hyphae mesh (the fungus, or the mould on the corpse),
+// the helix mesh (the molecule, and the toxin's molecules with it), the
+// weather module's four (its world quad, solid impostors, additive impostors,
+// bolt capsules), the microscope's quad, the day's quad, the currents' three
+// (sea, trails, markers). Everything not selected is hidden and does no
+// per-frame work; every material is visible at creation and the quads draw
+// a 2-px patch at zero alpha for the first two frames (the warm frames), so
+// the driver's first rasterised use of each program lands off screen. GLSL3.
 // Colour: cytoplasm and plasmodium from palette 3/4 lifted toward white,
 // nuclei and organelles from palette 1, membranes and fans palette 0, plate,
 // hyphae and backbones from palette 2 lifted toward white, the four bases from
@@ -310,6 +360,11 @@
 // oxygen palette 0, chlorine palette 4, hydrogen near white), the sickening
 // and the ash picked from the palette itself — the coldest stop and the least
 // saturated one, followed smoothly so a hue rotation never flicks them.
+
+import { createWeather } from './naturestomb/weather.js';
+import { createMicroscopy } from './naturestomb/microscopy.js';
+import { createSea } from './naturestomb/sea.js';
+import { createCurrents } from './naturestomb/currents.js';
 
 export const meta = {
   id: 'naturestomb',
@@ -324,13 +379,27 @@ export const meta = {
       { key: 'toxin', label: 'toxin' },
       { key: 'phagocytosis', label: 'phagocytosis' },
       { key: 'decomposition', label: 'decomposition' },
+      { key: 'microscopy', label: 'microscopy' },
+      { key: 'oceanCurrents', label: 'ocean currents' },
+      { key: 'theDay', label: 'the day' },
+      { key: 'lightning', label: 'lightning' },
+      { key: 'tornado', label: 'tornado' },
+      { key: 'hurricane', label: 'hurricane' },
+      { key: 'wildfire', label: 'wildfire' },
+      { key: 'sandstorm', label: 'sandstorm' },
       { key: 'developUp', label: 'develop up' },
       { key: 'developDown', label: 'develop down' },
       { key: 'reseed', label: 're-seed' },
+      { key: 'strike', label: 'lightning strike' },
+      { key: 'touchdown', label: 'touchdown' },
+      { key: 'gust', label: 'gust front' },
+      { key: 'flareUp', label: 'flare up' },
+      { key: 'eyewall', label: 'eyewall cycle' },
+      { key: 'calm', label: 'calm' },
     ],
     params: [
       { key: 'development', label: 'development', min: 0, max: 1, default: 0 },
-      { key: 'organism', label: 'organism', min: 0, max: 6, default: 0 },
+      { key: 'organism', label: 'organism', min: 0, max: 14, default: 0 },
       { key: 'species', label: 'species', min: 0, max: 7, default: 0 },
       { key: 'morph', label: 'morph', min: 0, max: 1, default: 0 },
       { key: 'squeeze', label: 'squeeze', min: 0, max: 1, default: 0 },
@@ -455,6 +524,10 @@ const GLSL = /* glsl */ `
   uniform vec3 uAsh;           // the palette's ash end, and its cold end
   uniform vec3 uCold;
   uniform float uSick;         // the helix's sickening, 0..1
+  // the loop bounds as UNIFORMS: a constant trip count is fully unrolled by
+  // the D3D compiler at every call site (the march × the culled cell list ×
+  // three marchers), which is what made the cold first draw take a minute
+  uniform int uSpecSteps, uNSteps, uMaxC;
   in vec2 vUv;
   out vec4 fragColor;
 
@@ -547,7 +620,7 @@ const GLSL = /* glsl */ `
       if (d2 > rr * rr) { gFar = min(gFar, sqrt(d2) - gs.w); continue; }
       int s = int(uSpan[g].x);
       int cnt = int(n);
-      for (int i = 0; i < MAXC; i++) {
+      for (int i = 0; i < uMaxC; i++) {
         if (i >= cnt) break;
         vec4 c = uCells[s + i];
         vec3 o2 = c.xyz - ro;
@@ -584,7 +657,7 @@ const GLSL = /* glsl */ `
         if (d2 > rr * rr) continue;
         int s = int(uSpan[g].x);
         int cnt = int(n);
-        for (int i = 0; i < MAXC; i++) {
+        for (int i = 0; i < uMaxC; i++) {
           if (i >= cnt) break;
           if (gN >= LOCAL) break;
           vec4 c = uCells[s + i];
@@ -982,7 +1055,7 @@ const GLSL = /* glsl */ `
     float t = 0.0;
     bool hit = false;
     float tExit = 2.0 * bnd + 0.2;
-    for (int i = 0; i < SPEC_STEPS; i++) {
+    for (int i = 0; i < uSpecSteps; i++) {
       float d = mapSpec(p, mode);
       if (d < 0.0018) { hit = true; break; }
       t += d * 0.85;
@@ -1054,7 +1127,7 @@ const GLSL = /* glsl */ `
       } else if (mode == 1) {
         float tn = 0.02, depth = 0.02, minD = 1e9;
         vec3 qb = q0;
-        for (int j = 0; j < NSTEPS; j++) {
+        for (int j = 0; j < uNSteps; j++) {
           vec3 q = q0 + rdi * tn;
           float dn = mapOrgan(q);
           if (dn < minD) { minD = dn; qb = q; depth = tn; }
@@ -1298,7 +1371,7 @@ const GLSL = /* glsl */ `
     float t = 0.0;
     bool hit = false;
     float tExit = 2.0 * bnd + 0.2;
-    for (int i = 0; i < SPEC_STEPS; i++) {
+    for (int i = 0; i < uSpecSteps; i++) {
       float d = mapPhago(p);
       if (d < 0.002) { hit = true; break; }
       t += d * 0.85;
@@ -1347,7 +1420,7 @@ const GLSL = /* glsl */ `
       if (uPhA.y < 0.995) {
         float tn = 0.02, depth = 0.02, minD = 1e9;
         vec3 qb = ps;
-        for (int j = 0; j < NSTEPS; j++) {
+        for (int j = 0; j < uNSteps; j++) {
           vec3 q = ps + rds * tn;
           float dn = dPreyF(q);
           if (dn < minD) { minD = dn; qb = q; depth = tn; }
@@ -1451,7 +1524,7 @@ const GLSL = /* glsl */ `
     float t = 0.0;
     bool hit = false;
     float tExit = 2.0 * bnd + 0.2;
-    for (int i = 0; i < SPEC_STEPS; i++) {
+    for (int i = 0; i < uSpecSteps; i++) {
       float d = mapDec(p);
       if (d < 0.002) { hit = true; break; }
       t += d * 0.85;
@@ -1530,6 +1603,7 @@ const MYC_VERT = /* glsl */ `
   // quad marches), so the network follows the body as it slumps and sinks
   uniform vec4 uBody[MAXC];
   uniform float uBodyN, uLift;
+  uniform int uMaxC;
   in vec2 aQuad;  // per vertex: side -1..1, along 0 (start) .. 1 (end)
   in vec3 aP0;
   in vec3 aP1;
@@ -1538,7 +1612,7 @@ const MYC_VERT = /* glsl */ `
   out float vLenR, vTip, vA, vGen, vRnd, vKind;
   float lift(vec2 xy) {
     float h = 0.0;
-    for (int i = 0; i < MAXC; i++) {
+    for (int i = 0; i < uMaxC; i++) {
       if (float(i) >= uBodyN) break;
       vec4 c = uBody[i];
       vec2 d = xy - c.xy;
@@ -1859,11 +1933,14 @@ export function createScene(ctx) {
     uAsh: { value: new THREE.Color(0.5, 0.5, 0.5) },
     uCold: { value: new THREE.Color(0.5, 0.6, 0.8) },
     uSick: { value: 0 },
+    uSpecSteps: { value: SPEC_STEPS },
+    uNSteps: { value: NSTEPS },
+    uMaxC: { value: MAXC },
   };
   const mat = new THREE.ShaderMaterial({
     glslVersion: THREE.GLSL3,
     uniforms: U,
-    defines: { SPEC_STEPS, NSTEPS, MAXC, LOCAL, NPOD, PODPTS },
+    defines: { MAXC, LOCAL, NPOD, PODPTS },
     vertexShader: /* glsl */ `
       out vec2 vUv;
       void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
@@ -1919,6 +1996,7 @@ export function createScene(ctx) {
     uBody: { value: cells },   // the same packed cell list the quad marches
     uBodyN: { value: 0 },
     uLift: { value: 0 },
+    uMaxC: { value: MAXC },
   };
   const mycMat = new THREE.ShaderMaterial({
     glslVersion: THREE.GLSL3,
@@ -1971,9 +2049,31 @@ export function createScene(ctx) {
   });
   const helix = new THREE.Mesh(hx.g, hxMat);
   helix.frustumCulled = false;
-  helix.renderOrder = 2;
-  helix.visible = false;
+  helix.renderOrder = 4;
+  helix.visible = true; // linked at warm time (nothing to draw at count 0); the first update hides it
   scene.add(helix);
+  hyphae.renderOrder = 3;
+  hyphae.visible = true;
+
+  // --- the world plates: scene-private modules, each with its own programs ----------
+  // (the weather's four meshes, the microscope's quad, the day's quad, the
+  // currents' three). Every one is visible at creation so the warm pipeline
+  // links it; the first update hides what has no weight.
+  const wx = createWeather(THREE, ctx);
+  const micro = createMicroscopy(THREE, ctx);
+  const sea = createSea(THREE, ctx);
+  const curr = createCurrents(THREE, ctx);
+  const plateModules = [wx, micro, sea, curr];
+  for (const m of plateModules) for (const o of m.objects) scene.add(o);
+  // the per-frame plate state handed to the modules (one object, mutated)
+  const PS = {
+    dt: 0, t: 0, weight: 0, sys: 0, intensity: 0, level: 0, sway: 0, press: 0, hx: 0.5, hy: 0.5,
+    opened: false, openNow: false, openS: 0, openDim: 0, bass: 0, mid: 0, high: 0, pulse: 0,
+    speciesHash: 0, warm: true, order: [0, 1, 2, 3, 4],
+  };
+  const warmth = [0, 0, 0, 0, 0];
+  // the quads' first two frames: every quad draws its 2-px patch at zero alpha
+  let warmFrames = 2;
 
   // --- the cell line: layouts for every aggregate stage --------------------------
   // Cleavage is continuous in the level, so a fractional stage is a furrow in
@@ -3633,8 +3733,18 @@ export function createScene(ctx) {
   // the mold; then the toxin at the molecule, the cell consumed, the body
   // decomposed.
   const ORG_HELIX = 0, ORG_CELL = 1, ORG_MYC = 2, ORG_SLIME = 3, ORG_TOXIN = 4, ORG_PHAGO = 5, ORG_DECOMP = 6;
-  const ORG_N = 7;
-  const ORG_STAGES = [3, STAGES, 6, 6, 6, 6, 6]; // helix, cell line, mycelium, slime mold, toxin, phagocytosis, decomposition
+  // then the world: the microscope, the currents, the day, and the five
+  // weather systems in the order lightning, tornado, hurricane, wildfire,
+  // sandstorm (weather.js's own indices: 2, 0, 1, 3, 4)
+  const ORG_MICRO = 7, ORG_CURR = 8, ORG_DAY = 9, ORG_WX0 = 10, ORG_WX1 = 14;
+  const WX_SYS = [2, 0, 1, 3, 4];
+  const ORG_N = 15;
+  // stages per plate: helix, cell line, mycelium, slime mold, toxin,
+  // phagocytosis, decomposition, the focus (four), the regimes (six), the
+  // day's phases (five), then the five weather plates (the level is the
+  // intensity; a pad fires the main event, develop up / down step in sixths)
+  const ORG_STAGES = [3, STAGES, 6, 6, 6, 6, 6, 4, 6, 5, 6, 6, 6, 6, 6];
+  const isWx = (o) => o >= ORG_WX0 && o <= ORG_WX1;
 
   let level = 0, target = 0, dir = 1;
   let knobLvlPrev = null, knobOrgPrev = null, knobSpcPrev = null, strikePrev = 0;
@@ -3650,8 +3760,11 @@ export function createScene(ctx) {
   let speciesIdx = 0;
   let reseedN = 0;
   let paramMorph = null, paramSqueeze = null;
-  let jig = 0, press = 0, bass = 0, high = 0, lvl = 0, dist = 3.4;
+  let jig = 0, press = 0, bass = 0, mid = 0, high = 0, lvl = 0, dist = 3.4;
   let panX = 0, panY = 0, azim = 0, pulse = 0, beatPrev = 0, flow = 0;
+  let hxS = 0.5, hyS = 0.5;  // the hand, smoothed, for the world plates
+  let wxSys = 2;             // the weather system the weather plates last asked for (lightning)
+  const bloom = { strength: 0, radius: 0.5, threshold: 0.6 }; // the weather's, weighted by its plate
   let mycSway = -1, mycDirty = true, mycMode = 0; // the mode the hyphae buffer holds: 0 the fungus, 1 the mould
   let hxSway = -1, hxLevel = -1, hxDirty = true;
   let seedOff = 0;
@@ -3691,12 +3804,14 @@ export function createScene(ctx) {
     camera,
     update(dt, t, io) {
       // ---- the cold open
+      let openNow = false;
       if (!opened) {
         const tp = io.transport || null;
         const tpNow = !!(tp && tp.playing);
         const beat = io.beat > 0.6 && io.level > 0.12;
         if ((tpNow && !tpPrev) || beat || io.strike > 0.12) {
           opened = true;
+          openNow = true;
           openAge = 0;
           // the opening element: the molecule replicating — the fork is stage 1 of the helix
           if (orgTarget === ORG_HELIX && target < 0.25) { dir = 1; target = 1 / (ORG_STAGES[ORG_HELIX] - 1); }
@@ -3708,14 +3823,14 @@ export function createScene(ctx) {
       openS = approach(openS, opened ? 1 : 0, 0.6, dt);
       const openDim = Math.max(openS, 0.05 + 0.04 * io.level); // dark, not dead
 
-      // ---- the organism: KNOB 6 in sevenths of a turn, with hysteresis at the edges
+      // ---- the plate: KNOB 6 in fifteenths of a turn, with hysteresis at the edges
       const k6 = io.knobs[5];
       if (knobOrgPrev === null) knobOrgPrev = k6;
       if (Math.abs(k6 - knobOrgPrev) > 1 / 256) {
         knobOrgPrev = k6;
         const band = 1 / ORG_N;
         const b = clamp(Math.floor(k6 * ORG_N), 0, ORG_N - 1);
-        if (b !== orgTarget && (k6 < orgTarget * band - 0.015 || k6 > (orgTarget + 1) * band + 0.015)) orgTarget = b;
+        if (b !== orgTarget && (k6 < orgTarget * band - 0.012 || k6 > (orgTarget + 1) * band + 0.012)) orgTarget = b;
       }
       orgPos = approach(orgPos, orgTarget, 0.15, dt);
       const wMyc = Math.max(0, 1 - Math.abs(orgPos - ORG_MYC));
@@ -3725,6 +3840,16 @@ export function createScene(ctx) {
       const wToxin = Math.max(0, 1 - Math.abs(orgPos - ORG_TOXIN));
       const wPhago = Math.max(0, 1 - Math.abs(orgPos - ORG_PHAGO));
       const wDecomp = Math.max(0, 1 - Math.abs(orgPos - ORG_DECOMP));
+      const wMicro = Math.max(0, 1 - Math.abs(orgPos - ORG_MICRO));
+      const wCurr = Math.max(0, 1 - Math.abs(orgPos - ORG_CURR));
+      const wDay = Math.max(0, 1 - Math.abs(orgPos - ORG_DAY));
+      // the weather as a whole: the five weather bands' weights sum (the
+      // tents between two weather plates add to one, so the module's own
+      // two-eye dissolve carries a change of system)
+      let wWx = 0;
+      for (let k = ORG_WX0; k <= ORG_WX1; k++) wWx += Math.max(0, 1 - Math.abs(orgPos - k));
+      const wLife = wMyc + wSlime + wCell + wHelix + wToxin + wPhago + wDecomp;
+      if (isWx(orgTarget)) wxSys = WX_SYS[orgTarget - ORG_WX0];
 
       // ---- the species: KNOB 7, quantized to the eight seeded parameter sets
       const k7 = io.knobs[6];
@@ -3749,9 +3874,14 @@ export function createScene(ctx) {
         target = k5;
       }
       if (io.strike > strikePrev + 0.3 && openAge > 0.1) {
-        if (target >= 1 - 1e-3) dir = -1;
-        else if (target <= 1e-3) dir = 1;
-        stepLevel(dir);
+        // on a weather plate a pad is the system's main event; everywhere
+        // else it steps the development one stage of what is on screen
+        if (isWx(orgTarget)) wx.mainEvent();
+        else {
+          if (target >= 1 - 1e-3) dir = -1;
+          else if (target <= 1e-3) dir = 1;
+          stepLevel(dir);
+        }
       }
       strikePrev = io.strike;
       level = approach(level, target, 1.3, dt);
@@ -3768,7 +3898,10 @@ export function createScene(ctx) {
       azim = approach(azim, (io.xy.x - 0.5) * 6.2831853, 0.25, dt);
       dist = approach(dist, 4.3 - io.xy.y * 1.9, 0.35, dt);
       bass = approach(bass, io.bands.bass, 0.12, dt);
+      mid = approach(mid, io.bands.mid, 0.12, dt);
       high = approach(high, io.bands.high, 0.1, dt);
+      hxS = approach(hxS, io.xy.x, 0.3, dt);
+      hyS = approach(hyS, io.xy.y, 0.3, dt);
       lvl = approach(lvl, io.level, 0.25, dt);
       if (io.beat > beatPrev + 0.3) pulse = 1;
       beatPrev = io.beat;
@@ -3991,8 +4124,50 @@ export function createScene(ctx) {
       HU.uBeat.value = pulse;
       HU.uHigh.value = high;
       HU.uTime.value = t;
+
+      // ---- the world plates. The organism quad is the opaque base and is
+      // drawn only while a life plate has weight; the world plates' quads
+      // draw weighted and add, so a dissolve between different programs is
+      // the cross-fade of two finished images. For the first two frames every
+      // quad draws its 2-px patch instead (the warm frames), whatever the
+      // weights.
+      const warm = warmFrames > 0;
+      if (warm) warmFrames--;
+      quad.visible = wLife > 0.002 || warm;
+      // the palette sorted cool → warm by (r − b), in place, for the world
+      // plates' tinting (the day's stop tables, the currents' ramp, the
+      // microscope's two colours)
+      const ord = PS.order;
+      for (let i = 0; i < 5; i++) { warmth[i] = pl[i].r - pl[i].b; ord[i] = i; }
+      for (let i = 1; i < 5; i++) {
+        const k = ord[i];
+        let j = i - 1;
+        while (j >= 0 && warmth[ord[j]] > warmth[k]) { ord[j + 1] = ord[j]; j--; }
+        ord[j + 1] = k;
+      }
+      PS.dt = dt; PS.t = t;
+      PS.level = level; PS.intensity = level;
+      PS.sway = jig; PS.press = press; PS.hx = hxS; PS.hy = hyS;
+      // the world plates' dark floor sits a little higher than the organisms'
+      // (a calm sky is faint, not black — the same floor Weather Systems had)
+      PS.opened = opened; PS.openNow = openNow; PS.openS = openS; PS.openDim = Math.max(openS, 0.07 + 0.05 * io.level);
+      PS.bass = bass; PS.mid = mid; PS.high = high; PS.pulse = pulse;
+      PS.speciesHash = hash1(speciesIdx * 13.37 + reseedN * 3.77 + 2.0);
+      PS.warm = warm;
+      PS.sys = wxSys;
+      PS.weight = wWx; wx.update(PS, io);
+      PS.weight = wMicro; micro.update(PS, io);
+      PS.weight = wDay; sea.update(PS, io);
+      PS.weight = wCurr; curr.update(PS, io);
+      // live bloom: the weather's, which its plate weight already scales
+      bloom.strength = wx.bloom.strength;
+      bloom.radius = wx.bloom.radius;
+      bloom.threshold = wx.bloom.threshold;
     },
-    // discrete events: pick an organism, step the development, re-seed
+    bloom,
+    // discrete events: pick a plate, step the development, re-seed, the
+    // weather's events (the module takes them; strike lands in any weather
+    // system)
     action(key) {
       if (key === 'mycelium') orgTarget = ORG_MYC;
       else if (key === 'slimeMold') orgTarget = ORG_SLIME;
@@ -4001,9 +4176,18 @@ export function createScene(ctx) {
       else if (key === 'toxin') orgTarget = ORG_TOXIN;
       else if (key === 'phagocytosis') orgTarget = ORG_PHAGO;
       else if (key === 'decomposition') orgTarget = ORG_DECOMP;
+      else if (key === 'microscopy') orgTarget = ORG_MICRO;
+      else if (key === 'oceanCurrents') orgTarget = ORG_CURR;
+      else if (key === 'theDay') orgTarget = ORG_DAY;
+      else if (key === 'lightning') orgTarget = ORG_WX0;
+      else if (key === 'tornado') orgTarget = ORG_WX0 + 1;
+      else if (key === 'hurricane') orgTarget = ORG_WX0 + 2;
+      else if (key === 'wildfire') orgTarget = ORG_WX0 + 3;
+      else if (key === 'sandstorm') orgTarget = ORG_WX0 + 4;
       else if (key === 'developUp') { dir = 1; stepLevel(1); }
       else if (key === 'developDown') { dir = -1; stepLevel(-1); }
       else if (key === 'reseed') { reseedN++; applySpecies(); }
+      else if (key === 'strike' || key === 'touchdown' || key === 'gust' || key === 'flareUp' || key === 'eyewall' || key === 'calm') wx.event(key);
     },
     // continuous parameters; the raw knobs above stay the fallback, whichever
     // moved last winning, and morph / squeeze ride alongside their gestures
@@ -4020,6 +4204,7 @@ export function createScene(ctx) {
       U.uRes.value.set(w, h);
       MU.uRes.value.set(w, h);
       HU.uRes.value.set(w, h);
+      for (const m of plateModules) m.resize(w, h);
     },
     dispose() {
       quad.geometry.dispose();
@@ -4029,6 +4214,7 @@ export function createScene(ctx) {
       mycMat.dispose();
       hx.g.dispose();
       hxMat.dispose();
+      for (const m of plateModules) m.dispose();
     },
   };
 }

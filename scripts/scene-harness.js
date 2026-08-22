@@ -113,6 +113,10 @@ if (process.versions.electron && !process.env.ELECTRON_RUN_AS_NODE) {
   } else if (plan.userDataDir) {
     args.push(`--user-data-dir=${path.resolve(plan.userDataDir)}`);
   }
+  // "electronArgs": ["--gpu-program-cache-size-kb=524288", "--use-angle=gl"]
+  // passes Chromium/ANGLE switches through, so the shader-cache and backend
+  // questions can be measured without editing this file.
+  for (const a of plan.electronArgs || []) args.push(String(a));
   const r = spawnSync(electron, args, { env, stdio: 'inherit', cwd: root });
   process.exit(r.status == null ? 1 : r.status);
 }

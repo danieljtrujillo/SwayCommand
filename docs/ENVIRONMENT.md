@@ -4,7 +4,7 @@ This document covers the environment variables the application reads, the render
 
 ## Environment variables
 
-All six variables are read in `src/main/main.js` at window creation. Four exist for automated verification (`SWAYCOMMAND_SHOT`, `SWAYCOMMAND_SHOT_DELAY`, `SWAYCOMMAND_PROBE`, `SWAYCOMMAND_WINDOW`); the other two preset the renderer's query parameters.
+All seven variables are read in `src/main/main.js`. Four exist for automated verification (`SWAYCOMMAND_SHOT`, `SWAYCOMMAND_SHOT_DELAY`, `SWAYCOMMAND_PROBE`, `SWAYCOMMAND_WINDOW`), two preset the renderer's query parameters, and `SWAYCOMMAND_ANGLE` picks the graphics backend before the app is ready.
 
 | Variable | Value | Default | Behavior |
 |---|---|---|---|
@@ -14,6 +14,7 @@ All six variables are read in `src/main/main.js` at window creation. Four exist 
 | `SWAYCOMMAND_WINDOW` | `<width>x<height>`, e.g. `960x600` | unset | Forces the initial window size so narrow layouts can be screenshot-tested headlessly. |
 | `SWAYCOMMAND_AUTOPLAY` | Template id, or a `.sway` file path | unset | Forwarded to the renderer as the `autoplay` query parameter of `dist/index.html`. |
 | `SWAYCOMMAND_SCENE` | Scene id | unset | Forwarded to the renderer as the `scene` query parameter. |
+| `SWAYCOMMAND_ANGLE` | ANGLE backend name (`gl`, `d3d11`, `vulkan`), or `default` | `gl` | The graphics backend ANGLE translates the shaders through, applied as Chromium's `--use-angle` before the app is ready. The default is **`gl`** because the D3D11 backend compiles through fxc, which fully unrolls and inlines: the first draw of Nature's Tomb cost 132 s on D3D11 against 12 s on GL, and a cache-warm first draw 2.9 s against 0.29 s, for between −0.1 and +1.9 ms a frame at 1080p tier med. Set `d3d11` to restore the old backend, or `default` to let Chromium choose. The program cache is raised to 512 MB at the same point and is not configurable — at Chromium's default the two big scenes' binaries evict each other and neither is ever cached, so every launch pays the full compile. |
 
 `SWAYCOMMAND_SHOT` and `SWAYCOMMAND_PROBE` register independent `did-finish-load` timers and can be combined; screenshot mode quits the application once its own delay elapses, so a probe result appears only when the probe timer (3000 ms) fires first. Launch examples:
 
@@ -52,7 +53,7 @@ Both parameters are consumed once, in `main()` of `src/renderer/app.js`, from `l
 | Parameter | Value | Behavior |
 |---|---|---|
 | `autoplay` | Template id, or a `.sway` file path | A value ending in `.sway` (case-insensitive) is opened as a project file; anything else is opened as a template id. On failure the startup falls through to the normal selection (most recent project, then the `first-flight` template) with a console warning. Any `autoplay` value also skips the SYSTEM modal: the blast door opens immediately and the Doctor still runs in the background, keeping its checks reachable from the CONTROLS modal. |
-| `scene` | Scene id | Applied after the boot project loads: Auto-VJ is disabled and the engine switches to the named scene via `setScene(scene, 0.3)`. The value is one of the twenty ids in the scene registry (`src/renderer/engine/scenes/index.js`): `beams`, `swarm`, `ribbons`, `voxels`, `warp`, `nebula`, `mandelbulb`, `cymatic`, `spectra`, `vjshader`, `ferrofluid`, `chladni`, `valley`, `lattice`, `willidream`, `naturestomb`, `miraclemile`, `tunnelending`, `wormholept1`, `wormholeend`. `setScene` ignores an id with no registered creator, so an unknown value leaves the project's opening scene on stage with Auto-VJ still disabled. |
+| `scene` | Scene id | Applied after the boot project loads: Auto-VJ is disabled and the engine switches to the named scene via `setScene(scene, 0.3)`. The value is one of the sixteen ids in the scene registry (`src/renderer/engine/scenes/index.js`): `beams`, `swarm`, `ribbons`, `voxels`, `nebula`, `mandelbulb`, `cymatic`, `spectra`, `vjshader`, `ferrofluid`, `chladni`, `valley`, `lattice`, `willidream`, `naturestomb`, `miraclemile`. `setScene` ignores an id with no registered creator, so an unknown value leaves the project's opening scene on stage with Auto-VJ still disabled. |
 
 ## The automation handle
 

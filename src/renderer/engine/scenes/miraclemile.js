@@ -316,6 +316,10 @@
 // glow rides the ray's own fog integral, so a deck standing over the city
 // lights the haze and the faces turned toward it and leaves the rest black.
 
+// The launch map is a scene-private module (docs/SCENE_CONTRACT.md, hard rule 4):
+// a factory taking THREE, owned and disposed by this scene, never registered.
+import { createLaunchMap } from './miraclemile/launchmap.js';
+
 export const meta = {
   id: 'miraclemile',
   name: 'Miracle Mile',
@@ -330,6 +334,8 @@ export const meta = {
       { key: 'salvo', label: 'full salvo' },
       { key: 'rebuild', label: 're-seed city' },
       { key: 'lightning', label: 'lightning' },
+      { key: 'launchMap', label: 'launch map' },
+      { key: 'launchAll', label: 'all launched' },
     ],
     params: [
       { key: 'act', label: 'act', min: 0, max: 3, default: 0 },
@@ -337,6 +343,7 @@ export const meta = {
       { key: 'transition', label: 'atom to city', min: 0, max: 1, default: 1 },
       { key: 'cloudScale', label: 'cloud scale', min: 0.35, max: 2.4, default: 1 },
       { key: 'place', label: 'strike place', min: 0, max: 15, default: 0 },
+      { key: 'shadowContrast', label: 'shadow contrast', min: 0, max: 1, default: 0.5 },
     ],
   },
 };
@@ -379,7 +386,8 @@ const LAMP_Z0 = 60;
 const LAMP_X = 19;
 const LAMP_H = 8.5;
 const EMBERS = 220;
-const DEBRIS = 140;   // the debris shower in the front: dark chunks thrown out along it
+const CARS = 110;     // parked along the kerbs of the boulevard, the avenues and the cross streets
+const CLOUD_H = 600;  // the height of the deck the projected light comes through
 // open ground across the grid: the river (three lots wide, the boulevard bridged
 // over it) and the rail yard, both in lot rows (cz)
 const RIVER_C0 = -15, RIVER_C1 = -17;
@@ -492,6 +500,7 @@ const WORLD_FRAG = /* glsl */ `
   #define CELLF ${CELL}.0
   #define HMAXF ${H_MAX}.0
   #define CFAR ${CITY_FAR}.0
+  #define CLOUD_H 600.0
   uniform vec2 uRes;
   uniform vec3 uCamPos, uCamFwd, uCamRight, uCamUp;
   uniform float uTanHalf, uTime, uIntensity, uFlash;
@@ -511,6 +520,21 @@ const WORLD_FRAG = /* glsl */ `
   uniform vec3 uSun;
   uniform vec2 uWind;
   uniform float uWreck, uHaze, uLamps, uLtn, uBoltSeed;
+  // THE SHADOWS. The sun's shadow is a march along its bearing over the lot
+  // grid (uShadowSteps lots, a uniform bound so HLSL does not unroll it; the
+  // wet road's reflection takes the short form); the light that reaches the
+  // city is gated by the PROJECTED mask of the storm's broken deck and the
+  // smoke (uGateT its threshold); every burst is a point light for its flash
+  // and throws a hard shadow AWAY from itself (uNFlash of them, the biggest
+  // two; uFlashP = x, y, z, r² and uFlashC = amplitude; uFlashExpo the
+  // exposure the flash takes off everything it does not light); the etched
+  // shadows the wreck keeps trace at uEtchSteps toward each crater's burst
+  // (uDmgY its height).
+  uniform int uShadowSteps, uShadowStepsLite, uFlashSteps, uEtchSteps, uNFlash, uNEtch;
+  uniform vec4 uFlashP[2];
+  uniform float uFlashC[2];
+  uniform float uFlashExpo, uGateT;
+  uniform float uDmgY[MAX_DMG];
   // the wreck: craters (x, z, 1/R², strength), the box round their heavy radii
   // (min x, min z, max x, max z), and the fires the fronts lit (x, z, y, age)
   uniform int uNDmg;
@@ -714,6 +738,138 @@ const WORLD_FRAG = /* glsl */ `
     return 32.0 + g2 * 3.5 + g * 40.0;
   }
 
+  // ================================================================ the shadows
+  // the sun's bearing on the ground, its rise per metre along it, and the
+  // inverse — set once a pixel (prepColours)
+  vec2 gSunDir; float gRise, gInvRise;
+  // Does lot c block a ray leaving p along dir (unit, on the ground) and
+  // rising rise per metre? The lot's footprint (the same plan bits lotOf
+  // reads — two hashes, no family branches) is slab-tested along the ray, and
+  // the ray's height where it ENTERS the footprint is held against the lot's
+  // top: a real trace, not a height lookup at a guessed distance. The penumbra
+  // widens with that entry distance (the sun is half a degree wide; the flash
+  // is a fireball), so the shadow is knife-sharp at the foot of the block that
+  // throws it and soft at the far end of its run — the contact hardening of a
+  // soft shadow map. fallen takes the crater into account (a stump throws a
+  // stump's shadow); the etched shadows pass 0 — they were thrown by the
+  // blocks as they STOOD at the instant of the flash.
+  float lotBlock(ivec2 c, vec3 p, vec2 dir, float rise, float soft, float fallen) {
+    uint k = lotKey(c);
+    uint a = hu(k);
+    float rx = float(a & 255u) * (1.0 / 255.0), rz = float((a >> 8) & 255u) * (1.0 / 255.0);
+    float ox = (float((a >> 16) & 255u) * (1.0 / 255.0) - 0.5) * 3.0, oz = (float(a >> 24) * (1.0 / 255.0) - 0.5) * 3.0;
+    float hx = CELLF * 0.5 - (3.0 + rx * 4.0), hz = CELLF * 0.5 - (3.0 + rz * 4.0);
+    if (abs(c.x) == 1) { hx -= 4.0; ox += c.x > 0 ? 4.0 : -4.0; }
+    vec2 ctr = vec2(c) * CELLF + vec2(ox, oz);
+    vec2 id = vec2(1.0) / (abs(dir) + vec2(1e-5)) * sign(dir + vec2(1e-7));
+    vec2 t1 = (ctr - vec2(hx, hz) - p.xz) * id, t2 = (ctr + vec2(hx, hz) - p.xz) * id;
+    vec2 tn = min(t1, t2), tf = max(t1, t2);
+    float tIn = max(tn.x, tn.y), tOut = min(tf.x, tf.y);
+    if (tOut <= max(tIn, 0.0)) return 1.0;
+    tIn = max(tIn, 0.0);
+    int fam; float g;
+    float top = lotTop(k, fam, g) - 3.0;   // the furniture on the roof is thin; the mass is what shadows
+    if (fallen > 0.5) top *= 1.0 - 0.72 * smoothstep(0.55, 1.0, craterAt(ctr));
+    float w = soft * (0.35 + tIn * 0.012);
+    return smoothstep(-w, w, p.y + rise * tIn - top);
+  }
+  // The sun's shadow at p: a march along the bearing, the first lots one by
+  // one and then at a widening stride out to a few hundred metres — the sun
+  // stands three and a half degrees up, so a tower throws its shadow hundreds
+  // of metres down the boulevard and what decides the light at a point is
+  // whether ANY block along that run clears the ray. own is the cell p
+  // stands in (a block does not shadow its own lit face); steps is a uniform
+  // — the wet road's trace takes the short form. The result is squared by the
+  // callers: the shadow side goes to black.
+  float sunShadow(vec3 p, ivec2 own, int steps) {
+    float lit = 1.0;
+    ivec2 prev = ivec2(100000);
+    for (int i = 0; i < steps; i++) {
+      float fi = float(i);
+      float d = CELLF * (0.55 + 0.62 * fi + 0.075 * fi * fi);
+      ivec2 c = ivec2(floor((p.xz + gSunDir * d) / CELLF + 0.5));
+      if (c == own || c == prev || lotStreet(c)) { prev = c; continue; }
+      prev = c;
+      lit = min(lit, lotBlock(c, p, gSunDir, gRise, 1.0, 1.0));
+      if (lit < 0.01) break;
+    }
+    return lit;
+  }
+  // The flash: a burst is a point light for the instant of its flash, and
+  // every block throws a HARD shadow away from it — a march from p toward the
+  // burst, the ray climbing to the fireball. fallen as in lotBlock.
+  float flashShadow(vec3 p, vec3 B, int steps, float fallen) {
+    vec2 dv = B.xz - p.xz;
+    float D = length(dv);
+    if (D < 2.0) return 1.0;
+    vec2 dir = dv / D;
+    float rise = (B.y - p.y) / D;
+    float lit = 1.0;
+    ivec2 prev = ivec2(100000);
+    for (int i = 0; i < steps; i++) {
+      float d = CELLF * (0.5 + 0.85 * float(i));
+      if (d >= D) break;
+      ivec2 c = ivec2(floor((p.xz + dir * d) / CELLF + 0.5));
+      if (c == prev || lotStreet(c)) { prev = c; continue; }
+      prev = c;
+      lit = min(lit, lotBlock(c, p, dir, rise, 0.6, fallen));
+      if (lit < 0.01) break;
+    }
+    return lit;
+  }
+  // THE PROJECTED LIGHT. The sunlight reaching the city comes through the
+  // storm's broken deck and the smoke between the sun and the city, so it is
+  // gated by a PROJECTED mask — the pen's projection map: a domain-warped fbm,
+  // a ridge, the pen's own mask weights and a luma threshold with a 0.1
+  // smoothstep — evaluated where the sun ray from p crosses the cloud plane
+  // (CLOUD_H), so the pattern is carried along the sun onto whatever it hits;
+  // it FLOWS (translation, never rotation) and the wreck thickens it as the
+  // ash comes in (the caller raises uGateT). Bands of hard light and cloud
+  // shadow sweep the city; the shafts in the haze read the same mask.
+  float skyGate(vec3 p) {
+    vec2 q = p.xz + gSunDir * ((CLOUD_H - p.y) * gInvRise);
+    vec2 fl = vec2(uTime * 5.5, uTime * 3.2);
+    vec2 w = q + 110.0 * (vec2(vnoise2(q * 0.0021 + fl * 0.002), vnoise2(q * 0.0021 + vec2(7.3, 2.1) - fl.yx * 0.002)) - 0.5);
+    vec2 wa = (w + fl) * 0.0037;
+    float nA = 0.75 * fbm2b(wa) + 0.25 * vnoise2(wa * 4.1 + 3.0);
+    float nB = fbm2b((w + fl * 0.6) * 0.0083 + 11.0);
+    float ridge = 1.0 - abs(2.0 * nB - 1.0);
+    float mask = 0.18 + 1.12 * (0.58 * nA + 0.42 * ridge);
+    return smoothstep(uGateT, uGateT + 0.1, mask);
+  }
+  // THE ETCHED SHADOWS. Inside a crater the flash bleached whatever it
+  // reached and left the ground and the walls dark wherever a block stood
+  // between them and the burst — the silhouette persists in the wreck. Traced
+  // toward each crater's burst (the STUMPS biggest) at a reduced step count
+  // against the city as it STOOD; 'rebuild' clears the craters and the etch
+  // with them. Returns how bleached p is (0 in the silhouette or outside).
+  float etchAt(vec3 p) {
+    if (uNDmg == 0 || p.x < uDmgBox.x - 60.0 || p.z < uDmgBox.y - 60.0 || p.x > uDmgBox.z + 60.0 || p.z > uDmgBox.w + 60.0) return 0.0;
+    float e = 0.0;
+    for (int i = 0; i < uNEtch; i++) {
+      vec4 D = uDmg[i];
+      vec2 dv = p.xz - D.xy;
+      float fall = D.w * clamp((1.0 - dot(dv, dv) * D.z) * 1.8, 0.0, 1.0);
+      if (fall < 0.05) continue;
+      e = max(e, fall * flashShadow(p, vec3(D.x, uDmgY[i], D.y), uEtchSteps, 0.0));
+    }
+    return e;
+  }
+  // the flash's light at p on a face n: the two biggest live bursts, each a
+  // point light with a hard traced shadow; white-hot on the lit side
+  float flashLight(vec3 p, vec3 n) {
+    float L = 0.0;
+    for (int i = 0; i < uNFlash; i++) {
+      vec4 F = uFlashP[i];
+      vec3 dv = F.xyz - p;
+      float d2 = dot(dv, dv);
+      float ndl = dot(n, dv) * inversesqrt(max(d2, 1.0));
+      if (ndl < 0.001) continue;
+      L += uFlashC[i] * F.w / (F.w + d2) * ndl * flashShadow(p, F.xyz, uFlashSteps, 1.0);
+    }
+    return L;
+  }
+
   vec3 safeInv(vec3 v) {
     vec3 s = vec3(v.x >= 0.0 ? 1.0 : -1.0, v.y >= 0.0 ? 1.0 : -1.0, v.z >= 0.0 ? 1.0 : -1.0);
     return s / max(abs(v), vec3(1e-7));
@@ -884,6 +1040,9 @@ const WORLD_FRAG = /* glsl */ `
   // every function below, so they are worked out once a pixel (prepColours)
   vec3 gSunT, gHaze, gAmb;
   void prepColours() {
+    gSunDir = normalize(uSun.xz);
+    gRise = uSun.y / max(length(uSun.xz), 1e-4);
+    gInvRise = 1.0 / max(gRise, 1e-3);
     gSunT = mix(mix(uPal0, vec3(1.0), 0.55), mix(uPal1, uPal3, 0.5) * 0.8, uWreck * 0.85);
     gHaze = mix(mix(uPal3, uPal0, 0.5) * 0.55, grey(mix(uPal4, uPal1, 0.3), 0.6) * 0.22, uWreck * 0.85);
     gAmb = mix(mix(mix(uPal3, uPal0, 0.5), grey(uPal2, 0.4), 0.5) * 0.40, grey(mix(uPal4, uPal1, 0.3), 0.6) * 0.14, uWreck * 0.85);
@@ -905,27 +1064,6 @@ const WORLD_FRAG = /* glsl */ `
     vec3 ash = mix(grey(uPal4, 0.5), uPal1, 0.25) * 0.14;
     col = mix(col, ash * (0.6 + 0.8 * (1.0 - h)), uWreck * 0.78);
     return col;
-  }
-
-  // the sun's shadow at p. The sun stands three degrees up, so every shadow is
-  // hundreds of metres long and what decides the light is whether the next few
-  // blocks along the bearing clear the ray to it: four height lookups along the
-  // bearing stand in for a shadow trace (two lookups). own is the cell p stands in (a block
-  // does not shadow its own lit face).
-  float sunShadow(vec3 p, ivec2 own) {
-    vec2 dir = normalize(uSun.xz);
-    float rise = uSun.y / max(length(uSun.xz), 1e-4);
-    float lit = 1.0;
-    for (int i = 0; i < 2; i++) {
-      float d = (float(i) * 2.2 + 0.95) * CELLF;
-      vec2 q = p.xz + dir * d;
-      ivec2 c = ivec2(floor(q / CELLF + 0.5));
-      if (c == own || lotStreet(c)) continue;
-      int fam = 0; float g = 0.0;
-      float top = lotTop(lotKey(c), fam, g) - 4.0;   // the furniture on the roof is thin; the mass is what shadows
-      lit *= smoothstep(-3.0, 1.5, p.y + rise * d - top);
-    }
-    return lit;
   }
 
   // a dot-matrix panel: q relative to its centre, hf its half size; glyph-like
@@ -1060,7 +1198,9 @@ const WORLD_FRAG = /* glsl */ `
     vec2 cc = ctr + (lvl == 1 ? off.xy : (lvl == 2 ? off.zw : vec2(0.0)));
     if (n.y > 0.5) return grey(uPal4, 0.8) * 0.03;
     float u = abs(n.x) > 0.5 ? p.z : p.x;
-    float sun = max(dot(n, uSun), 0.0) * 0.5;
+    float sunD = max(dot(n, uSun), 0.0);
+    float shL = sunD > 0.001 ? sunShadow(p, c, uShadowStepsLite) : 0.0;   // the short trace; the gate's average stands in
+    float sun = sunD * shL * shL * 0.35;
     float ao = mix(0.4, 1.0, smoothstep(0.0, 22.0, p.y));
     vec3 stone = grey(mix(uPal4, vec3(1.0), 0.18), 0.8) * (fam == 2 ? 0.3 : 1.0);
     vec3 col = stone * (gAmb * ao * 0.45 + gSunT * sun * 0.9 * (1.0 - uWreck * 0.75));
@@ -1091,8 +1231,16 @@ const WORLD_FRAG = /* glsl */ `
 
     // ---- light: the sun (hard, low, long shadows), the dome, the occlusion of
     // the canyon floor and the setbacks, the lightning
+    // the traced shadow, squared to black, under the projected gate — the
+    // face is lit only where every block along the sun's run clears the ray
+    // AND the deck is open over that run
     float sunD = max(dot(n, uSun), 0.0);
-    float sun = sunD > 0.001 ? sunD * sunShadow(p, c) : 0.0;
+    float sun = 0.0;
+    if (sunD > 0.001) {
+      float sh = sunShadow(p, c, uShadowSteps);
+      sh *= sh;
+      if (sh > 0.01) sun = sunD * sh * skyGate(p);
+    }
     float ao = roof ? 0.85 : mix(0.38, 1.0, smoothstep(0.0, 9.0, hgt)) * mix(0.55, 1.0, smoothstep(0.0, 24.0, v));
     if (roof) {
       // the roof darkens against the mass standing on it, and lights at its parapet
@@ -1104,8 +1252,12 @@ const WORLD_FRAG = /* glsl */ `
     }
     vec3 amb = gAmb;
     vec3 sunCol = gSunT * (1.0 - uWreck * 0.75);
-    vec3 light = amb * ao * (0.62 + 0.38 * (n.y * 0.5 + 0.5)) + sunCol * sun * 1.5;
+    // the flash takes the exposure: everything it does not light goes toward
+    // black while it lasts, and the faces it reaches go white-hot
+    float expo = 1.0 / (1.0 + uFlashExpo);
+    vec3 light = (amb * ao * (0.62 + 0.38 * (n.y * 0.5 + 0.5)) + sunCol * sun * 1.5) * expo;
     light += mix(uPal2, vec3(1.0), 0.5) * uLtn * 0.10;
+    if (uNFlash > 0) light += mix(uPal0, vec3(1.0), 0.75) * flashLight(p, n) * 2.2;
 
     // ---- material: micro-variation, grime running down from the sills, a wet sheen
     float g1 = vnoise2(vec2(u, v) * 0.55 + rnd.xy * 17.0);
@@ -1272,8 +1424,14 @@ const WORLD_FRAG = /* glsl */ `
       col = mix(col, grey(uPal4, 0.8) * 0.35 * light, stump * slabs * 0.8);
       col *= 1.0 - stump * 0.3 * smoothstep(0.4, 0.65, vnoise2(vec2(u * 0.7, v * 0.5) + rnd.xy * 3.0));
     }
+    // the etched shadow: inside the crater the flash bleached the wall where it
+    // reached it and left the silhouette of whatever stood between
+    if (dmg > 0.3 && !roof) {
+      float et = etchAt(p);
+      if (et > 0.01) col = mix(col, (base * albedo * grain * 2.4 + grey(uPal4, 0.9) * 0.08) * light * (1.0 - hole * 0.6), et * 0.6);
+    }
     // the street lamps reach the lower floors
-    if (p.y < 46.0) col += lampLight(p, clamp(blown + flare * 0.5, 0.0, 2.0)) * mix(uPal1, uPal0, 0.3) * 0.22 * uLamps * max(1.0 - n.y, 0.15);
+    if (p.y < 46.0) col += lampLight(p, clamp(blown + flare * 0.5, 0.0, 2.0)) * mix(uPal1, uPal0, 0.3) * 0.22 * uLamps * max(1.0 - n.y, 0.15) * expo;
     // Every fireball is a light: the facades turned toward it burn. The term is
     // PURELY directional and carries no ambient share at all — the smallest
     // floor here is a floor under every wall in frame, and with a deck standing
@@ -1281,7 +1439,7 @@ const WORLD_FRAG = /* glsl */ `
     // A wall turned away from every fireball stays unlit however many stand.
     vec3 fireCol = mix(uPal1, uPal0, 0.45);
     float face = roof ? 0.75 : clamp(n.x * fireDir.x + n.z * fireDir.y, 0.0, 1.0);
-    col += fireCol * fireLit * 0.16 * face * face * grain;
+    col += fireCol * fireLit * 0.11 * face * face * grain;
     // the front: a hard white edge as it arrives, glass glittering behind it
     col += mix(uPal0, vec3(1.0), 0.6) * flare * (0.04 + sun * 0.08);
     col += vec3(1.0) * glint * (0.10 + lum) * 0.35 * near;
@@ -1303,11 +1461,17 @@ const WORLD_FRAG = /* glsl */ `
     float wet = uRain * smoothstep(0.34, 0.66, fbm2b(p.xz * 0.035 + 3.1));
     float dmg = damageAt(p.xz);
     // light: the dome into the canyon, the sun where the blocks let it through
-    float shadowG = sunShadow(p, ivec2(100000));
+    // — the traced shadow squared to black, the projected gate over it; the
+    // long dark lanes the towers throw down the grid are this number
+    float shadowG = sunShadow(p, ivec2(100000), uShadowSteps);
+    shadowG *= shadowG;
+    if (shadowG > 0.01) shadowG *= skyGate(p);
     float sun = shadowG * max(uSun.y, 0.0) * 4.0;
     float aoG = street ? mix(0.55, 1.0, smoothstep(0.0, 10.0, edgeD)) : 0.5;
-    vec3 light = gAmb * aoG * 0.8 + gSunT * sun * (1.0 - uWreck * 0.75);
+    float expo = 1.0 / (1.0 + uFlashExpo);
+    vec3 light = (gAmb * aoG * 0.8 + gSunT * sun * (1.0 - uWreck * 0.75)) * expo;
     light += mix(uPal2, vec3(1.0), 0.5) * uLtn * 0.08;
+    if (uNFlash > 0) light += mix(uPal0, vec3(1.0), 0.75) * flashLight(p, vec3(0.0, 1.0, 0.0)) * 2.2;
     vec3 col = vec3(0.0);
     vec3 tar = grey(uPal4, 0.85);
     if (river && abs(p.x) > 17.0) {
@@ -1316,7 +1480,8 @@ const WORLD_FRAG = /* glsl */ `
       vec3 rr = reflect(rd, nw);
       rr.y = abs(rr.y);
       float fr = pow(1.0 - max(-rd.y, 0.0), 4.0);
-      col = mix(grey(mix(uPal2, uPal4, 0.5), 0.6) * 0.03 * light, skyBase(rr) * 0.75, 0.12 + 0.88 * fr);
+      // the blocks' shadow lies across the water as it does across the road
+      col = mix(grey(mix(uPal2, uPal4, 0.5), 0.6) * 0.03 * light, skyBase(rr) * 0.75 * (0.45 + 0.55 * shadowG) * expo, 0.12 + 0.88 * fr);
       col += mix(uPal1, uPal0, 0.45) * fireLit * 0.04;
       col *= 1.0 - scorch * 0.4;
     } else {
@@ -1338,11 +1503,64 @@ const WORLD_FRAG = /* glsl */ `
     } else {
       col = (mix(tar, vec3(1.0), 0.16) * 0.26 * gn + mix(tar, vec3(1.0), 0.3) * kerb * 0.20) * light;
     }
-    // the rubble at the foot of the wrecked blocks
-    float rubble = smoothstep(0.45, 0.8, dmg);
-    if (rubble > 0.01) {
-      float lump = smoothstep(0.48, 0.72, vnoise2(p.xz * 0.9 + 2.0)) * (0.5 + 0.5 * vnoise2(p.xz * 3.0));
-      col = mix(col, grey(uPal4, 0.85) * (0.22 + 0.4 * lump) * light, rubble * (0.5 + 0.5 * lump));
+    // ---- the rubble: PILES, never a carpet. Heaps at the feet of the stumps
+    // and along the bases of the standing blocks on the burst side, drifts
+    // down the streets on the blast bearing (radially out from each crater,
+    // fading with distance, thicker where two wakes overlap), clumps and
+    // clear patches by a noise, the boulevard's centre line scoured thin by
+    // the blast wind and the rubble piled at the kerbs and corners, glass
+    // glitter on the asphalt where the panes blew out — and the etched shadow
+    // on the bare ground between.
+    float wreckG = smoothstep(0.12, 0.5, dmg);
+    if (wreckG > 0.01) {
+      float drift = 0.0; vec2 blastDir = vec2(0.0);
+      for (int i = 0; i < MAX_DMG; i++) {
+        if (i >= uNDmg) break;
+        vec4 D = uDmg[i];
+        vec2 dv = p.xz - D.xy;
+        float d2 = dot(dv, dv);
+        float reach = D.w * clamp((1.0 - d2 * D.z * 0.3) * 1.3, 0.0, 1.0);   // the wake, to ~1.8 radii
+        if (reach < 0.02) continue;
+        float d = sqrt(d2);
+        float th = atan(dv.y, dv.x);
+        // streaked ALONG the radial: fine across it, slow along it
+        float streak = 0.65 * vnoise2(vec2(th * 18.0, d * 0.025 + float(i) * 3.0)) + 0.35 * vnoise2(vec2(th * 47.0 + 5.0, d * 0.06));
+        drift += reach * smoothstep(0.40, 0.72, streak);
+        blastDir += dv / max(d, 1.0) * reach;
+      }
+      float bl = length(blastDir);
+      blastDir = bl > 1e-4 ? blastDir / bl : vec2(1.0, 0.0);
+      float heap;
+      if (street) heap = exp(-edgeD * 0.33) * 0.9;                     // the kerbs and the corners
+      else {
+        // the foot of the block on this lot (the same plan bits lotBlock reads)
+        uint a = hu(lotKey(c));
+        float hxf = CELLF * 0.5 - (3.0 + float(a & 255u) * (1.0 / 255.0) * 4.0), hzf = CELLF * 0.5 - (3.0 + float((a >> 8) & 255u) * (1.0 / 255.0) * 4.0);
+        vec2 ctrf = vec2(c) * CELLF + vec2((float((a >> 16) & 255u) * (1.0 / 255.0) - 0.5) * 3.0, (float(a >> 24) * (1.0 / 255.0) - 0.5) * 3.0);
+        if (abs(c.x) == 1) { hxf -= 4.0; ctrf.x += c.x > 0 ? 4.0 : -4.0; }
+        vec2 outv = p.xz - ctrf;
+        float dFoot = max(abs(outv.x) - hxf, abs(outv.y) - hzf);
+        float facing = 0.5 - 0.5 * dot(normalize(outv + vec2(1e-4, 0.0)), blastDir);   // the side turned toward the burst
+        heap = exp(-max(dFoot, 0.0) * 0.3) * (0.35 + 0.65 * facing) * (0.55 + 0.7 * smoothstep(0.55, 0.9, dmg));
+      }
+      float clump = smoothstep(0.30, 0.72, fbm2b(p.xz * 0.045 + 1.7));
+      float scour = 1.0 - 0.7 * exp(-min(lc.x * lc.x, lc.y * lc.y) / 80.0) * float(street);
+      float rub = clamp((heap + drift * 0.8) * (0.35 + 0.65 * clump) * scour + 0.18 * clump, 0.0, 1.0) * wreckG;
+      rub = max(rub, 0.55 * smoothstep(0.55, 0.9, dmg) * clump);
+      // the lumps, lit on the side that faces the sun
+      float lump = vnoise2(p.xz * 0.9 + 2.0);
+      float lump2 = vnoise2((p.xz + gSunDir * 0.5) * 0.9 + 2.0);
+      float relief = clamp((lump2 - lump) * 5.0, -0.5, 0.5);
+      float fine = 0.5 + 0.5 * vnoise2(p.xz * 3.0);
+      vec3 rubCol = grey(uPal4, 0.85) * (0.20 + 0.30 * smoothstep(0.48, 0.72, lump) * fine) * light * (0.75 + 0.6 * relief * (0.4 + 0.6 * shadowG * 3.0));
+      col = mix(col, rubCol, rub);
+      // glass on the asphalt: points of the dome, hard sun glints where the sun reaches
+      vec2 gc = floor(p.xz * 7.0), gf = fract(p.xz * 7.0) - 0.5;
+      float glit = step(0.985, h21(gc)) * smoothstep(0.22, 0.0, length(gf)) * smoothstep(0.2, 0.6, dmg) * (1.0 - rub * 0.7) * (1.0 - smoothstep(60.0, 200.0, dist));
+      col += mix(gSunT, vec3(1.0), 0.3) * glit * (0.10 + 2.0 * shadowG);
+      // the etched shadow on the bare ground
+      float et = etchAt(p);
+      if (et > 0.01) col = mix(col, grey(mix(uPal4, vec3(1.0), 0.45), 0.85) * 0.55 * light, et * 0.6 * (1.0 - rub * 0.8));
     }
     float lampOn = clamp(blown + flare * 0.5, 0.0, 2.0) * uLamps * (1.0 - smoothstep(0.3, 0.6, dmg));
     col += lampLight(p, lampOn) * mix(uPal1, uPal0, 0.25) * 0.62 * gn * (0.55 + wet * 0.8);
@@ -1486,6 +1704,13 @@ const WORLD_FRAG = /* glsl */ `
         cumCol = mix(cumCol, stormCol, storm);
         cumM = max(cumM, storm * 0.95);
       }
+      // the flash on the cloud undersides: the bellies toward the burst go white
+      for (int i = 0; i < uNFlash; i++) {
+        vec4 F = uFlashP[i];
+        float fAz = atan(F.x - uCamPos.x, -(F.z - uCamPos.z));
+        float dA = az - fAz;
+        cumCol += mix(uPal0, vec3(1.0), 0.7) * uFlashC[i] * 0.09 * exp(-dA * dA * 2.5) * (0.5 + 0.5 * belly);
+      }
       col = mix(col, cumCol, cumM * 0.9);
       // the bolt, only where the storm stands and only while it flashes
       if (uLtn > 0.003 && dAz < 0.32 && rd.y < 0.14) {
@@ -1521,7 +1746,12 @@ const WORLD_FRAG = /* glsl */ `
       float hh2 = h21(vec2(cell, 31.0 + float(b)));
       float top = (b == 0 ? 0.008 : 0.004) + (b == 0 ? 0.030 : 0.017) * hh * hh + step(0.96, hh2) * (b == 0 ? 0.05 : 0.025) * hh2;
       float below = 1.0 - smoothstep(top - 0.0015, top + 0.0015, rd.y);
-      vec3 bc = mix(dark, haze, hz);
+      // the coarse form of the sun's shadow: a cell standing in the lee of a
+      // taller neighbour on the sun's side is dark up to that neighbour's height
+      float hhS = h21(vec2(cell - 1.0, 7.0 + float(b) * 3.0));
+      float topS = (b == 0 ? 0.008 : 0.004) + (b == 0 ? 0.030 : 0.017) * hhS * hhS;
+      float shF = 1.0 - 0.4 * step(top + 0.004, topS) * (1.0 - smoothstep(topS - 0.003, topS + 0.002, rd.y));
+      vec3 bc = mix(dark * shF, haze, hz);
       // lit windows in the silhouette, dimmed by the same haze
       float lit = step(0.965, h21(vec2(floor(az * 900.0 + float(b) * 13.0), floor(rd.y * 2600.0)))) * (1.0 - hz) * 0.8;
       bc += lightCol * lit * (1.0 - uWreck * 0.7);
@@ -1823,8 +2053,10 @@ const WORLD_FRAG = /* glsl */ `
     if (tB > 0.0) col = shadeFacade(ro + rd * tB, nrm, rd, hc, hlvl, tB, blown, flare, glint, scorch, fireLit, fireDir);
     else if (groundHit) col = shadeGround(ro, rd, ro + rd * tg, tg, blown, flare, glint, scorch, fireLit);
     else { col = skyCol(rd, az); if (rd.y < 0.1) col = farCity(rd, az, col); }
-    // aerial perspective: the haze takes the distance, and the dust thickens it
-    if (tOpaque < CFAR) col = mix(col, gHaze, (1.0 - exp(-tOpaque * uHaze)) * 0.92);
+    // aerial perspective: the haze takes the distance, and the dust thickens
+    // it — and the flash takes the haze's exposure as it takes the city's
+    float expoH = 1.0 / (1.0 + uFlashExpo * 0.7);
+    if (tOpaque < CFAR) col = mix(col, gHaze * expoH, (1.0 - exp(-tOpaque * uHaze)) * 0.92);
 
     // fog: an exponential height layer, banded, integrated along the ray
     float Hf = 90.0;
@@ -1834,8 +2066,18 @@ const WORLD_FRAG = /* glsl */ `
       ? dens * exp(-ro.y / Hf) * min(tOpaque, CFAR)
       : dens * Hf / ky * (exp(-ro.y / Hf) - exp(-(ro.y + ky * min(tOpaque, CFAR)) / Hf));
     float fog = 1.0 - exp(-max(I, 0.0));
-    vec3 fogCol = gHaze * 0.55;
+    vec3 fogCol = gHaze * 0.55 * expoH;
     col = mix(col, fogCol, clamp(fog, 0.0, 0.96));
+    // crepuscular shafts: the sun's forward scatter in the haze, gated by the
+    // projected mask where the ray crosses it — bright rays where the deck
+    // stands open, nothing where it is closed
+    float sdv = dot(rd, uSun);
+    if (sdv > 0.25) {
+      float gS = skyGate(ro + rd * min(tOpaque * 0.55, 320.0));
+      float sd2v = sdv * sdv, sd4v = sd2v * sd2v;
+      float hazeK = clamp(fog * 1.2 + (1.0 - exp(-tOpaque * uHaze)) * 1.4 + 0.18, 0.0, 1.0);
+      col += gSunT * (sd4v * sd4v * 0.16 + sd4v * 0.03) * hazeK * gS * (1.0 - uWreck * 0.5);
+    }
     col += lampAir(ro, rd, min(tOpaque, 420.0), clamp(blown + flare * 0.5, 0.0, 2.0) * uLamps) * (0.35 + uStreet * 0.9);
     // the smoke off the fires, behind the clouds and in front of the blocks
     if (uNFire > 0) smokeColumns(ro, rd, tOpaque, col);
@@ -2130,6 +2372,69 @@ const SPH_FRAG_GLOW = /* glsl */ `
   }
 `;
 
+// ------------------------------------------------------------ oriented boxes
+// The cars, the flying chunks and the resting rubble: one instanced box mesh,
+// each instance an oriented box — position, half extents, a quaternion — lit
+// per face in the vertex shader by the same light the city takes: the dome,
+// the sun with the CPU mirror's traced shadow (aLit.x), the lamps (aLit.y),
+// the strongest flash with its traced shadow (aLit.z), a fire of its own
+// (aLit.w). The flash's exposure drop (uExpo) rides it like the city. A
+// negative aLit.w marks a SHADOW STREAK: a flat black box laid down-sun from
+// the thing that throws it, hardest at the foot and fading along its run —
+// the cars' own shadows on the road. Depth-written, normal-blended.
+const BOX_VERT = /* glsl */ `
+  uniform vec3 uSun, uSunCol, uAmb, uDome, uLampCol, uFlashCol, uFireCol;
+  uniform vec4 uFlash;       // x, y, z, amplitude — the strongest flash
+  uniform float uFlashR2, uExpo;
+  in vec3 aPos;
+  in vec3 aExt;
+  in vec4 aRot;
+  in vec4 aCol;
+  in vec4 aLit;
+  out vec3 vCol;
+  out float vA;
+  vec3 rot(vec4 q, vec3 v) { return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v); }
+  void main() {
+    vec3 wp = aPos + rot(aRot, position * aExt);
+    float vis = step(0.001, aCol.a) * step(0.001, aExt.x);
+    if (aLit.w < -1.5) {
+      // a contact shadow under a thing on the ground: even, soft at its rim
+      vCol = vec3(0.0);
+      vA = aCol.a / (1.0 + uExpo * 0.5);
+    } else if (aLit.w < -0.5) {
+      // a shadow streak: black, hardest at the foot (local x = -1), fading down its length
+      vCol = vec3(0.0);
+      float u = position.x * 0.5 + 0.5;
+      vA = aCol.a * pow(1.0 - u, 1.6) / (1.0 + uExpo * 0.5);
+    } else {
+      vec3 n = normalize(rot(aRot, normal));
+      float ndS = max(dot(n, uSun), 0.0);
+      // the dome's sheen on the upward faces — paintwork and wet slab carry the sky
+      vec3 L = (uAmb * (0.55 + 0.45 * (n.y * 0.5 + 0.5)) + uDome * (0.12 + 0.55 * max(n.y, 0.0)) + uSunCol * ndS * aLit.x * 1.5) / (1.0 + uExpo);
+      L += uLampCol * aLit.y * max(n.y * 0.5 + 0.5, 0.25) / (1.0 + uExpo);
+      if (uFlash.w > 0.0) {
+        vec3 dv = uFlash.xyz - wp;
+        float d2 = dot(dv, dv);
+        float ndl = max(dot(n, dv) * inversesqrt(max(d2, 1.0)), 0.0);
+        L += uFlashCol * uFlash.w * uFlashR2 / (uFlashR2 + d2) * ndl * aLit.z * 2.2;
+      }
+      vCol = aCol.rgb * L + uFireCol * aLit.w * (0.6 + 0.4 * max(n.y, 0.0));
+      vA = 1.0;
+    }
+    vec4 clip = projectionMatrix * viewMatrix * vec4(wp, 1.0);
+    gl_Position = vis > 0.5 ? clip : vec4(0.0, 0.0, 2.0, 1.0);
+  }
+`;
+const BOX_FRAG = /* glsl */ `
+  uniform float uIntensity;
+  in vec3 vCol;
+  in float vA;
+  out vec4 fragColor;
+  void main() {
+    fragColor = vec4(vCol * uIntensity, vA);
+  }
+`;
+
 // ---------------------------------------------------------- the lot grid on JS
 // The same integer hash the shader runs, so the CPU knows exactly where every
 // facade and every lit pane stands: that is what lets the nucleon cluster land
@@ -2256,6 +2561,133 @@ function lotOfJS(cx, cz, seed, out, dmg) {
   return out;
 }
 
+// ---------------------------------------------------- the shadow traces on JS
+// The shader's lotTop, lotBlock, sunShadow and flashShadow, number for number,
+// so a car in a tower's shadow is dark and a chunk in a flash's shadow is
+// black — the impostors take the same light as the city they stand in.
+const SUN_DX = Math.sin(SUN_AZ), SUN_DZ = -Math.cos(SUN_AZ);   // the bearing on the ground
+const SUN_RISE = Math.tan(SUN_EL);
+function lotTopJS(k) {
+  const b = hu((k ^ 0x9e3779b9) >>> 0);
+  const f = (b & 4095) / 4096, g = ((b >>> 12) & 4095) / 4096, g2 = (b >>> 24) / 255;
+  const fam = f < 0.06 ? 0 : f < 0.36 ? 1 : f < 0.50 ? 2 : f < 0.62 ? 3 : f < 0.85 ? 4 : 5;
+  if (fam === 0) return 64 + g * 48;
+  if (fam === 1) return 17.5 + Math.max(g, g2) * 16;
+  if (fam === 2) return 48 + g * 46;
+  if (fam === 3) return 12.5 + g * 9;
+  if (fam === 4) return 21.2 + g * 34;
+  return 32 + g2 * 3.5 + g * 40;
+}
+function lotBlockJS(cx, cz, seed, px, py, pz, dx, dz, rise, soft, fallen, dmg) {
+  const k = lotKeyJS(cx, cz, seed);
+  const a = hu(k);
+  let hx = CELL * 0.5 - (3 + ((a & 255) / 255) * 4), hz = CELL * 0.5 - (3 + (((a >>> 8) & 255) / 255) * 4);
+  let ox = (((a >>> 16) & 255) / 255 - 0.5) * 3, oz = ((a >>> 24) / 255 - 0.5) * 3;
+  if (Math.abs(cx) === 1) { hx -= 4; ox += cx > 0 ? 4 : -4; }
+  const ctx0 = cx * CELL + ox, ctz0 = cz * CELL + oz;
+  const idx = (dx >= 0 ? 1 : -1) / (Math.abs(dx) + 1e-5), idz = (dz >= 0 ? 1 : -1) / (Math.abs(dz) + 1e-5);
+  let ax = (ctx0 - hx - px) * idx, bx = (ctx0 + hx - px) * idx;
+  if (ax > bx) { const q = ax; ax = bx; bx = q; }
+  let az = (ctz0 - hz - pz) * idz, bz = (ctz0 + hz - pz) * idz;
+  if (az > bz) { const q = az; az = bz; bz = q; }
+  let tIn = ax > az ? ax : az;
+  const tOut = bx < bz ? bx : bz;
+  if (tOut <= (tIn > 0 ? tIn : 0)) return 1;
+  if (tIn < 0) tIn = 0;
+  let top = lotTopJS(k) - 3;
+  if (fallen) top *= 1 - 0.72 * smoothstepJS(0.55, 1.0, craterAtJS(dmg, ctx0, ctz0));
+  const w = soft * (0.35 + tIn * 0.012);
+  return smoothstepJS(-w, w, py + rise * tIn - top);
+}
+function sunShadowJS(px, py, pz, seed, steps, dmg) {
+  let lit = 1, pcx = 100000, pcz = 100000;
+  for (let i = 0; i < steps; i++) {
+    const d = CELL * (0.55 + 0.62 * i + 0.075 * i * i);
+    const cx = Math.floor((px + SUN_DX * d) / CELL + 0.5), cz = Math.floor((pz + SUN_DZ * d) / CELL + 0.5);
+    if ((cx === pcx && cz === pcz) || lotStreetJS(cx, cz)) { pcx = cx; pcz = cz; continue; }
+    pcx = cx; pcz = cz;
+    const s = lotBlockJS(cx, cz, seed, px, py, pz, SUN_DX, SUN_DZ, SUN_RISE, 1, true, dmg);
+    if (s < lit) lit = s;
+    if (lit < 0.01) break;
+  }
+  return lit;
+}
+function flashShadowJS(px, py, pz, bx, by, bz, seed, steps, dmg) {
+  const vx = bx - px, vz = bz - pz;
+  const D = Math.sqrt(vx * vx + vz * vz);
+  if (D < 2) return 1;
+  const dx = vx / D, dz = vz / D, rise = (by - py) / D;
+  let lit = 1, pcx = 100000, pcz = 100000;
+  for (let i = 0; i < steps; i++) {
+    const d = CELL * (0.5 + 0.85 * i);
+    if (d >= D) break;
+    const cx = Math.floor((px + dx * d) / CELL + 0.5), cz = Math.floor((pz + dz * d) / CELL + 0.5);
+    if ((cx === pcx && cz === pcz) || lotStreetJS(cx, cz)) { pcx = cx; pcz = cz; continue; }
+    pcx = cx; pcz = cz;
+    const s = lotBlockJS(cx, cz, seed, px, py, pz, dx, dz, rise, 0.6, true, dmg);
+    if (s < lit) lit = s;
+    if (lit < 0.01) break;
+  }
+  return lit;
+}
+// the shader's projected gate (skyGate), number for number: h21, vnoise2,
+// fbm2b and the mask — so a car or a chunk standing under a closed patch of
+// the deck takes the cloud's shadow like the road it stands on
+const fractJ = (x) => x - Math.floor(x);
+function h21J(px, py) {
+  let qx = fractJ(px * 0.1031), qy = fractJ(py * 0.1031), qz = qx;
+  const d = qx * (qy + 33.33) + qy * (qz + 33.33) + qz * (qx + 33.33);
+  qx += d; qy += d; qz += d;
+  return fractJ((qx + qy) * qz);
+}
+function vnoise2J(x, y) {
+  const ix = Math.floor(x), iy = Math.floor(y);
+  let fx = x - ix, fy = y - iy;
+  fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy);
+  const a = h21J(ix, iy), b = h21J(ix + 1, iy), c = h21J(ix, iy + 1), d = h21J(ix + 1, iy + 1);
+  return (a + (b - a) * fx) * (1 - fy) + (c + (d - c) * fx) * fy;
+}
+const fbm2bJ = (x, y) => 0.667 * vnoise2J(x, y) + 0.333 * vnoise2J(x * 2.03 + 7.1, y * 2.03 + 7.1);
+function skyGateJ(px, py, pz, t, T) {
+  const s = (CLOUD_H - py) / SUN_RISE;
+  const qx = px + SUN_DX * s, qz = pz + SUN_DZ * s;
+  const flx = t * 5.5, flz = t * 3.2;
+  const wx = qx + 110 * (vnoise2J(qx * 0.0021 + flx * 0.002, qz * 0.0021 + flz * 0.002) - 0.5);
+  const wz = qz + 110 * (vnoise2J(qx * 0.0021 + 7.3 - flz * 0.002, qz * 0.0021 + 2.1 - flx * 0.002) - 0.5);
+  const wax = (wx + flx) * 0.0037, waz = (wz + flz) * 0.0037;
+  const nA = 0.75 * fbm2bJ(wax, waz) + 0.25 * vnoise2J(wax * 4.1 + 3, waz * 4.1 + 3);
+  const nB = fbm2bJ((wx + flx * 0.6) * 0.0083 + 11, (wz + flz * 0.6) * 0.0083 + 11);
+  const ridge = 1 - Math.abs(2 * nB - 1);
+  const mask = 0.18 + 1.12 * (0.58 * nA + 0.42 * ridge);
+  return smoothstepJS(T, T + 0.1, mask);
+}
+// quaternion helpers on flat arrays: q = (x, y, z, w) at offset o
+function quatSetAxisAngle(Q, o, ax, ay, az, ang) {
+  const s = Math.sin(ang * 0.5);
+  Q[o] = ax * s; Q[o + 1] = ay * s; Q[o + 2] = az * s; Q[o + 3] = Math.cos(ang * 0.5);
+}
+// integrate an angular velocity (world frame) into q over dt, renormalised
+function quatSpin(Q, o, wx, wy, wz, dt) {
+  const x = Q[o], y = Q[o + 1], z = Q[o + 2], w = Q[o + 3];
+  const hx = wx * dt * 0.5, hy = wy * dt * 0.5, hz = wz * dt * 0.5;
+  const nx = x + (hx * w + hy * z - hz * y);
+  const ny = y + (hy * w + hz * x - hx * z);
+  const nz = z + (hz * w + hx * y - hy * x);
+  const nw = w - (hx * x + hy * y + hz * z);
+  const l = 1 / (Math.sqrt(nx * nx + ny * ny + nz * nz + nw * nw) || 1);
+  Q[o] = nx * l; Q[o + 1] = ny * l; Q[o + 2] = nz * l; Q[o + 3] = nw * l;
+}
+// compose a world-frame rotation (axis, angle) onto q exactly: q' = r ⊗ q
+function quatPreRotate(Q, o, ax, ay, az, ang) {
+  const s = Math.sin(ang * 0.5), rw = Math.cos(ang * 0.5);
+  const rx = ax * s, ry = ay * s, rz = az * s;
+  const x = Q[o], y = Q[o + 1], z = Q[o + 2], w = Q[o + 3];
+  Q[o] = rw * x + rx * w + ry * z - rz * y;
+  Q[o + 1] = rw * y - rx * z + ry * w + rz * x;
+  Q[o + 2] = rw * z + rx * y - ry * x + rz * w;
+  Q[o + 3] = rw * w - rx * x - ry * y - rz * z;
+}
+
 export function createScene(ctx) {
   const { THREE, quality } = ctx;
   const scene = new THREE.Scene();
@@ -2275,6 +2707,17 @@ export function createScene(ctx) {
   const MAX_FIRE = tier === 'low' ? 4 : tier === 'high' ? 12 : 5;    // smoke columns the fronts can leave standing
   const MAX_DMG = tier === 'high' ? 8 : 5;                           // craters the wreck remembers (the clouds come and go; the damage stays)
   const STUMPS = tier === 'high' ? 4 : 2;                            // of those, how many knock blocks down to stumps in the DDA's geometry
+  // the shadows: the lots the sun's trace walks (a uniform bound: HLSL does
+  // not unroll it), the short form the wet road takes, the flash's and the
+  // etched shadow's counts
+  const SHADOW_STEPS = tier === 'low' ? 6 : tier === 'high' ? 11 : 8;
+  const SHADOW_STEPS_LITE = 3;
+  const FLASH_STEPS = tier === 'low' ? 5 : tier === 'high' ? 8 : 6;
+  const ETCH_STEPS = tier === 'low' ? 3 : tier === 'high' ? 5 : 4;
+  // the debris: the airborne chunks a front throws (they only cost while they
+  // fly), the resting chunks a burst leaves round its crater
+  const DEBRIS = tier === 'low' ? 400 : tier === 'high' ? 800 : 600;
+  const REST = tier === 'low' ? 120 : tier === 'high' ? 260 : 200;
 
   // instance layout
   const N_CAPS_DET = DET_CAPS;
@@ -2285,7 +2728,14 @@ export function createScene(ctx) {
   const CAP_RV0 = CAP_LAMP0 + LAMPS * 2;
   const N_CAPS = CAP_RV0 + MAX_RV * TRAIL_SEGS;
   const N_NUC = NUCLEI * NUCLEONS;
-  const N_SOLID = N_NUC + DEBRIS;     // the debris chunks ride the solid (depth-writing, normal-blended) impostors
+  const N_SOLID = N_NUC;
+  // the oriented boxes: four per car (body, cabin, its shadow streak, its
+  // contact shadow), one per airborne chunk, three per resting chunk (the
+  // chunk, its streak, its contact shadow)
+  const BX_CAR0 = 0;
+  const BX_DEB0 = BX_CAR0 + CARS * 4;
+  const BX_REST0 = BX_DEB0 + DEBRIS;
+  const N_BOX = BX_REST0 + REST * 3;
   const GL_BUNCH0 = 0;
   const GL_HIT0 = 2;
   const GL_NEUT0 = GL_HIT0 + MAX_HITS;
@@ -2314,7 +2764,7 @@ export function createScene(ctx) {
   // (centre, 1/R², strength), the max over them the damage at a point. The JS
   // lot mirror runs the same loops, so the stumps and the blown panes the city
   // shows are the ones the nucleons are matched against.
-  const dmg = { n: 0, stumps: STUMPS, x: new Float32Array(MAX_DMG), z: new Float32Array(MAX_DMG), invR2: new Float32Array(MAX_DMG), s: new Float32Array(MAX_DMG) };
+  const dmg = { n: 0, stumps: STUMPS, x: new Float32Array(MAX_DMG), z: new Float32Array(MAX_DMG), invR2: new Float32Array(MAX_DMG), s: new Float32Array(MAX_DMG), y: new Float32Array(MAX_DMG) };
   const WU = {
     uRes: { value: new THREE.Vector2(ctx.width, ctx.height) },
     uCamPos: { value: new THREE.Vector3() },
@@ -2363,6 +2813,17 @@ export function createScene(ctx) {
     uDmgBox: { value: new THREE.Vector4(0, 0, 0, 0) },
     uNFire: { value: 0 },
     uFire: { value: new Float32Array(MAX_FIRE * 4) },
+    uShadowSteps: { value: SHADOW_STEPS },
+    uShadowStepsLite: { value: SHADOW_STEPS_LITE },
+    uFlashSteps: { value: FLASH_STEPS },
+    uEtchSteps: { value: ETCH_STEPS },
+    uNFlash: { value: 0 },
+    uNEtch: { value: 0 },
+    uFlashP: { value: new Float32Array(8) },
+    uFlashC: { value: new Float32Array(2) },
+    uFlashExpo: { value: 0 },
+    uGateT: { value: 0.62 },
+    uDmgY: { value: new Float32Array(MAX_DMG) },
     ...palUniforms(wp),
   };
   const worldMat = new THREE.ShaderMaterial({
@@ -2442,6 +2903,68 @@ export function createScene(ctx) {
   }
   const solids = sphereSystem(N_SOLID, SPH_FRAG_SOLID, sp, true, 1);
   const glows = sphereSystem(N_GLOW, SPH_FRAG_GLOW, gp, false, 3);
+
+  // --- the launch map: the holographic globe over the city. Its own module and
+  // its own programs, so nothing here grows the city shader; it draws above
+  // everything (renderOrder 10+) and does no per-frame work while hidden.
+  const launchMap = createLaunchMap(THREE, { tier, width: ctx.width, height: ctx.height, renderOrder: 10 });
+  scene.add(launchMap.group);
+  let mapOn = false;
+
+  // the oriented boxes: cars, chunks, rubble and their shadow streaks
+  const boxSrc = new THREE.BoxGeometry(2, 2, 2);
+  const boxGeo = new THREE.InstancedBufferGeometry();
+  boxGeo.setIndex(boxSrc.getIndex());
+  boxGeo.setAttribute('position', boxSrc.getAttribute('position'));
+  boxGeo.setAttribute('normal', boxSrc.getAttribute('normal'));
+  const bxPos = new Float32Array(N_BOX * 3), bxExt = new Float32Array(N_BOX * 3);
+  const bxRot = new Float32Array(N_BOX * 4), bxCol = new Float32Array(N_BOX * 4), bxLit = new Float32Array(N_BOX * 4);
+  for (let i = 0; i < N_BOX; i++) bxRot[i * 4 + 3] = 1;
+  const bxAPos = dyn(bxPos, 3), bxAExt = dyn(bxExt, 3), bxARot = dyn(bxRot, 4), bxACol = dyn(bxCol, 4), bxALit = dyn(bxLit, 4);
+  boxGeo.setAttribute('aPos', bxAPos);
+  boxGeo.setAttribute('aExt', bxAExt);
+  boxGeo.setAttribute('aRot', bxARot);
+  boxGeo.setAttribute('aCol', bxACol);
+  boxGeo.setAttribute('aLit', bxALit);
+  boxGeo.instanceCount = N_BOX;
+  const BU = {
+    uSun: { value: WU.uSun.value },
+    uSunCol: { value: new THREE.Color() }, uAmb: { value: new THREE.Color() }, uDome: { value: new THREE.Color() }, uLampCol: { value: new THREE.Color() },
+    uFlashCol: { value: new THREE.Color() }, uFireCol: { value: new THREE.Color() },
+    uFlash: { value: new THREE.Vector4(0, 0, 0, 0) }, uFlashR2: { value: 1 }, uExpo: { value: 0 },
+    uIntensity: { value: 1 },
+  };
+  const boxMat = new THREE.ShaderMaterial({
+    glslVersion: THREE.GLSL3, uniforms: BU, vertexShader: BOX_VERT, fragmentShader: BOX_FRAG,
+    transparent: true, depthTest: true, depthWrite: true, blending: THREE.NormalBlending,
+  });
+  boxMat.name = "mile-boxes";
+  const boxes = new THREE.Mesh(boxGeo, boxMat);
+  boxes.frustumCulled = false;
+  boxes.renderOrder = 1;
+  scene.add(boxes);
+  // one box: position, half extents, quaternion (flat array + offset), colour, light terms
+  const box = (i, x, y, z, ex, ey, ez, Q, qo, r, g, b, a, sunV, lamp, flashV, fire) => {
+    const o3 = i * 3, o4 = i * 4;
+    bxPos[o3] = x; bxPos[o3 + 1] = y; bxPos[o3 + 2] = z;
+    bxExt[o3] = ex; bxExt[o3 + 1] = ey; bxExt[o3 + 2] = ez;
+    bxRot[o4] = Q[qo]; bxRot[o4 + 1] = Q[qo + 1]; bxRot[o4 + 2] = Q[qo + 2]; bxRot[o4 + 3] = Q[qo + 3];
+    bxCol[o4] = r; bxCol[o4 + 1] = g; bxCol[o4 + 2] = b; bxCol[o4 + 3] = a;
+    bxLit[o4] = sunV; bxLit[o4 + 1] = lamp; bxLit[o4 + 2] = flashV; bxLit[o4 + 3] = fire;
+  };
+  const boxOff = (i) => { bxCol[i * 4 + 3] = 0; };
+  // the shadow streak a thing throws down-sun: a flat black box from its foot,
+  // as long as its height lets it be (capped), fading along its run
+  // the box's local x runs along the streak, from the foot (x = -1) away from
+  // the sun: a yaw about y sends +x onto (-SUN_DX, -SUN_DZ) — a rotation by θ
+  // maps (1, 0, 0) to (cos θ, 0, -sin θ)
+  const shadowQ = new Float32Array(4);
+  quatSetAxisAngle(shadowQ, 0, 0, 1, 0, Math.atan2(SUN_DZ, -SUN_DX));
+  const shadowBox = (i, x, z, h, w, alpha) => {
+    const L = Math.min(h / SUN_RISE, 34);
+    const hl = L * 0.5;
+    box(i, x + (-SUN_DX) * hl, 0.05, z + (-SUN_DZ) * hl, hl, 0.02, w, shadowQ, 0, 0, 0, 0, alpha, 0, 0, 0, -1);
+  };
 
   const cap = (i, x0, y0, z0, x1, y1, z1, rad, alpha, tint, mode) => {
     const o = i * 3, q = i * 4;
@@ -2781,7 +3304,6 @@ export function createScene(ctx) {
   const jetPhi = new Float32Array(3), jetTheta = new Float32Array(3);
   // the two ends of the city's window colour, refreshed from the palette
   const winWarm = new Float32Array(3), winCool = new Float32Array(3);
-  const pal4Dark = new Float32Array(3);   // the debris: the palette's ash, greyed and dark
   const nucPh = new Float32Array(NUCLEONS * 3);
   for (let i = 0; i < NUCLEONS * 3; i++) nucPh[i] = Math.random() * 6.2831853;
   // The scene OPENS on the collider — act 0, the detector held dark until the
@@ -2818,29 +3340,82 @@ export function createScene(ctx) {
   const candX = new Float32Array(FIRE_PICK), candZ = new Float32Array(FIRE_PICK), candY = new Float32Array(FIRE_PICK), candS = new Float32Array(FIRE_PICK);
   // lightning: the storm cell throws a bolt every so often; 'lightning' fires one
   let ltnT = 9, ltnClock = 0, ltnNext = 26 + Math.random() * 30;
-  // the debris shower: chunks waiting on a front, then flying with it
-  const dbState = new Uint8Array(DEBRIS);                // 0 idle, 1 waiting on its front, 2 flying
+  // ---- THE DEBRIS: pieces of buildings flying. Chunks waiting on a front,
+  // then thrown along it — slabs, beams, panels, window frames, signage, car
+  // bodies — as oriented boxes tumbling about their own axis as a function of
+  // their flight (the spin rate rides the speed, so a chunk at rest does not
+  // spin), ballistic: radial from the burst, gravity, a little drag, NO
+  // wander. A chunk that lands stays where it fell (state 3) until a new
+  // front needs it.
+  const dbState = new Uint8Array(DEBRIS);                // 0 idle, 1 waiting on its front, 2 flying, 3 resting
   const dbSrc = new Int8Array(DEBRIS);                   // the cloud slot whose front it rides; -2 ground zero's own
   const dbX = new Float32Array(DEBRIS), dbY = new Float32Array(DEBRIS), dbZ = new Float32Array(DEBRIS);
   const dbVX = new Float32Array(DEBRIS), dbVY = new Float32Array(DEBRIS), dbVZ = new Float32Array(DEBRIS);
-  const dbTrig = new Float32Array(DEBRIS), dbAz = new Float32Array(DEBRIS), dbR = new Float32Array(DEBRIS);
+  const dbTrig = new Float32Array(DEBRIS), dbAz = new Float32Array(DEBRIS);
+  const dbEx = new Float32Array(DEBRIS), dbEy = new Float32Array(DEBRIS), dbEz = new Float32Array(DEBRIS);
+  const dbQ = new Float32Array(DEBRIS * 4), dbW = new Float32Array(DEBRIS * 3);
+  const dbKind = new Uint8Array(DEBRIS), dbTint = new Float32Array(DEBRIS);
+  const dbSun = new Float32Array(DEBRIS), dbFl = new Float32Array(DEBRIS).fill(1), dbVis = new Float32Array(DEBRIS).fill(1);
+  const dbRestT = new Float32Array(DEBRIS);
+  for (let i = 0; i < DEBRIS; i++) dbQ[i * 4 + 3] = 1;
   let debrisLive = 0;
-  // the lamps: how far each has fallen (0 standing, 1 down); persistent until rebuild
+  // ---- THE RESTING POOL: the bigger chunks a burst leaves round its crater —
+  // slab corners, beams, a water tank, a cornice piece — settled on the
+  // rubble, at the feet of the stumps and down the streets, sized by the
+  // crater; each grows from nothing as the fireball hides it. Cleared by
+  // 'rebuild'; the oldest recycled by the next burst.
+  const rsOn = new Uint8Array(REST);
+  const rsX = new Float32Array(REST), rsY = new Float32Array(REST), rsZ = new Float32Array(REST);
+  const rsEx = new Float32Array(REST), rsEy = new Float32Array(REST), rsEz = new Float32Array(REST);
+  const rsQ = new Float32Array(REST * 4), rsGrow = new Float32Array(REST), rsAge = new Float32Array(REST);
+  const rsSun = new Float32Array(REST), rsFl = new Float32Array(REST).fill(1), rsVis = new Float32Array(REST).fill(1), rsTint = new Float32Array(REST);
+  for (let i = 0; i < REST; i++) rsQ[i * 4 + 3] = 1;
+  let rsNext = 0;
+  // ---- THE CARS: parked along both kerbs of the boulevard, the avenues and
+  // the cross streets; in the wreck shoved, flipped, stacked against the bases
+  // of the blocks, burning — and lifted and tumbled along the blast wind when
+  // a front takes them.
+  const carState = new Uint8Array(CARS);                 // 0 empty slot, 1 parked, 2 flying, 3 wrecked at rest
+  const carX = new Float32Array(CARS), carY = new Float32Array(CARS), carZ = new Float32Array(CARS);
+  const carVX = new Float32Array(CARS), carVY = new Float32Array(CARS), carVZ = new Float32Array(CARS);
+  const carQ = new Float32Array(CARS * 4), carW = new Float32Array(CARS * 3);
+  const carSun = new Float32Array(CARS), carLamp = new Float32Array(CARS), carFl = new Float32Array(CARS).fill(1), carVis = new Float32Array(CARS).fill(1);
+  const carFire = new Float32Array(CARS), carTint = new Float32Array(CARS), carHit = new Uint8Array(CARS);
+  for (let i = 0; i < CARS; i++) carQ[i * 4 + 3] = 1;
+  const CAR_EX = 2.2, CAR_EY = 0.36, CAR_EZ = 0.95;       // the body's half extents; the cabin sits on it
+  // the blast wind: radial from the most recent burst at the eye, relaxing
+  // back to the storm's wind over a minute — the smoke leans with it, the
+  // embers stream along it, debris far from any burst rides it
+  let bwX = 0.91, bwZ = 0.41, bwGust = 0.35;
+  const WBX = WIND_X / Math.sqrt(WIND_X * WIND_X + WIND_Z * WIND_Z), WBZ = WIND_Z / Math.sqrt(WIND_X * WIND_X + WIND_Z * WIND_Z);
+  // the flash picks: the two biggest live bursts, as lights
+  let nFlash = 0, flashExpo = 0;
+  const flX = new Float32Array(2), flY = new Float32Array(2), flZ = new Float32Array(2), flA = new Float32Array(2), flR2 = new Float32Array(2);
+  let shadowContrastP = 0.5;
+  let visCursor = 0;                                     // the amortised visibility query's cursor
+  // the lamps: how far each has fallen (0 standing, 1 down); persistent until
+  // rebuild; and the sun's shadow on each post (the trace, once)
   const lampFall = new Float32Array(LAMPS * 2);
+  const lampSun = new Float32Array(LAMPS * 2).fill(1);
+  function traceLamps() {
+    for (let k = 0; k < LAMPS; k++) for (let s = 0; s < 2; s++) lampSun[k * 2 + s] = sunShadowJS(s ? LAMP_X : -LAMP_X, LAMP_H * 0.5, LAMP_Z0 - LAMP_DZ * k, citySeed, SHADOW_STEPS, dmg);
+  }
 
   gatherWindows(citySeed);
+  parkCars(citySeed);
+  traceLamps();
 
   // A burst's crater: merged into one standing close by, else a free slot,
   // else the weakest. Packed straight to the shader; the window gather is
   // marked stale so the next pull-back matches against the wrecked city.
-  function addDamage(x, z, R, s) {
+  function addDamage(x, z, R, s, y) {
     let slot = -1;
     for (let i = 0; i < dmg.n; i++) {
       const dx = x - dmg.x[i], dz = z - dmg.z[i];
       const Ri = 1 / Math.sqrt(dmg.invR2[i]);
       if (dx * dx + dz * dz < Math.max(R, Ri) * Math.max(R, Ri) * 0.2) {
         slot = i;
-        if (Ri > R) { x = dmg.x[i]; z = dmg.z[i]; R = Ri; }
+        if (Ri > R) { x = dmg.x[i]; z = dmg.z[i]; R = Ri; y = dmg.y[i]; }
         s = Math.max(s, dmg.s[i]);
         break;
       }
@@ -2849,7 +3424,7 @@ export function createScene(ctx) {
       if (dmg.n < MAX_DMG) slot = dmg.n++;
       else { let w = 1e18; for (let i = 0; i < MAX_DMG; i++) { const v = dmg.s[i] / dmg.invR2[i]; if (v < w) { w = v; slot = i; } } }
     }
-    dmg.x[slot] = x; dmg.z[slot] = z; dmg.invR2[slot] = 1 / (R * R); dmg.s[slot] = s;
+    dmg.x[slot] = x; dmg.z[slot] = z; dmg.invR2[slot] = 1 / (R * R); dmg.s[slot] = s; dmg.y[slot] = y;
     // the biggest first: the geometry reads only the first STUMPS of them
     for (let i = 1; i < dmg.n; i++) {
       for (let j = i; j > 0 && dmg.s[j] / dmg.invR2[j] > dmg.s[j - 1] / dmg.invR2[j - 1]; j--) {
@@ -2857,12 +3432,14 @@ export function createScene(ctx) {
         q = dmg.z[j]; dmg.z[j] = dmg.z[j - 1]; dmg.z[j - 1] = q;
         q = dmg.invR2[j]; dmg.invR2[j] = dmg.invR2[j - 1]; dmg.invR2[j - 1] = q;
         q = dmg.s[j]; dmg.s[j] = dmg.s[j - 1]; dmg.s[j - 1] = q;
+        q = dmg.y[j]; dmg.y[j] = dmg.y[j - 1]; dmg.y[j - 1] = q;
       }
     }
-    const U = WU.uDmg.value;
+    const U = WU.uDmg.value, UY = WU.uDmgY.value;
     let bx0 = 1e9, bz0 = 1e9, bx1 = -1e9, bz1 = -1e9;
     for (let i = 0; i < dmg.n; i++) {
       U[i * 4] = dmg.x[i]; U[i * 4 + 1] = dmg.z[i]; U[i * 4 + 2] = dmg.invR2[i]; U[i * 4 + 3] = dmg.s[i];
+      UY[i] = dmg.y[i];
       if (i >= STUMPS) continue;
       // the box round the radii a block starts to fall at (the crater term past 0.45)
       const Rf = 0.85 / Math.sqrt(dmg.invR2[i]);
@@ -2871,7 +3448,11 @@ export function createScene(ctx) {
     }
     WU.uDmgBox.value.set(bx0, bz0, bx1, bz1);
     WU.uNDmg.value = dmg.n;
+    WU.uNEtch.value = Math.min(dmg.n, STUMPS);
     winDirty = true;
+    // the stumps throw stumps' shadows: the traced light on the cars and the lamps is stale
+    carsDirty = true;
+    traceLamps();
   }
   // one pass of the fire scan: the lots of a box, standing but hit (damage in
   // [dMin, 0.97]), one in five by hash, the `pick` nearest the eye kept
@@ -2919,28 +3500,58 @@ export function createScene(ctx) {
     const E = 170;
     scanFires(x, z, sc, Math.floor((fx - E) / CELL), Math.ceil((fx + E) / CELL), Math.floor((fz - E) / CELL), Math.ceil((fz + E) / CELL), 0.18, 2, fx, fz);
   }
-  // the debris a front throws: a share of the idle pool waits on this burst's
-  // front at radii spread round the eye's distance, bearing toward the eye,
-  // so the shower passes the eye as the front does
+  // a chunk's shape: slab, beam, panel, window frame, signage, a car body —
+  // the box's x is its long axis and y its thin one, so a chunk lies flat
+  // when its quaternion is a yaw
+  function rollChunk(i, scale) {
+    const r = Math.random();
+    let ex, ey, ez, kind;
+    if (r < 0.30) { kind = 0; ex = 1.2 + Math.random() * 1.2; ey = 0.15 + Math.random() * 0.15; ez = 0.8 + Math.random() * 0.8; }       // slab
+    else if (r < 0.50) { kind = 1; ex = 1.8 + Math.random() * 1.4; ey = 0.15; ez = 0.15 + Math.random() * 0.1; }                          // beam
+    else if (r < 0.72) { kind = 2; ex = 1.0 + Math.random() * 0.8; ey = 0.05; ez = 0.7 + Math.random() * 0.6; }                             // panel
+    else if (r < 0.84) { kind = 3; ex = 0.9 + Math.random() * 0.4; ey = 0.06; ez = 1.0 + Math.random() * 0.5; }                             // window frame
+    else if (r < 0.90) { kind = 4; ex = 1.4 + Math.random() * 0.8; ey = 0.08; ez = 0.8 + Math.random() * 0.4; }                             // signage
+    else { kind = 5; ex = 2.1; ey = 0.55; ez = 0.9; }                                                                                        // a car body
+    dbEx[i] = ex * scale; dbEy[i] = ey * scale; dbEz[i] = ez * scale;
+    dbKind[i] = kind; dbTint[i] = Math.random();
+    // the tumble axis: its own, fixed for the flight
+    let ax = Math.random() - 0.5, ay = Math.random() - 0.5, az = Math.random() - 0.5;
+    const l = Math.sqrt(ax * ax + ay * ay + az * az) + 1e-6;
+    dbW[i * 3] = ax / l; dbW[i * 3 + 1] = ay / l; dbW[i * 3 + 2] = az / l;
+  }
+  // the debris a front throws: a share of the pool (the idle first, then the
+  // longest-resting) waits on this burst's front at radii round the eye's
+  // distance, bearing toward the eye, so the shower crosses the eye as the
+  // front does — launched upwind of it, the chunks stream PAST it
   function seedDebris(src, x, z, sc, share) {
     const dx = camPos.x - x, dz = camPos.z - z;
     const dCam = Math.sqrt(dx * dx + dz * dz);
     const azC = Math.atan2(dz, dx);
     const rMax = Math.min(sc * 45, 900);
-    for (let i = 0; i < DEBRIS; i++) {
-      if (dbState[i] !== 0 || Math.random() > share) continue;
-      dbState[i] = 1; dbSrc[i] = src;
-      dbAz[i] = azC + (Math.random() - 0.5) * 1.5;
-      dbTrig[i] = Math.min(rMax, dCam * (0.35 + Math.random() * 0.75));
-      dbR[i] = 0.35 + Math.random() * 1.1;
+    const scale = 0.7 + 0.5 * clamp(sc / 40, 0.3, 1.6);
+    let want = Math.round(DEBRIS * share);
+    // the idle first, then the chunks resting out of the eye's sight, then any at rest
+    for (let pass = 0; pass < 3 && want > 0; pass++) {
+      for (let i = 0; i < DEBRIS && want > 0; i++) {
+        if (pass === 0 ? dbState[i] !== 0 : dbState[i] !== 3) continue;
+        if (pass > 0 && dbRestT[i] < 2) continue;
+        if (pass === 1) { const ex = dbX[i] - camPos.x, ez = dbZ[i] - camPos.z; if (ex * ex + ez * ez < 150 * 150) continue; }
+        if (Math.random() > 0.5) continue;
+        dbState[i] = 1; dbSrc[i] = src;
+        dbAz[i] = azC + (Math.random() - 0.5) * 0.7;
+        dbTrig[i] = Math.min(rMax, dCam * (0.82 + Math.random() * 0.26));
+        rollChunk(i, scale);
+        want--;
+      }
     }
   }
+  // the chunks in flight, the chunks at rest: integrate, tumble, land, light
   function updateDebris(dt) {
     debrisLive = 0;
-    const cr = pal4Dark[0], cg = pal4Dark[1], cb = pal4Dark[2];
+    const flashOn = nFlash > 0;
     for (let i = 0; i < DEBRIS; i++) {
-      const idx = N_NUC + i;
-      if (dbState[i] === 1) {
+      const st = dbState[i];
+      if (st === 1) {
         const src = dbSrc[i];
         let rs, ox, oz;
         if (src === -2) { rs = blastAge >= 0 ? gzRs : -1; ox = GZ_X; oz = GZ_Z; }
@@ -2948,24 +3559,353 @@ export function createScene(ctx) {
         if (rs < 0) { dbState[i] = 0; }
         else if (rs >= dbTrig[i]) {
           const ca = Math.cos(dbAz[i]), sa = Math.sin(dbAz[i]);
-          dbX[i] = ox + ca * rs; dbZ[i] = oz + sa * rs; dbY[i] = 1 + Math.random() * 5;
-          const v = 22 + Math.random() * 40;
-          dbVX[i] = ca * v + (Math.random() - 0.5) * 12; dbVZ[i] = sa * v + (Math.random() - 0.5) * 12; dbVY[i] = 10 + Math.random() * 18;
+          dbX[i] = ox + ca * rs; dbZ[i] = oz + sa * rs; dbY[i] = 1 + Math.random() * 6;
+          // THROWN: radial from the burst at the front's speed, a narrow spread
+          // across it, a kick upward — and nothing else. No wander.
+          const v = 48 + Math.random() * 44;
+          const sp = (Math.random() - 0.5) * 0.24 * v;
+          dbVX[i] = ca * v - sa * sp; dbVZ[i] = sa * v + ca * sp; dbVY[i] = 6 + Math.random() * 18;
           dbState[i] = 2;
+          quatSetAxisAngle(dbQ, i * 4, dbW[i * 3], dbW[i * 3 + 1], dbW[i * 3 + 2], Math.random() * 6.2831853);
         }
       }
       if (dbState[i] === 2) {
-        dbVY[i] -= 20 * dt;
-        const drag = Math.exp(-dt * 0.45);
+        dbVY[i] -= 22 * dt;
+        const drag = Math.exp(-dt * 0.10);
         dbVX[i] *= drag; dbVZ[i] *= drag;
         dbX[i] += dbVX[i] * dt; dbY[i] += dbVY[i] * dt; dbZ[i] += dbVZ[i] * dt;
-        if (dbY[i] < 0.2) dbState[i] = 0;
-        else debrisLive++;
+        // the tumble is the flight's: rate tied to the speed and the size
+        const spd = Math.sqrt(dbVX[i] * dbVX[i] + dbVY[i] * dbVY[i] + dbVZ[i] * dbVZ[i]);
+        const rate = spd * 0.22 / (dbEx[i] + 0.6);
+        quatSpin(dbQ, i * 4, dbW[i * 3] * rate, dbW[i * 3 + 1] * rate, dbW[i * 3 + 2] * rate, dt);
+        const restY = Math.max(dbEy[i], dbEz[i] * 0.35);
+        if (dbY[i] <= restY && dbVY[i] < 0) {
+          // down: it lies along its travel, flat, and skids out
+          dbY[i] = restY;
+          dbState[i] = 3; dbRestT[i] = 0;
+          dbVY[i] = 0; dbVX[i] *= 0.3; dbVZ[i] *= 0.3;
+          quatSetAxisAngle(dbQ, i * 4, 0, 1, 0, Math.atan2(-dbVZ[i], dbVX[i]) + (Math.random() - 0.5) * 0.4);
+          dbSun[i] = sunShadowJS(dbX[i], dbY[i], dbZ[i], citySeed, SHADOW_STEPS, dmg);
+        } else {
+          debrisLive++;
+          dbSun[i] = sunShadowJS(dbX[i], dbY[i], dbZ[i], citySeed, SHADOW_STEPS, dmg);
+        }
+      } else if (dbState[i] === 3) {
+        dbRestT[i] += dt;
+        if (dbRestT[i] < 1) {
+          const k = Math.exp(-dt * 4);
+          dbVX[i] *= k; dbVZ[i] *= k;
+          dbX[i] += dbVX[i] * dt; dbZ[i] += dbVZ[i] * dt;
+        }
       }
-      const q = idx * 4;
-      solids.c[q] = cr; solids.c[q + 1] = cg; solids.c[q + 2] = cb; solids.c[q + 3] = 0.92;
-      sph(solids, idx, dbX[i], dbY[i], dbZ[i], dbR[i], dbState[i] === 2 ? 1 : 0, 4.0, 0.0);
+      if (dbState[i] >= 2 && flashOn) dbFl[i] = flashShadowJS(dbX[i], dbY[i], dbZ[i], flX[0], flY[0], flZ[0], citySeed, FLASH_STEPS, dmg);
     }
+  }
+  // ---- the cars
+  function parkCars(seed) {
+    let n = 0;
+    const slot = (x, z, yaw, h) => {
+      if (n >= CARS) return;
+      carState[n] = 1; carX[n] = x; carZ[n] = z; carY[n] = 0.3 + CAR_EY;
+      quatSetAxisAngle(carQ, n * 4, 0, 1, 0, yaw);
+      carTint[n] = h; carFire[n] = 0; carHit[n] = 0; carVis[n] = 1; carFl[n] = 1;
+      carVX[n] = 0; carVY[n] = 0; carVZ[n] = 0;
+      n++;
+    };
+    let j = 0;
+    const r = () => hf((seed * 7919 + j++ * 2654435761 + 17) >>> 0);
+    // the boulevard: both kerbs, from the street eye down to the river
+    for (let s = 0; s < 2; s++) {
+      for (let k = 0; k < 28; k++) {
+        const z = 46 - k * 18.5 + (r() - 0.5) * 5;
+        if (r() > 0.85) continue;
+        if (z < RIVER_C0 * CELL + 20 && z > RIVER_C1 * CELL - 20) continue;   // the bridge
+        slot((s ? 12.4 : -12.4) + (r() - 0.5) * 0.4, z, (s ? 0.5 : -0.5) * Math.PI + (r() - 0.5) * 0.06, r());
+      }
+    }
+    // the avenues either side, the kerb toward the boulevard
+    for (let s = 0; s < 2; s++) {
+      const ax = s ? AV * CELL : -AV * CELL;
+      for (let k = 0; k < 16; k++) {
+        const z = -40 - k * 24 + (r() - 0.5) * 6;
+        if (r() > 0.6) continue;
+        slot(ax + (s ? -12.4 : 12.4), z, (s ? -0.5 : 0.5) * Math.PI + (r() - 0.5) * 0.06, r());
+      }
+    }
+    // the cross streets: the near kerb, along x, clear of the boulevard and the avenues
+    for (let cz = -ST; cz >= -ST * 4; cz -= ST) {
+      if ((cz <= RIVER_C0 && cz >= RIVER_C1) || (cz <= YARD_C0 && cz >= YARD_C1)) continue;
+      for (let k = 0; k < 14; k++) {
+        const x = -104 + k * 16 + (r() - 0.5) * 4;
+        if (Math.abs(x) < 17 || Math.abs(Math.abs(x) - AV * CELL) < 17 || r() > 0.55) continue;
+        slot(x, cz * CELL + 12.4, (r() - 0.5) * 0.06, r());
+      }
+    }
+    for (let i = n; i < CARS; i++) carState[i] = 0;
+    traceCars();
+  }
+  // the sun's shadow on every parked car, once (again when the wreck changes)
+  function traceCars() {
+    for (let i = 0; i < CARS; i++) {
+      if (carState[i] === 0) continue;
+      carSun[i] = sunShadowJS(carX[i], carY[i] + 0.5, carZ[i], citySeed, SHADOW_STEPS, dmg);
+      // the lamps' light on it: the two posts of the nearest group, as the shader sums them
+      const k0 = Math.round((-carZ[i] + LAMP_Z0) / LAMP_DZ);
+      let sum = 0;
+      for (let kk = k0 - 1; kk <= k0 + 1; kk++) {
+        const k = clamp(kk, 0, LAMPS - 1), lz = LAMP_Z0 - LAMP_DZ * k;
+        for (let s = 0; s < 2; s++) {
+          const dx = carX[i] - (s ? LAMP_X : -LAMP_X), dz = carZ[i] - lz, dy = carY[i] + 0.6 - LAMP_H;
+          const d2 = dx * dx + dy * dy + dz * dz;
+          sum += 130 * (-dy / Math.sqrt(d2)) / (d2 + 20);
+        }
+      }
+      carLamp[i] = sum;
+    }
+  }
+  let carsDirty = false;
+  // a front reaching a car: shoved, flipped, stacked at the kerb, set
+  // burning, or LIFTED and thrown along the blast wind with the chunks
+  function hitCar(i, dirx, dirz, d, sc) {
+    carHit[i] = 1;
+    const r = Math.random();
+    if (r < 0.30) {
+      // lifted: it flies with the front and tumbles
+      carState[i] = 2;
+      const v = 26 + Math.random() * 30;
+      carVX[i] = dirx * v + (Math.random() - 0.5) * 6; carVZ[i] = dirz * v + (Math.random() - 0.5) * 6; carVY[i] = 9 + Math.random() * 14;
+      let ax = Math.random() - 0.5, ay = Math.random() - 0.5, az = Math.random() - 0.5;
+      const l = Math.sqrt(ax * ax + ay * ay + az * az) + 1e-6;
+      carW[i * 3] = ax / l; carW[i * 3 + 1] = ay / l; carW[i * 3 + 2] = az / l;
+      carFire[i] = Math.random() < 0.35 ? 1 : 0;
+    } else {
+      // shoved down the blast: out along the radial, yawed, some flipped,
+      // the ones that reach the kerb stacked up against it
+      carState[i] = 3;
+      const push = (3 + Math.random() * 7) * clamp(sc / 30, 0.5, 1.5) * clamp(1.6 - d, 0.3, 1.2);
+      carX[i] += dirx * push; carZ[i] += dirz * push;
+      const lim = Math.abs(carX[i]) < 40 ? 17.5 : 1e9;      // the boulevard's kerbs
+      let stacked = 0;
+      if (Math.abs(carX[i]) > lim) { carX[i] = Math.sign(carX[i]) * lim; stacked = 1; }
+      const yaw = Math.atan2(-dirz, dirx) + (Math.random() - 0.5) * 1.4;
+      const flip = Math.random() < 0.45 + 0.3 * stacked;
+      quatSetAxisAngle(carQ, i * 4, 0, 1, 0, yaw);
+      if (flip) {
+        const roll = Math.random() < 0.5 ? Math.PI : (Math.random() < 0.5 ? 1.45 : -1.45);
+        const cy = Math.cos(yaw), sy = Math.sin(yaw);
+        quatPreRotate(carQ, i * 4, cy, 0, -sy, roll);           // roll about its own long axis
+        carY[i] = Math.abs(Math.abs(roll) - Math.PI) < 0.1 ? CAR_EY + 0.62 : CAR_EZ;
+      } else carY[i] = 0.3 + CAR_EY;
+      if (stacked) carY[i] += 1.2 + Math.random() * 0.5;
+      carFire[i] = Math.random() < 0.25 ? 1 : 0;
+    }
+  }
+  function updateCars(dt) {
+    const flashOn = nFlash > 0;
+    for (let i = 0; i < CARS; i++) {
+      const st = carState[i];
+      if (st === 0) continue;
+      if (st === 1 && !carHit[i]) {
+        // has a front reached it, with damage here?
+        const dHere = damageAtJS(dmg, carX[i], carZ[i]);
+        if (dHere > 0.30) {
+          let hit = false, dirx = 0, dirz = 0, dd = 1, scc = 20;
+          if (blastAge >= 0) {
+            const dx = carX[i] - GZ_X, dz = carZ[i] - GZ_Z, d = Math.sqrt(dx * dx + dz * dz);
+            if (gzRs >= d) { hit = true; dirx = dx / d; dirz = dz / d; dd = d / (cSc[0] * 10); scc = cSc[0]; }
+          }
+          for (let c = 0; c < MAX_CLOUDS && !hit; c++) {
+            if (cAge[c] < 0) continue;
+            const dx = carX[i] - cX[c], dz = carZ[i] - cZ[c], d = Math.sqrt(dx * dx + dz * dz);
+            if (ringR(cAge[c], cSc[c]) >= d && d < cSc[c] * 12) { hit = true; dirx = dx / d; dirz = dz / d; dd = d / (cSc[c] * 10); scc = cSc[c]; }
+          }
+          if (hit) hitCar(i, dirx, dirz, dd, scc);
+        }
+      }
+      if (st === 2) {
+        carVY[i] -= 22 * dt;
+        const drag = Math.exp(-dt * 0.12);
+        carVX[i] *= drag; carVZ[i] *= drag;
+        carX[i] += carVX[i] * dt; carY[i] += carVY[i] * dt; carZ[i] += carVZ[i] * dt;
+        const spd = Math.sqrt(carVX[i] * carVX[i] + carVY[i] * carVY[i] + carVZ[i] * carVZ[i]);
+        const rate = spd * 0.09;
+        quatSpin(carQ, i * 4, carW[i * 3] * rate, carW[i * 3 + 1] * rate, carW[i * 3 + 2] * rate, dt);
+        carSun[i] = sunShadowJS(carX[i], carY[i], carZ[i], citySeed, SHADOW_STEPS, dmg);
+        if (carY[i] < CAR_EZ && carVY[i] < 0) {
+          // down, on whatever side it landed on
+          carState[i] = 3;
+          const yaw = Math.atan2(-carVZ[i], carVX[i]) + (Math.random() - 0.5) * 0.8;
+          quatSetAxisAngle(carQ, i * 4, 0, 1, 0, yaw);
+          const roll = Math.random() < 0.45 ? Math.PI : (Math.random() < 0.5 ? 1.5 : 0);
+          if (roll !== 0) {
+            const cy = Math.cos(yaw), sy = Math.sin(yaw);
+            quatPreRotate(carQ, i * 4, cy, 0, -sy, roll);
+          }
+          carY[i] = roll === 0 ? 0.3 + CAR_EY : (roll > 3 ? CAR_EY + 0.62 : CAR_EZ);
+          carVX[i] = 0; carVY[i] = 0; carVZ[i] = 0;
+          carSun[i] = sunShadowJS(carX[i], carY[i], carZ[i], citySeed, SHADOW_STEPS, dmg);
+        }
+      }
+      if (flashOn) carFl[i] = flashShadowJS(carX[i], carY[i] + 0.5, carZ[i], flX[0], flY[0], flZ[0], citySeed, FLASH_STEPS, dmg);
+    }
+    if (carsDirty) { traceCars(); carsDirty = false; }
+  }
+  // ---- the resting pool: a burst's bigger chunks, round its crater
+  function placeRest(x, z, sc) {
+    const R = Math.min(sc * 10 * 0.9, 360);
+    const count = Math.min(REST, Math.round(REST * 0.35 * clamp(sc / 30, 0.5, 1.4)));
+    const scale = 0.6 + 0.45 * clamp(sc / 40, 0.3, 1.6);
+    for (let k = 0; k < count; k++) {
+      const i = rsNext; rsNext = (rsNext + 1) % REST;
+      const ang = Math.random() * 6.2831853;
+      let px, pz;
+      if (Math.random() < 0.45) {
+        // at the foot of a block: a built lot inside the radius, just off its footprint
+        const rr = R * (0.25 + 0.7 * Math.sqrt(Math.random()));
+        const cx = Math.round((x + Math.cos(ang) * rr) / CELL), cz = Math.round((z + Math.sin(ang) * rr) / CELL);
+        if (lotStreetJS(cx, cz)) { rsOn[i] = 0; continue; }
+        const L = lotOfJS(cx, cz, citySeed, visRec, dmg);
+        const side = Math.random() < 0.5, sg = Math.random() < 0.5 ? 1 : -1;
+        px = side ? L.cx + sg * (L.b[0] + 0.5 + Math.random() * 3) : L.cx + (Math.random() - 0.5) * 2 * L.b[0];
+        pz = side ? L.cz + (Math.random() - 0.5) * 2 * L.b[1] : L.cz + sg * (L.b[1] + 0.5 + Math.random() * 3);
+      } else {
+        // down the streets, outward-biased
+        const rr = R * (0.3 + 0.7 * Math.sqrt(Math.random()));
+        px = x + Math.cos(ang) * rr; pz = z + Math.sin(ang) * rr;
+      }
+      rsOn[i] = 1; rsX[i] = px; rsZ[i] = pz;
+      const big = Math.random();
+      const s = scale * (0.6 + 1.6 * big * big);
+      rsEx[i] = (1.0 + Math.random() * 1.6) * s; rsEy[i] = (0.35 + Math.random() * 0.5) * s; rsEz[i] = (0.7 + Math.random() * 1.0) * s;
+      if (Math.random() < 0.12) { rsEx[i] = 2.4 * s; rsEy[i] = 2.4 * s; rsEz[i] = 2.4 * s; }   // a water tank, a plant room
+      rsY[i] = rsEy[i] * 0.8;
+      quatSetAxisAngle(rsQ, i * 4, 0, 1, 0, Math.random() * 6.2831853);
+      if (Math.random() < 0.3) { const t = Math.random() * 0.5 - 0.25; quatPreRotate(rsQ, i * 4, 0.894, 0, 0.447, t); rsY[i] += rsEx[i] * Math.abs(t) * 0.7; }
+      rsGrow[i] = 0; rsAge[i] = 0; rsTint[i] = Math.random();
+      rsSun[i] = sunShadowJS(px, rsY[i], pz, citySeed, SHADOW_STEPS, dmg);
+      rsVis[i] = 0;
+    }
+  }
+  function updateRest(dt) {
+    const flashOn = nFlash > 0;
+    for (let i = 0; i < REST; i++) {
+      if (!rsOn[i]) continue;
+      rsAge[i] += dt;
+      rsGrow[i] = Math.min(1, rsGrow[i] + dt / 0.6);
+      if (flashOn) rsFl[i] = flashShadowJS(rsX[i], rsY[i], rsZ[i], flX[0], flY[0], flZ[0], citySeed, FLASH_STEPS, dmg);
+    }
+  }
+  // the visibility of what stands still, a few a frame: the world quad writes
+  // no depth, so the CPU says what the blocks hide (visibleFrom), eased
+  function amortiseVisibility(dt) {
+    const per = 24;
+    const total = CARS + REST + DEBRIS;
+    for (let n = 0; n < per; n++) {
+      const j = visCursor; visCursor = (visCursor + 1) % total;
+      if (j < CARS) { if (carState[j] !== 0) carVis[j] = visibleFrom(carX[j], carY[j] + 0.8, carZ[j]); }
+      else if (j < CARS + REST) { const i = j - CARS; if (rsOn[i]) rsVis[i] = visibleFrom(rsX[i], rsY[i] + 0.5, rsZ[i]); }
+      else { const i = j - CARS - REST; if (dbState[i] === 3) dbVis[i] = visibleFrom(dbX[i], dbY[i] + 0.3, dbZ[i]); }
+    }
+    void dt;
+  }
+  // ---- the flash picks: the two biggest live fireballs as the city's point
+  // lights, ranked by their light at the eye; the exposure they take
+  function pickFlashes() {
+    nFlash = 0; flashExpo = 0;
+    let a0 = 0, a1 = 0, i0 = -1, i1 = -1;
+    for (let i = 0; i < MAX_CLOUDS; i++) {
+      if (cAge[i] < 0 || cFade[i] < 0.05) continue;
+      const age = cAge[i], sc = cSc[i];
+      const fire = Math.exp(-age / (1.4 + 0.09 * sc));
+      const amp = cFireS[i] * 3.2 * fire * (0.35 + 0.65 * Math.exp(-age / 0.8)) * cFade[i];
+      if (amp < 0.04) continue;
+      const r2 = sc * sc * 170;
+      const dx = cX[i] - camPos.x, dz = cZ[i] - camPos.z;
+      const atEye = amp * r2 / (r2 + dx * dx + dz * dz + camPos.y * camPos.y);
+      if (atEye > a0) { a1 = a0; i1 = i0; a0 = atEye; i0 = i; }
+      else if (atEye > a1) { a1 = atEye; i1 = i; }
+    }
+    const F = WU.uFlashP.value, C = WU.uFlashC.value;
+    for (let k = 0; k < 2; k++) {
+      const i = k === 0 ? i0 : i1;
+      if (i < 0) break;
+      const age = cAge[i], sc = cSc[i];
+      const fire = Math.exp(-age / (1.4 + 0.09 * sc));
+      const amp = cFireS[i] * 3.2 * fire * (0.35 + 0.65 * Math.exp(-age / 0.8)) * cFade[i];
+      flX[k] = cX[i]; flZ[k] = cZ[i]; flY[k] = Math.max(sc, cYc[i] * 0.7); flA[k] = amp; flR2[k] = sc * sc * 170;
+      F[k * 4] = flX[k]; F[k * 4 + 1] = flY[k]; F[k * 4 + 2] = flZ[k]; F[k * 4 + 3] = flR2[k];
+      C[k] = amp;
+      flashExpo += (k === 0 ? a0 : a1) * 0.9;
+      nFlash++;
+    }
+    WU.uNFlash.value = nFlash;
+    WU.uFlashExpo.value = flashExpo;
+  }
+  // ---- the boxes: every car, chunk and resting piece, and their shadows, written
+  const carCol = new Float32Array(3), chunkCol = new Float32Array(3);
+  function updateBoxes(dt, w, pw) {
+    // the palette's ash, greyed, for the chunks; the cars mostly dark neutrals
+    const l4 = 0.299 * pw[4].r + 0.587 * pw[4].g + 0.114 * pw[4].b;
+    chunkCol[0] = (pw[4].r + (l4 - pw[4].r) * 0.75) * 0.55; chunkCol[1] = (pw[4].g + (l4 - pw[4].g) * 0.75) * 0.55; chunkCol[2] = (pw[4].b + (l4 - pw[4].b) * 0.75) * 0.55;
+    const cityW = w;
+    const gateT = WU.uGateT.value;
+    for (let i = 0; i < CARS; i++) {
+      const b = BX_CAR0 + i * 4;
+      const st = carState[i];
+      if (st === 0 || cityW < 0.01) { boxOff(b); boxOff(b + 1); boxOff(b + 2); boxOff(b + 3); continue; }
+      // colour: a dark neutral, a palette colour on a third
+      const t = carTint[i];
+      let r, g, bb;
+      if (t < 0.66) { const v = 0.06 + t * 0.35; r = v * (0.9 + 0.2 * pw[4].r); g = v * (0.9 + 0.2 * pw[4].g); bb = v * (0.9 + 0.2 * pw[4].b); }
+      else { const c = t < 0.78 ? pw[1] : t < 0.9 ? pw[2] : pw[3]; const lum = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b; r = (c.r + (lum - c.r) * 0.5) * 0.5; g = (c.g + (lum - c.g) * 0.5) * 0.5; bb = (c.b + (lum - c.b) * 0.5) * 0.5; }
+      const vis = carVis[i] * cityW;
+      const fire = carFire[i] * (0.5 + 0.5 * Math.abs(Math.sin(tNow * 9 + i * 2.1))) * (0.7 + 0.3 * Math.sin(tNow * 23 + i));
+      const lamp = carLamp[i] * WU.uLamps.value * 0.55;
+      const sunV = carSun[i] * carSun[i] * (carSun[i] > 0.05 ? skyGateJ(carX[i], carY[i], carZ[i], tNow, gateT) : 0);
+      box(b, carX[i], carY[i], carZ[i], CAR_EX * cityW, CAR_EY * cityW, CAR_EZ * cityW, carQ, i * 4, r, g, bb, vis, sunV, lamp, carFl[i], fire * 0.8);
+      // the cabin rides the body's frame: up and a little back in its local x
+      const q = i * 4;
+      const qx = carQ[q], qy = carQ[q + 1], qz = carQ[q + 2], qw = carQ[q + 3];
+      // rotate the local offset (-0.25, 0.63, 0)
+      const lx = -0.25 * cityW, ly = 0.63 * cityW, lz = 0;
+      const cx2 = qy * lz - qz * ly + qw * lx, cy2 = qz * lx - qx * lz + qw * ly, cz2 = qx * ly - qy * lx + qw * lz;
+      const ox = lx + 2 * (qy * cz2 - qz * cy2), oy = ly + 2 * (qz * cx2 - qx * cz2), oz = lz + 2 * (qx * cy2 - qy * cx2);
+      box(b + 1, carX[i] + ox, carY[i] + oy, carZ[i] + oz, 1.05 * cityW, 0.27 * cityW, 0.82 * cityW, carQ, i * 4, r * 0.55 + 0.02, g * 0.55 + 0.02, bb * 0.55 + 0.03, vis, sunV, lamp, carFl[i], fire * 0.5);
+      // its shadow on the road: the streak only while it stands on the ground
+      // and the sun reaches it; the contact shadow whenever it stands
+      if (st !== 2 && sunV > 0.02) shadowBox(b + 2, carX[i], carZ[i], 1.5, (st === 1 ? CAR_EZ : CAR_EX * 0.7) * cityW, 0.62 * sunV * vis);
+      else boxOff(b + 2);
+      if (st === 1) box(b + 3, carX[i], 0.04, carZ[i], CAR_EX * 1.08 * cityW, 0.02, CAR_EZ * 1.15 * cityW, carQ, i * 4, 0, 0, 0, 0.5 * vis, 0, 0, 0, -2);
+      else if (st === 3) box(b + 3, carX[i], 0.04, carZ[i], CAR_EX * 0.85 * cityW, 0.02, CAR_EX * 0.85 * cityW, shadowQ, 0, 0, 0, 0, 0.45 * vis, 0, 0, 0, -2);   // on its side or its roof: a square patch
+      else boxOff(b + 3);
+    }
+    for (let i = 0; i < DEBRIS; i++) {
+      const b = BX_DEB0 + i;
+      const st = dbState[i];
+      if (st < 2 || cityW < 0.01) { boxOff(b); continue; }
+      const t = dbTint[i];
+      let r = chunkCol[0] * (0.7 + 0.6 * t), g = chunkCol[1] * (0.7 + 0.6 * t), bb = chunkCol[2] * (0.7 + 0.6 * t);
+      if (dbKind[i] === 4) { const c = t < 0.5 ? pw[3] : pw[2]; r = c.r * 0.6; g = c.g * 0.6; bb = c.b * 0.6; }   // signage keeps its colour
+      else if (dbKind[i] === 5) { r *= 0.6; g *= 0.6; bb *= 0.7; }
+      const vis = (st === 3 ? dbVis[i] : 1) * cityW;
+      const sunV = dbSun[i] * dbSun[i] * (dbSun[i] > 0.05 ? skyGateJ(dbX[i], dbY[i], dbZ[i], tNow, gateT) : 0);
+      box(b, dbX[i], dbY[i], dbZ[i], dbEx[i], dbEy[i], dbEz[i], dbQ, i * 4, r, g, bb, vis, sunV, 0, dbFl[i], 0);
+    }
+    for (let i = 0; i < REST; i++) {
+      const b = BX_REST0 + i * 3;
+      if (!rsOn[i] || cityW < 0.01) { boxOff(b); boxOff(b + 1); boxOff(b + 2); continue; }
+      const gsc = smooth01(rsGrow[i]);
+      const t = rsTint[i];
+      const r = chunkCol[0] * (0.75 + 0.5 * t), g = chunkCol[1] * (0.75 + 0.5 * t), bb = chunkCol[2] * (0.75 + 0.5 * t);
+      const vis = rsVis[i] * cityW;
+      const sunV = rsSun[i] * rsSun[i] * (rsSun[i] > 0.05 ? skyGateJ(rsX[i], rsY[i], rsZ[i], tNow, gateT) : 0);
+      box(b, rsX[i], rsY[i] * gsc, rsZ[i], rsEx[i] * gsc, rsEy[i] * gsc, rsEz[i] * gsc, rsQ, i * 4, r, g, bb, vis, sunV, 0, rsFl[i], 0);
+      if (sunV > 0.02 && gsc > 0.2) shadowBox(b + 1, rsX[i], rsZ[i], rsEy[i] * 1.6 * gsc, rsEz[i] * 0.8 * gsc, 0.5 * sunV * vis);
+      else boxOff(b + 1);
+      const pad = Math.max(rsEx[i], rsEz[i]) * 1.05 * gsc;
+      box(b + 2, rsX[i], 0.04, rsZ[i], pad, 0.02, pad, shadowQ, 0, 0, 0, 0, 0.42 * vis * gsc, 0, 0, 0, -2);
+    }
+    void dt;
   }
   function fireLightning() {
     ltnT = 0;
@@ -3271,9 +4211,12 @@ export function createScene(ctx) {
     const d = Math.sqrt(dx * dx + dz * dz + camPos.y * camPos.y);
     // what the burst leaves: a crater in the wreck, fires in its wake, debris on
     // its front, and a little more ash in the sky
-    addDamage(x, z, cSc[slot] * 10, 0.45 + 0.55 * yf);
+    addDamage(x, z, cSc[slot] * 10, 0.45 + 0.55 * yf, cSc[slot] * 1.8);
     igniteFrom(x, z, cSc[slot]);
-    seedDebris(slot, x, z, cSc[slot], 0.3 * clamp(900 / (300 + d), 0, 1));
+    seedDebris(slot, x, z, cSc[slot], 0.45 * clamp(900 / (300 + d), 0, 1));
+    placeRest(x, z, cSc[slot]);
+    // the blast wind at the eye is this burst's radial
+    { const l = Math.sqrt(dx * dx + dz * dz) || 1; bwX = dx / l; bwZ = dz / l; bwGust = 1; }
     wreck = Math.min(1, wreck + 0.10 + 0.28 * yf);
     flash = Math.max(flash, clamp((sc * 26) / (110 + d), 0, 0.94));
     emberA = Math.max(emberA, clamp(0.35 + yf * 0.8, 0, 1) * clamp(700 / (200 + d), 0, 1));
@@ -3561,9 +4504,11 @@ export function createScene(ctx) {
     passAge = -1;
     flash = 1;
     emberA = 1;
-    addDamage(GZ_X, GZ_Z, cSc[0] * 10, 1);
+    addDamage(GZ_X, GZ_Z, cSc[0] * 10, 1, cSc[0] * 1.8);
     igniteFrom(GZ_X, GZ_Z, cSc[0]);
-    seedDebris(-2, GZ_X, GZ_Z, cSc[0], 0.6);
+    seedDebris(-2, GZ_X, GZ_Z, cSc[0], 0.75);
+    placeRest(GZ_X, GZ_Z, cSc[0]);
+    { const dx = camPos.x - GZ_X, dz = camPos.z - GZ_Z; const l = Math.sqrt(dx * dx + dz * dz) || 1; bwX = dx / l; bwZ = dz / l; bwGust = 1; }
     wreck = Math.min(1, wreck + 0.35);
     for (let i = 0; i < EMBERS; i++) {
       embX[i] = camPos.x + (Math.random() - 0.5) * 120;
@@ -3613,20 +4558,35 @@ export function createScene(ctx) {
         const dirx = (hf(i * 53 + 3) - 0.5) * 1.4;                 // away from ground zero, a little sideways
         const dl = Math.sqrt(dirx * dirx + 1);
         const st = Math.sin(th), ct = Math.cos(th);
-        cap(CAP_LAMP0 + i, lx, 0, lz, lx + (st * LAMP_H * dirx) / dl, LAMP_H * ct, lz + (st * LAMP_H) / dl, 1.6, w * 0.34, 4.0, 0);
+        // the post stands in the sun or in a tower's shadow like everything else on the pavement
+        cap(CAP_LAMP0 + i, lx, 0, lz, lx + (st * LAMP_H * dirx) / dl, LAMP_H * ct, lz + (st * LAMP_H) / dl, 1.6, w * 0.34 * (0.45 + 0.55 * lampSun[i]), 4.0, 0);
       }
     }
+    // the embers stream along the blast wind — carried horizontally with the
+    // front, faster than they fall; none of them floats — and are re-seeded
+    // upwind of the eye so the stream keeps crossing it
+    const wsp = (0.5 + bwGust) * dt;
     for (let i = 0; i < EMBERS; i++) {
       if (emberA > 0.01) {
-        embY[i] -= embV[i] * dt;
-        embX[i] += Math.sin(t * 1.3 + i) * dt * 2.5;
-        if (embY[i] < 0) { embY[i] = 30 + Math.random() * 50; embX[i] = camPos.x + (Math.random() - 0.5) * 140; embZ[i] = camPos.z - Math.random() * 240; }
+        const spd = 16 + embV[i] * 2.2;
+        embX[i] += bwX * spd * wsp; embZ[i] += bwZ * spd * wsp;
+        embY[i] -= (1.5 + embV[i] * 0.35) * dt;
+        const rx = embX[i] - camPos.x, rz = embZ[i] - camPos.z;
+        if (embY[i] < 0 || rx * rx + rz * rz > 300 * 300 || rx * bwX + rz * bwZ > 120) {
+          const back = 30 + Math.random() * 220, side = (Math.random() - 0.5) * 180;
+          embX[i] = camPos.x - bwX * back - bwZ * side; embZ[i] = camPos.z - bwZ * back + bwX * side;
+          embY[i] = 3 + Math.random() * 55;
+        }
       }
       sph(glows, GL_EMBER0 + i, embX[i], embY[i], embZ[i], 0.5 + 0.4 * (i % 3), emberA * (0.4 + 0.5 * Math.sin(t * 6 + i)), 0.45, 0.8);
     }
   }
 
   const bloom = { strength: 0.45, radius: 0.45, threshold: 0.55 };
+  // scratch colours for the boxes' light (the city's own numbers, on the CPU)
+  const cA = new THREE.Color(), cB = new THREE.Color(), cC = new THREE.Color();
+  const grey3 = (c, k) => { const l = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b; c.r += (l - c.r) * k; c.g += (l - c.g) * k; c.b += (l - c.b) * k; return c; };
+  let warmFrames = 0;   // the boxes' first two frames draw a pinhead at zero alpha in front of the eye, so the program's first use is cheap and off screen
 
   function setAct(next) {
     next = clamp(next | 0, 0, ACTS - 1);
@@ -3659,10 +4619,18 @@ export function createScene(ctx) {
       // across the pad map so it reads as a bus's payload and not a cluster.
       else if (key === 'salvo') { salvoLeft = MAX_CLOUDS - 1; salvoT = 0; salvoIdx = 0; }
       else if (key === 'lightning') fireLightning();
+      // the launch map: one toggles the globe, the other plays the scenario
+      // (and raises the globe first, so a pad bound only to `all launched`
+      // still shows what it is doing)
+      else if (key === 'launchMap') { mapOn = !mapOn; launchMap.show(mapOn); }
+      else if (key === 'launchAll') { if (!mapOn) { mapOn = true; launchMap.show(true); } launchMap.launchAll(); }
       // a new city, whole: the craters, the fires, the fallen lamps and the ash dusk go with the old one
       else if (key === 'rebuild') {
         citySeed = 1 + ((Math.random() * 900) | 0); WU.uCitySeed.value = citySeed;
-        dmg.n = 0; WU.uNDmg.value = 0; fireT0.fill(-1); lampFall.fill(0); wreck = 0;
+        dmg.n = 0; WU.uNDmg.value = 0; WU.uNEtch.value = 0; fireT0.fill(-1); lampFall.fill(0); wreck = 0;
+        // the rubble, the chunks, the wrecked cars and the etched shadows go with the old city
+        rsOn.fill(0); dbState.fill(0); debrisLive = 0;
+        parkCars(citySeed); traceLamps();
         gatherWindows(citySeed); winDirty = false;
       }
     },
@@ -3672,6 +4640,7 @@ export function createScene(ctx) {
       else if (key === 'transition') { transit = clamp(value, 0, 1); transitTarget = transit; }
       else if (key === 'cloudScale') cloudScaleP = clamp(value, 0.2, 3);
       else if (key === 'place') placeP = clamp(value, 0, 15);
+      else if (key === 'shadowContrast') shadowContrastP = clamp(value, 0, 1);
     },
     update(dt, t, io) {
       tNow = t;
@@ -3808,21 +4777,27 @@ export function createScene(ctx) {
       winCool[0] = pw[2].r + (1 - pw[2].r) * 0.30;
       winCool[1] = pw[2].g + (1 - pw[2].g) * 0.30;
       winCool[2] = pw[2].b + (1 - pw[2].b) * 0.30;
-      {
-        const l4 = 0.299 * pw[4].r + 0.587 * pw[4].g + 0.114 * pw[4].b;
-        pal4Dark[0] = (pw[4].r + (l4 - pw[4].r) * 0.8) * 0.22;
-        pal4Dark[1] = (pw[4].g + (l4 - pw[4].g) * 0.8) * 0.22;
-        pal4Dark[2] = (pw[4].b + (l4 - pw[4].b) * 0.8) * 0.22;
-      }
 
       // ---- the acts (every act keeps running; only weighted ones show)
       updateCollider(dt, t, actW[0]);
       updateFission(dt, t, actW[1], transit);
       updateClouds(dt, t);
+      pickFlashes();
       updateRVs(dt);
       updateShockwave(dt, t, actW[3]);
+      // the blast wind: the gust of the last burst dies back to the storm's
+      // wind over a minute; the smoke leans with it, the embers and the far
+      // debris stream along it
+      bwGust = approach(bwGust, 0.35, 40, dt);
+      bwX = approach(bwX, WBX, 70, dt); bwZ = approach(bwZ, WBZ, 70, dt);
+      { const l = Math.sqrt(bwX * bwX + bwZ * bwZ) || 1; bwX /= l; bwZ /= l; }
+      WU.uWind.value.set(bwX * (0.10 + 0.16 * bwGust), bwZ * (0.10 + 0.16 * bwGust));
       updateStreet(dt, t, actW[3]);
       updateDebris(dt);
+      updateCars(dt);
+      updateRest(dt);
+      amortiseVisibility(dt);
+      updateBoxes(dt, clamp(actW[2] + actW[3], 0, 1), pw);
 
       // ---- the sky's state: the ash dusk decays over minutes; the storm throws
       // a bolt every so often; the fires age and their smoke stands
@@ -3876,23 +4851,53 @@ export function createScene(ctx) {
       WU.uHaze.value = 0.0007 + wreck * 0.0009;   // the dust thickens the distance
       WU.uLamps.value = 0.5 + 0.5 * wreck;         // the lamps come up as the dusk deepens
       WU.uFogD.value = 0.0020 + bass * 0.0015;
+      // the projected light's threshold: the contrast control, and the ash thickening the deck
+      WU.uGateT.value = clamp(0.40 + 0.45 * shadowContrastP + 0.22 * wreck, 0.1, 0.95);
       CU.uIntensity.value = io.intensity * openDim;
       solids.U.uIntensity.value = io.intensity * openDim;
       glows.U.uIntensity.value = io.intensity * openDim;
+      // the boxes' light: the city's sun, dome, lamp, flash and fire colours
+      BU.uIntensity.value = io.intensity * openDim;
+      cA.copy(pl[0]).lerp(cC.set(1, 1, 1), 0.55);
+      cB.copy(pl[1]).lerp(pl[3], 0.5).multiplyScalar(0.8);
+      BU.uSunCol.value.copy(cA).lerp(cB, wreck * 0.85).multiplyScalar(1 - wreck * 0.75);
+      cA.copy(pl[3]).lerp(pl[0], 0.5).lerp(grey3(cC.copy(pl[2]), 0.4), 0.5).multiplyScalar(0.40);
+      grey3(cB.copy(pl[4]).lerp(pl[1], 0.3), 0.6).multiplyScalar(0.14);
+      BU.uAmb.value.copy(cA).lerp(cB, wreck * 0.85);
+      BU.uLampCol.value.copy(pl[1]).lerp(pl[0], 0.3);
+      cA.copy(pl[3]).lerp(pl[0], 0.5).multiplyScalar(0.55);
+      grey3(cB.copy(pl[4]).lerp(pl[1], 0.3), 0.6).multiplyScalar(0.22);
+      BU.uDome.value.copy(cA).lerp(cB, wreck * 0.85);
+      BU.uFlashCol.value.copy(pl[0]).lerp(cC.set(1, 1, 1), 0.75);
+      BU.uFireCol.value.copy(pl[1]).lerp(pl[0], 0.5).multiplyScalar(2.2);
+      BU.uFlash.value.set(flX[0], flY[0], flZ[0], nFlash > 0 ? flA[0] : 0);
+      BU.uFlashR2.value = nFlash > 0 ? flR2[0] : 1;
+      BU.uExpo.value = flashExpo;
+      if (warmFrames < 2) {
+        // a pinhead at zero alpha two metres ahead of the eye: the driver's first use of the program
+        warmFrames++;
+        box(0, camPos.x + WU.uCamFwd.value.x * 2, camPos.y + WU.uCamFwd.value.y * 2, camPos.z + WU.uCamFwd.value.z * 2, 0.002, 0.002, 0.002, shadowQ, 0, 0, 0, 0, 0.002, 0, 0, 0, 0);
+      }
       capAP0.needsUpdate = true; capAP1.needsUpdate = true; capAS.needsUpdate = true;
       solids.aPos.needsUpdate = true; solids.aS.needsUpdate = true; solids.aC.needsUpdate = true;
       glows.aPos.needsUpdate = true; glows.aS.needsUpdate = true; glows.aC.needsUpdate = true;
+      bxAPos.needsUpdate = true; bxAExt.needsUpdate = true; bxARot.needsUpdate = true; bxACol.needsUpdate = true; bxALit.needsUpdate = true;
       const cityOn = actW[2] > 0.002 || actW[3] > 0.002;
       caps.visible = actW[0] > 0.002 || actW[1] > 0.002 || cityOn;
-      solids.mesh.visible = actW[1] > 0.002 || debrisLive > 0;
+      solids.mesh.visible = actW[1] > 0.002;
       glows.mesh.visible = caps.visible;
+      boxes.visible = cityOn || warmFrames < 2;
       bloom.strength = 0.45 + flash * 1.2 + collFlash * 0.4 + cascadeFlash * 0.8;
+      // the launch map rides above the city, on the eye that was just placed;
+      // it early-outs while hidden
+      launchMap.update(dt, t, io, { camera, hand: io.xy, intensity: io.intensity * openDim });
     },
     resize(w, h) {
       camera.aspect = w / Math.max(1, h);
       camera.updateProjectionMatrix();
       WU.uRes.value.set(w, h);
       CU.uRes.value.set(w, h);
+      launchMap.resize(w, h);
     },
     dispose() {
       world.geometry.dispose();
@@ -3903,6 +4908,10 @@ export function createScene(ctx) {
       solids.mat.dispose();
       glows.geo.dispose();
       glows.mat.dispose();
+      boxGeo.dispose();
+      boxMat.dispose();
+      boxSrc.dispose();
+      launchMap.dispose();
     },
   };
 }

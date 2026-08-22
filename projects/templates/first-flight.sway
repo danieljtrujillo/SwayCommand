@@ -33,7 +33,7 @@
           "swarm",
           "ribbons",
           "voxels",
-          "warp",
+          "willidream",
           "nebula",
           "mandelbulb",
           "cymatic",
@@ -157,7 +157,7 @@
         },
         {
           "type": "scene",
-          "scene": "warp",
+          "scene": "willidream",
           "transition": {
             "type": "cut",
             "duration": 0
