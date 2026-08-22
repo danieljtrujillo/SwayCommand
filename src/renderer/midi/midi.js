@@ -161,9 +161,21 @@ export async function createMidi({ onEvent } = {}) {
     // Sway present: bind it (exclusively authoritative for isSway flag).
     // Otherwise: bind ALL inputs so any controller drives the show.
     const targets = sway ? [sway] : inputs;
+    control.busy = false;
     for (const input of targets) {
       input.onmidimessage = (e) => handleMessage(e, input.name);
       boundInputs.set(input.id, input);
+      // Windows lets ONE process hold a MIDI input. If another app — or a
+      // stale headless instance of this one — already owns the port, the
+      // implicit open behind onmidimessage fails silently and the deck looks
+      // dead with the Sway plugged in. Open explicitly so that failure is
+      // visible: the link pill reads BUSY and the monitor names the port.
+      if (typeof input.open === 'function') {
+        input.open().catch((err) => {
+          control.busy = true;
+          pushMonitor(`PORT BUSY ${input.name} — held by another process (${err && err.name ? err.name : 'open failed'})`);
+        });
+      }
     }
     control.connected = targets.length > 0;
     control.isSway = !!sway;

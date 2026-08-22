@@ -7,21 +7,21 @@
   "modified_at": null,
   "project": {
     "meta": {
-      "id": "will-i-dream",
-      "name": "Will I Dream",
-      "description": "The universe begins on the downbeat: dark until play, then the big bang resolves into a straight flight through deep space, set to the track. Warp rides the hand toward the right and close to the sensors; every jump ends at a new celestial object. PAD 0 big bang, PAD 1 hyperspace jump, PAD 2 wormhole, PAD 3 spawn an object, PAD 7 black hole, PAD 8 and PAD 15 bank. The rack stays off.",
+      "id": "weather-systems",
+      "name": "Weather Systems",
+      "description": "Five weather systems on KNOB 6, in fifths: tornado, hurricane, lightning, wildfire, sandstorm. KNOB 5 is the intensity; any pad fires the system on screen's main event (touchdown, eyewall cycle, strike, flare up, gust); sway morphs the system, press squeezes, the hand steers the eye. The rack stays off.",
       "author": "",
-      "vibe": "lucid",
+      "vibe": "elemental",
       "bpmHint": 0,
       "pairsWith": null,
       "template": true
     },
     "palette": [
-      "#8fd3ff",
-      "#5b3fd6",
-      "#7df9ff",
-      "#ffd36e",
-      "#ff5fb0"
+      "#f3ead8",
+      "#ff7a1f",
+      "#3d6fa8",
+      "#c24a6e",
+      "#b8905c"
     ],
     "engine": {
       "quality": "med",
@@ -29,14 +29,14 @@
       "autoVJ": {
         "enabled": false,
         "pool": [
-          "willidream"
+          "weather"
         ],
         "minHold": 60,
         "maxHold": 120,
         "fadeTime": 4
       },
       "start": {
-        "scene": "willidream"
+        "scene": "weather"
       }
     },
     "fx": {
@@ -47,16 +47,7 @@
       "preset": "Init",
       "patch": null
     },
-    "media": [
-      {
-        "id": "will-i-dream",
-        "name": "New Will I Dream Master Style 2 - Live Punchy.mp3",
-        "path": "C:\\Users\\Cyboman\\Music\\New Will I Dream Master Style 2 - Live Punchy.mp3",
-        "sha256": "510de9de7fcb3b80edc85cacbef10ada685b0543b2e22dc9ec5a776f615a0e39",
-        "bytes": 9167722,
-        "duration": 229.008
-      }
-    ],
+    "media": [],
     "sampler": {
       "kit": {
         "version": 1,
@@ -100,36 +91,13 @@
           "name": "Audio",
           "gain": 1,
           "muted": false,
-          "clips": [
-            {
-              "id": "a-will-i-dream",
-              "name": "Will I Dream",
-              "media": "will-i-dream",
-              "start": 0,
-              "end": 229.008,
-              "offset": 0,
-              "gain": 1,
-              "fadeIn": 0,
-              "fadeOut": 2
-            }
-          ]
+          "clips": []
         },
         {
           "id": "visual-1",
           "type": "visual",
           "name": "Scenes",
-          "clips": [
-            {
-              "id": "v-will-i-dream",
-              "scene": "willidream",
-              "start": 0,
-              "end": 229.008,
-              "transition": {
-                "type": "cut",
-                "duration": 0
-              }
-            }
-          ]
+          "clips": []
         }
       ]
     },
@@ -139,50 +107,22 @@
         "synth": "unassigned"
       },
       "pads": [
-        {
-          "type": "sceneAction",
-          "scene": "willidream",
-          "action": "bigbang"
-        },
-        {
-          "type": "sceneAction",
-          "scene": "willidream",
-          "action": "hyperspace"
-        },
-        {
-          "type": "sceneAction",
-          "scene": "willidream",
-          "action": "wormhole"
-        },
-        {
-          "type": "sceneAction",
-          "scene": "willidream",
-          "action": "spawn"
-        },
-        null,
-        null,
-        null,
-        {
-          "type": "sceneAction",
-          "scene": "willidream",
-          "action": "blackhole"
-        },
-        {
-          "type": "sceneAction",
-          "scene": "willidream",
-          "action": "bankLeft"
-        },
         null,
         null,
         null,
         null,
         null,
         null,
-        {
-          "type": "sceneAction",
-          "scene": "willidream",
-          "action": "bankRight"
-        }
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
       ],
       "knobs": [
         null,

@@ -3,7 +3,7 @@
 // through the onOpenTab callback.
 
 const $ = (sel) => document.querySelector(sel);
-const TABS = ['synth', 'rack', 'kit'];
+const TABS = ['synth', 'rack', 'kit', 'plugins'];
 
 export function createDrawer({ onOpenTab }) {
   const drawer = $('#drawer');

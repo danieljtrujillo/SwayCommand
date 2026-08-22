@@ -48,6 +48,7 @@ export function createControlState() {
     connected: false,
     portName: null,
     isSway: false,
+    busy: false, // a bound port another process already holds (Windows: one opener per input)
     xy: { x: 0.5, y: 0.5 }, // 0..1
     gestures: { pulse: 0, press: 0, sway: 0 }, // 0..1
     xtrigYmod: { x: 0, y: 0 },

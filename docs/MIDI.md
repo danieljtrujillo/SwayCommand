@@ -38,7 +38,7 @@ Each rescan writes three connection fields into the control state:
 | `isSway` | `true` when the bound port matched the Sway name |
 | `portName` | the Sway port name; otherwise a comma-joined list of all bound port names; `null` when nothing is bound |
 
-The link pill in the top bar reads these fields: `SWAY`, `MIDI`, or `KEYS`.
+The link pill in the top bar reads these fields: `SWAY`, `MIDI`, or `KEYS` — or `BUSY` when a bound port exists but another process already holds it (Windows allows one opener per MIDI input; the MIDI layer opens every bound input explicitly, and a failed open sets `control.busy`, logs `PORT BUSY <name>` in the MIDI monitor, and lights the pill BUSY until the other process lets go and the port is re-bound). Close the other application — or a leftover headless instance of this one — then unplug and replug the Sway, or restart the application.
 
 ## Message routing
 
@@ -65,16 +65,18 @@ Pad-index resolution for notes tries two lookups in order:
 
 **Events** — `handleMidiEvent(e)`:
 
-- `pad`: executes the pad's assignment — trigger a sample, switch the scene (disabling Auto-VJ; the entry transition decides cut versus fade), or start a held effect punch (previous parameter value saved, restored on release).
+- `pad`: executes the pad's assignment — trigger a sample, switch the scene (disabling Auto-VJ; the entry transition decides cut versus fade), fire a scene event on the scene that owns it, or start a held effect punch (previous parameter value saved, restored on release).
 - `note` / `noteoff`: consults `noteRouting.synth` — `always`, `unassigned` (the default: notes whose pad carries an assignment do not reach the synth; free pitches such as Theory Engine notes always do), or `off`. Note-offs release unconditionally in every mode so a voice can never hang; a noteoff whose index maps to a pad also releases gate-mode samples and ends punches.
 - `cc`: matched against the learned button slots (CC number, plus channel when one was pinned); a rising edge across 0.5 executes the button's toggle target. The event's resolved continuous target, if any, feeds touch-to-select.
 - `bend` / `mod`: forwarded to the synth.
 
 **Frames** — the router registers itself as the engine's frame hook (`engine.setFrameHook`), running inside the frame after control ingestion and before the palette update. Each frame it updates the transport, then dispatches knobs and gesture routes:
 
-- Knobs are change-driven: a knob's assignment fires only when the hardware position moves past a small epsilon, so an idle knob never fights a value edited in a drawer panel. The 0–1 position runs through the assignment's curve (`linear`, or `detent` — center of travel maps to exactly zero) and min–max range, then drives the target: `engine:hue` / `engine:intensity` / `engine:fadeTime`, any numeric `fx:` parameter, any `synth:` range parameter, or the four `sampler:` knobs.
+- Knobs are change-driven: a knob's assignment fires only when the hardware position moves past a small epsilon, so an idle knob never fights a value edited in a drawer panel. The 0–1 position runs through the assignment's curve (`linear`, or `detent` — center of travel maps to exactly zero) and min–max range, then drives the target: `engine:hue` / `engine:intensity` / `engine:fadeTime`, any numeric `fx:` parameter, any `synth:` range parameter, the four `sampler:` knobs, or any parameter a scene declares (`scene:<sceneId>:<key>`).
 - Gesture routes (X, Y, PULSE, PRESS, SWAY — any number of routes per dimension) are applied after knobs, so on a shared target the gesture wins.
 - Held punches are re-asserted last so nothing overwrites them mid-hold.
+
+The frame hook also mirrors the transport into the engine's `io` (`io.transport = { playing, time }`), which is how a scene that opens on a trigger — Will I Dream stays dark until the show starts — sees the show clock without reaching outside the contract.
 
 **Timeline** — the transport reports visual-clip entries to the router, which suspends Auto-VJ while the timeline drives the stage (restoring its previous state when playback stops or leaves the clips) and applies the clip: the stored transition at a played boundary, an instant cut on any seek or play start.
 
@@ -136,7 +138,7 @@ Valid continuous learn targets:
 | `xtrig:x`, `xtrig:y` | `xtrigYmod.*` |
 | `knob:0` … `knob:7` | `knobs[0]` … `knobs[7]` |
 
-Overrides win over the factory map: incoming CC numbers are checked against the override set first, in insertion order, and only unmatched CCs fall through to the factory table. An override adds a binding for its target without removing the factory CC for that target; when an override claims a CC number the factory map assigns elsewhere, the override wins for that number. Only CC messages can be learned; notes cannot.
+Overrides win over the factory map: incoming CC numbers are checked against the override set first, in insertion order, and only unmatched CCs fall through to the factory table. An override adds a binding for its target without removing the factory CC for that target; when an override claims a CC number the factory map assigns elsewhere, the override wins for that number — which is the one sharp edge here. Learning `xy:y` onto CC 50, the CC the surface sends for X, leaves `xy:x` driven by nothing at all and both hand axes reporting Y, so the sensor array reads as broken while the hardware is fine. The **UNLEARN** chip in the assignment panel ([STUDIO.md](STUDIO.md#learn-and-persistence)) drops one override and restores the factory binding. Only CC messages can be learned; notes cannot.
 
 The caller is the router's `learnBinding(target)`, reached through the LEARN chip in the assignment panel ([STUDIO.md](STUDIO.md)). After every completed learn it persists the override set to `settings.json` (`midiOverrides`, applied again at the next startup) and marks the project dirty, so the binding also lands in the `.sway` file on the next save. A **button** learn captures the CC number and channel into the button slot instead; the temporary continuous override recorded on the way is deleted immediately so a button press never drives a knob path.
 

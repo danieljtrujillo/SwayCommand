@@ -10,17 +10,26 @@
 //   {
 //     "out": "<directory for the PNGs and the page>",   // default: os.tmpdir()/swaycommand-harness
 //     "width": 1280, "height": 720, "tier": "med",
+//     "freshCache": true,            // cold GPU shader cache: every scene's first draw is a real compile
+//     "userDataDir": "<path>",       // or pin a specific Electron profile
 //     "shots": [
 //       { "name": "tomb-egg", "scene": "naturestomb", "frames": 120, "dt": 0.01667,
 //         "io": { "knobs": { "4": 0.75 }, "gestures": { "sway": 0.5 }, "xy": { "x": 0.5, "y": 0.5 },
-//                 "bands": { "bass": 0.3 }, "level": 0.4, "beat": 0, "strike": 2, "palette": ["#...", ...] } }
+//                 "bands": { "bass": 0.3 }, "level": 0.4, "beat": 0, "strike": 2, "strikes": [0, 5],
+//                 "transport": { "playing": true, "time": 0 },
+//                 "actions": ["blackhole"], "params": { "objectScale": 3 },
+//                 "palette": ["#...", ...] } }
 //     ]
 //   }
 // Shots run in order on cached instances, so a scene's state carries from one
 // shot to the next (a strike in shot 2 lands on the state shot 1 left). One
 // JSON report prints at the end: per shot the update cost per frame, the
-// ms/frame of a timed burst (update + render, GPU finished), and the hooked
-// console errors and warnings — a shader that fails to compile shows there.
+// ms/frame of a timed burst closed by a pipeline-draining readPixels, the
+// GPU's own per-frame time from the disjoint timer query where the driver
+// exposes it (`gpuMs`, the number to trust), and the hooked console errors
+// and warnings — a shader that fails to compile shows there. `actions` and
+// `params` reach a scene's control surface (action() / setParam()) exactly as
+// the router would.
 
 'use strict';
 
@@ -53,7 +62,7 @@ if (process.versions.electron && !process.env.ELECTRON_RUN_AS_NODE) {
         const js = `(() => { try { return window.__h.run(${JSON.stringify(shot.scene)}, ${shot.frames || 60}, ${shot.dt || 1 / 60}, ${JSON.stringify(shot.io || null)}); } catch (e) { return { error: String((e && e.stack) || e) }; } })()`;
         const r = await win.webContents.executeJavaScript(js);
         if (r && r.png) fs.writeFileSync(path.join(out, `${shot.name}.png`), Buffer.from(r.png.split(',')[1], 'base64'));
-        report.shots.push({ name: shot.name, scene: shot.scene, updateMs: r.updateMs, msPerFrame: r.msPerFrame, error: r.error });
+        report.shots.push({ name: shot.name, scene: shot.scene, updateMs: r.updateMs, msPerFrame: r.msPerFrame, gpuMs: r.gpuMs, warm: r.warm, error: r.error });
       }
       report.logs = await win.webContents.executeJavaScript('window.__h.logs');
     } catch (err) {
@@ -93,6 +102,17 @@ if (process.versions.electron && !process.env.ELECTRON_RUN_AS_NODE) {
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
   const electron = require('electron');
-  const r = spawnSync(electron, [__filename, resolved], { env, stdio: 'inherit', cwd: root });
+  // "freshCache": true runs Electron on an empty user-data dir, so the GPU
+  // shader cache is cold and every shot's `warm.firstDrawMs` is the real
+  // first-use compile — the number a user meets on the first launch after an
+  // install. "userDataDir": "<path>" pins a specific profile instead.
+  const args = [__filename, resolved];
+  if (plan.freshCache) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'swaycommand-harness-cold-'));
+    args.push(`--user-data-dir=${dir}`);
+  } else if (plan.userDataDir) {
+    args.push(`--user-data-dir=${path.resolve(plan.userDataDir)}`);
+  }
+  const r = spawnSync(electron, args, { env, stdio: 'inherit', cwd: root });
   process.exit(r.status == null ? 1 : r.status);
 }

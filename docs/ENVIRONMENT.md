@@ -52,7 +52,7 @@ Both parameters are consumed once, in `main()` of `src/renderer/app.js`, from `l
 | Parameter | Value | Behavior |
 |---|---|---|
 | `autoplay` | Template id, or a `.sway` file path | A value ending in `.sway` (case-insensitive) is opened as a project file; anything else is opened as a template id. On failure the startup falls through to the normal selection (most recent project, then the `first-flight` template) with a console warning. Any `autoplay` value also skips the SYSTEM modal: the blast door opens immediately and the Doctor still runs in the background, keeping its checks reachable from the CONTROLS modal. |
-| `scene` | Scene id | Applied after the boot project loads: Auto-VJ is disabled and the engine switches to the named scene via `setScene(scene, 0.3)`. The value is one of the seventeen ids in the scene registry (`src/renderer/engine/scenes/index.js`): `beams`, `swarm`, `ribbons`, `voxels`, `warp`, `nebula`, `mandelbulb`, `cymatic`, `spectra`, `vjshader`, `ferrofluid`, `chladni`, `valley`, `lattice`, `willidream`, `naturestomb`, `miraclemile`. `setScene` ignores an id with no registered creator, so an unknown value leaves the project's opening scene on stage with Auto-VJ still disabled. |
+| `scene` | Scene id | Applied after the boot project loads: Auto-VJ is disabled and the engine switches to the named scene via `setScene(scene, 0.3)`. The value is one of the twenty ids in the scene registry (`src/renderer/engine/scenes/index.js`): `beams`, `swarm`, `ribbons`, `voxels`, `warp`, `nebula`, `mandelbulb`, `cymatic`, `spectra`, `vjshader`, `ferrofluid`, `chladni`, `valley`, `lattice`, `willidream`, `naturestomb`, `miraclemile`, `tunnelending`, `wormholept1`, `wormholeend`. `setScene` ignores an id with no registered creator, so an unknown value leaves the project's opening scene on stage with Auto-VJ still disabled. |
 
 ## The automation handle
 
@@ -69,6 +69,10 @@ The renderer exposes `window.__swaycommand` for `SWAYCOMMAND_PROBE` expressions 
 # scene registry size and current scene
 $env:SWAYCOMMAND_PROBE = "JSON.stringify({ scenes: __swaycommand.state.engine.sceneList.length, now: __swaycommand.state.engine.currentScene.id })"
 
+# frame health and the warm pipeline: worst frame (ms, raw delta), frames past 50 ms, the first forty stalls, per-scene warm costs
+$env:SWAYCOMMAND_PROBE = "(async () => { const e = __swaycommand.state.engine; await new Promise(r => setTimeout(r, 8000)); return JSON.stringify({ worst: e.stats.worst, slow: e.stats.slow, log: e.stats.stallLog, warm: e.stats.warm }); })()"
+# (SWAYCOMMAND_SHOT_DELAY must exceed 3000 + 8000 here)
+
 # project document state: path, name, dirty flag, media count
 $env:SWAYCOMMAND_PROBE = "JSON.stringify({ ...__swaycommand.projectStore.state, media: __swaycommand.projectStore.project().media.length })"
 
@@ -83,6 +87,11 @@ $env:SWAYCOMMAND_PROBE = "__swaycommand.openStudio('kit'); __swaycommand.selectC
 ```
 
 `openProject(path)` and `saveProject()` call straight into the project store; `openStudio(tab)` opens the drawer (`synth`, `rack`, or `kit`); `renderPads` and `renderSamples` refresh the deck labels and the KIT list.
+
+
+## The offscreen scene harness
+
+Scene work does not need the app at all. `node scripts/scene-harness.js <plan.json>` bundles the scene registry with esbuild, opens a **hidden** Electron window (no focus steal, no MIDI port taken, the app untouched), creates scenes with the same creation context the engine passes, drives `update()` with a patched `io` per planned shot, saves a PNG still per shot, and prints one JSON report: per shot `updateMs` (CPU, per frame), `msPerFrame` (a 40-frame burst closed by a pipeline-draining `readPixels`), `gpuMs` (the GPU's own per-frame time from `EXT_disjoint_timer_query_webgl2`, `null` where the driver does not expose it), and the hooked console errors and warnings — a shader that fails to compile shows there. The plan format is in the file's header; a shot's `io` patch takes `knobs`, `xy`, `gestures`, `bands`, `level`, `beat`, `intensity`, `palette`, `strike` (one pad) or `strikes` (several together), `transport` (`{ playing, time }`), and — for scenes that declare a control surface ([SCENE_CONTRACT.md](SCENE_CONTRACT.md#the-scene-control-surface)) — `actions` (fired through `action()` on the first frame) and `params` (set through `setParam()` before the frames). Shots run in order on cached instances, so state carries from one to the next. Clear `ELECTRON_RUN_AS_NODE` before running it, as for any Electron launch.
 
 ## Settings file
 

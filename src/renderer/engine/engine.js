@@ -43,11 +43,26 @@ export function createEngine({ canvas, quality = 'med' }) {
   const fxRack = createFxRack(THREE, renderer, width, height);
 
   // Shared reflection environment for the chrome scenes — the no-asset
-  // stand-in for theDAW's EXR: a PMREM-filtered RoomEnvironment, generated
-  // once and handed to scenes through ctx.environment.
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  const environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-  pmrem.dispose();
+  // stand-in for theDAW's EXR: a PMREM-filtered RoomEnvironment.
+  //
+  // Generating it costs the better part of a SECOND on a cold GPU cache: it
+  // builds the room, renders it to a cube map and runs the whole PMREM blur
+  // chain, compiling a fistful of shaders on the way. It used to run here, at
+  // engine construction, on every single launch — and it was almost the whole
+  // of the frozen first load, even though only three scenes (ferrofluid,
+  // chladni, valley) ever ask for it. It is now built on FIRST ACCESS, which
+  // happens inside the warm pipeline when one of those scenes is instantiated,
+  // off the boot path entirely, and cached for the rest of the session.
+  let environmentTex = null;
+  function environment() {
+    if (environmentTex) return environmentTex;
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const room = new RoomEnvironment();
+    environmentTex = pmrem.fromScene(room, 0.04).texture;
+    pmrem.dispose();
+    room.dispose(); // the room's own geometries and materials; the texture stays
+    return environmentTex;
+  }
 
   // Per-scene bloom (theDAW's UnrealBloomPass). Scenes request it through
   // meta.bloom { strength, radius, threshold } or a live instance.bloom that
@@ -96,13 +111,21 @@ export function createEngine({ canvas, quality = 'med' }) {
   // --- scene management --------------------------------------------------------
 
   const instances = new Map(); // id -> created scene
-  const ctx = { THREE, renderer, width, height, quality: q, environment };
+  // The creation context is built per scene rather than spread from a shared
+  // object, because `environment` has to stay a getter all the way to the
+  // scene: spreading would read it, and reading it is the second that was
+  // being spent on every launch.
+  function sceneCtx() {
+    const c = { THREE, renderer, width, height, quality: q };
+    Object.defineProperty(c, 'environment', { get: environment, enumerable: true });
+    return c;
+  }
 
   function instance(id) {
     if (!instances.has(id)) {
       const create = creators[id];
       if (!create) throw new Error(`Unknown scene: ${id}`);
-      instances.set(id, create({ ...ctx, width, height }));
+      instances.set(id, create(sceneCtx()));
     }
     return instances.get(id);
   }
@@ -113,17 +136,23 @@ export function createEngine({ canvas, quality = 'med' }) {
   let fading = false;
   let fadeTime = 4;
 
-  function cutTo(id) {
-    if (!creators[id]) return;
+  // A switch to a scene that has never been built used to instantiate it,
+  // compile its shaders and draw it in one frame — hundreds of milliseconds
+  // of frozen stage, and the reason a cold start was so rough. A switch to a
+  // cold scene is now DEFERRED: the target goes to the head of the warm queue
+  // and the stage keeps showing what it was showing until the target is
+  // genuinely ready to draw. Nothing is lost — a deferred switch runs as soon
+  // as the scene is up, usually within a frame or two — and nothing freezes.
+  let pending = null; // { id, seconds } — a switch waiting on its scene
+
+  function applyCut(id) {
     slotA = id;
     slotB = null;
     mix = 0;
     fading = false;
   }
 
-  function crossfadeTo(id, seconds) {
-    if (seconds <= 0.12) return cutTo(id);
-    if (id === slotA && !fading) return;
+  function applyFade(id, seconds) {
     if (fading) {
       // settle the current fade instantly, then start the new one
       slotA = mix > 0.5 ? slotB : slotA;
@@ -134,15 +163,185 @@ export function createEngine({ canvas, quality = 'med' }) {
     fadeTime = Math.max(0.1, seconds);
   }
 
-  // Cold scene instancing builds geometry and compiles shaders mid-frame, so
-  // a project load queues its scenes here and the loop warms one per frame.
-  const warmQueue = [];
+  function cutTo(id) {
+    if (!creators[id]) return;
+    if (!ready.has(id)) {
+      pending = { id, seconds: 0 };
+      warmFirst(id);
+      return;
+    }
+    pending = null;
+    applyCut(id);
+  }
+
+  function crossfadeTo(id, seconds) {
+    if (seconds <= 0.12) return cutTo(id);
+    if (id === slotA && !fading) return;
+    if (!creators[id]) return;
+    if (!ready.has(id)) {
+      pending = { id, seconds };
+      warmFirst(id);
+      return;
+    }
+    pending = null;
+    applyFade(id, seconds);
+  }
+
+  function servePending() {
+    if (!pending || !ready.has(pending.id)) return;
+    const { id, seconds } = pending;
+    pending = null;
+    if (seconds <= 0.12 || !slotA) applyCut(id);
+    else applyFade(id, seconds);
+  }
+
+  // Bringing a scene up costs twice: building its geometry, buffers and
+  // textures on the CPU, then compiling and linking its shader programs. Doing
+  // both in one frame — which is what a project load used to do, nine times
+  // over, one scene per frame — is what made a cold start crawl. The warm
+  // pipeline splits them:
+  //
+  //   frame n     instantiate one scene (CPU: geometry, buffers, textures)
+  //   frame n+1   hand its programs to the driver with compileAsync, which
+  //               links them on the driver's own threads through
+  //               KHR_parallel_shader_compile instead of blocking ours
+  //   later       the promise resolves; the scene is drawn ONCE into a 32 px
+  //               target on the next frame — the first use of a program is
+  //               where ANGLE's translation and the uniform setup land — and
+  //               only then joins `ready` and may be shown
+  //
+  // Only one scene is in flight at a time, and the pipeline stands down on any
+  // frame that already ran long, so warming can never be what makes a
+  // struggling stage worse. A scene is only drawn once it is in `ready`.
+  const ready = new Set(); // scene ids whose programs are linked, drawn once off screen, and safe to show
+  let warmLinked = null; // { id, inst } whose programs linked, waiting for the raster warm
+  // The raster warm target: 32 px is enough to make every program actually
+  // execute once — it is the first USE of a program that costs, not the pixels.
+  const warmRT = new THREE.WebGLRenderTarget(32, 32, { depthBuffer: true, stencilBuffer: false, type: THREE.HalfFloatType });
+  const warmQueue = []; // ids waiting to be instantiated
   let warmResolvers = [];
+  let warmBuilt = null; // { id, inst } built last frame, waiting for compileAsync
+  let warmInFlight = null; // id whose compileAsync has not resolved yet
+
+  function warmFirst(id) {
+    // A scene something is waiting on jumps the queue.
+    if (!creators[id] || ready.has(id) || warmInFlight === id) return;
+    if (warmBuilt && warmBuilt.id === id) return;
+    if (warmLinked && warmLinked.id === id) return;
+    const at = warmQueue.indexOf(id);
+    if (at > 0) warmQueue.splice(at, 1);
+    if (at !== 0) warmQueue.unshift(id);
+  }
+
+  function warmSettle() {
+    if (warmQueue.length || warmBuilt || warmInFlight || warmLinked) return;
+    for (const resolve of warmResolvers) resolve();
+    warmResolvers = [];
+  }
+
+  function rasterWarm(id, inst) {
+    const r0 = performance.now();
+    try {
+      renderer.setRenderTarget(warmRT);
+      renderer.clear();
+      renderer.render(inst.scene, inst.camera);
+    } catch (err) {
+      console.warn(`[engine] warm draw ${id} failed:`, err.message);
+    }
+    renderer.setRenderTarget(null);
+    (stats.warm[id] = stats.warm[id] || {}).drawMs = Math.round(performance.now() - r0);
+    ready.add(id);
+    warmSettle();
+  }
+
+  function warmTick(dt) {
+    if (warmLinked) {
+      // programs linked last frame: draw them once, small, and the scene is ready
+      const { id, inst } = warmLinked;
+      warmLinked = null;
+      rasterWarm(id, inst);
+      return;
+    }
+    if (warmInFlight) return; // the driver is linking; leave it alone
+    // Stand down while the frame is already over budget — 28 ms is comfortably
+    // past a 60 fps frame without tripping on the odd slow one — but never
+    // when the stage is waiting on this scene to appear at all. On a machine
+    // that never makes budget, that exception is the difference between a slow
+    // start and a permanently black stage.
+    const urgent = !!pending || !slotA || !ready.has(slotA);
+    if (!urgent && dt > 0.028) return;
+
+    if (warmBuilt) {
+      const { id, inst } = warmBuilt;
+      warmBuilt = null;
+      warmInFlight = id;
+      let promise;
+      const c0 = performance.now();
+      try {
+        // Linked with the HDR target BOUND. The D3D driver compiles a program
+        // for the render target signature it first meets: linking against the
+        // canvas and then drawing into a half-float target cost a second,
+        // synchronous compile on the first draw — 170 to 970 ms per scene on a
+        // cold shader cache, the bulk of what a first launch used to spend.
+        // Bound to a target of the scenes' own format, that compile happens
+        // inside the parallel link and the first draw costs single digits.
+        renderer.setRenderTarget(warmRT);
+        promise = renderer.compileAsync(inst.scene, inst.camera);
+        renderer.setRenderTarget(null);
+        (stats.warm[id] = stats.warm[id] || {}).submitMs = Math.round(performance.now() - c0);
+      } catch (err) {
+        console.warn(`[engine] compile ${id} failed:`, err.message);
+        ready.add(id); // draw it anyway rather than hiding the scene for good
+        warmInFlight = null;
+        warmSettle();
+        return;
+      }
+      // A link that never reports ready — a driver quirk we cannot see from
+      // here — would otherwise hide the scene for the rest of the session, so
+      // the wait is bounded and the scene is drawn regardless after it.
+      const settled = () => {
+        if (ready.has(id) || (warmLinked && warmLinked.id === id)) return;
+        // linked — the raster warm on the next frame is what makes it ready
+        warmLinked = { id, inst };
+        if (warmInFlight === id) warmInFlight = null;
+      };
+      const guard = setTimeout(() => {
+        console.warn(`[engine] compile ${id} did not report ready in 6 s; drawing it anyway`);
+        settled();
+      }, 6000);
+      promise
+        .catch((err) => console.warn(`[engine] compile ${id} failed:`, err && err.message))
+        .then(() => {
+          clearTimeout(guard);
+          (stats.warm[id] = stats.warm[id] || {}).linkMs = Math.round(performance.now() - c0);
+          settled();
+        });
+      return;
+    }
+
+    if (!warmQueue.length) return;
+    const id = warmQueue.shift();
+    if (ready.has(id)) return warmSettle();
+    try {
+      const t0 = performance.now();
+      const built = instance(id);
+      (stats.warm[id] = stats.warm[id] || {}).buildMs = Math.round(performance.now() - t0);
+      warmBuilt = { id, inst: built };
+    } catch (err) {
+      console.warn(`[engine] prewarm ${id} failed:`, err.message);
+      warmSettle();
+    }
+  }
+
   function prewarm(ids = autoVJ.pool) {
     for (const id of ids) {
-      if (creators[id] && !instances.has(id) && !warmQueue.includes(id)) warmQueue.push(id);
+      if (!creators[id] || ready.has(id)) continue;
+      if (warmQueue.includes(id) || warmInFlight === id) continue;
+      if (warmBuilt && warmBuilt.id === id) continue;
+      if (warmLinked && warmLinked.id === id) continue;
+      warmQueue.push(id);
     }
-    if (!warmQueue.length) return Promise.resolve();
+    if (!warmQueue.length && !warmBuilt && !warmInFlight && !warmLinked) return Promise.resolve();
     return new Promise((resolve) => warmResolvers.push(resolve));
   }
 
@@ -158,7 +357,7 @@ export function createEngine({ canvas, quality = 'med' }) {
   };
 
   function autoVJTick(dt) {
-    if (!autoVJ.enabled || fading || autoVJ.pool.length < 2) return;
+    if (!autoVJ.enabled || fading || pending || autoVJ.pool.length < 2) return;
     autoVJ.holdLeft -= dt;
     if (autoVJ.holdLeft <= 0) {
       const others = autoVJ.pool.filter((id) => id !== slotA);
@@ -182,9 +381,16 @@ export function createEngine({ canvas, quality = 'med' }) {
     strike: 0, // max pad energy this frame — the strike dimension scenes morph on
     palette: colorMaster.palette,
     intensity: 1,
+    // Mirrored by the router each frame (it owns the transport): a scene
+    // that opens on a trigger — Will I Dream stays dark until the show
+    // starts — watches the rising edge of `playing`.
+    transport: { playing: false, time: 0 },
   };
 
-  const stats = { fps: 0, frames: 0, acc: 0 };
+  // `worst` and `slow` make a rough startup measurable without a profiler:
+  // the longest frame yet, and how many frames ran past 50 ms.
+  const stats = { fps: 0, frames: 0, acc: 0, worst: 0, slow: 0, warm: {}, stallLog: [] };
+  const engineT0 = performance.now();
 
   // Engine-level performance parameters. These used to be hardwired to knobs
   // 0/1/2 inside the frame loop; the assignment router writes them now, and
@@ -206,12 +412,19 @@ export function createEngine({ canvas, quality = 'med' }) {
   function frame(now) {
     if (!running) return;
     requestAnimationFrame(frame);
-    const dt = Math.min(0.05, (now - last) / 1000 || 0.016);
+    const raw = (now - last) / 1000 || 0.016;
+    const dt = Math.min(0.05, raw);
     last = now;
     const t = now / 1000;
 
     stats.acc += dt;
     stats.frames++;
+    // Measured on the RAW delta: dt is clamped, so it can never show a stall.
+    if (raw * 1000 > stats.worst) stats.worst = raw * 1000;
+    if (raw > 0.05) {
+      stats.slow++;
+      if (stats.stallLog.length < 40) stats.stallLog.push({ atMs: Math.round(now - engineT0), ms: Math.round(raw * 1000), warming: warmInFlight || (warmBuilt && warmBuilt.id) || (warmLinked && warmLinked.id) || null, scene: slotA });
+    }
     if (stats.acc >= 0.5) {
       stats.fps = Math.round(stats.frames / stats.acc);
       stats.frames = 0;
@@ -250,24 +463,15 @@ export function createEngine({ canvas, quality = 'med' }) {
     colorMaster.update(dt, params.hue);
     io.intensity = 0.25 + params.intensity * 0.75 + io.gestures.pulse * 0.35;
 
-    if (warmQueue.length) {
-      const id = warmQueue.shift();
-      try {
-        const inst = instance(id);
-        renderer.compile(inst.scene, inst.camera);
-      } catch (err) {
-        console.warn(`[engine] prewarm ${id} failed:`, err.message);
-      }
-      if (!warmQueue.length) {
-        for (const resolve of warmResolvers) resolve();
-        warmResolvers = [];
-      }
-    }
+    warmTick(dt);
+    servePending();
 
     autoVJTick(dt);
 
-    // fade progress
-    if (fading) {
+    // fade progress — held while the incoming scene is still warming, so a
+    // fade never crosses into an empty target
+    if (fading && slotB && !ready.has(slotB)) warmFirst(slotB);
+    if (fading && (!slotB || ready.has(slotB))) {
       mix = Math.min(1, mix + dt / fadeTime);
       if (mix >= 1) {
         slotA = slotB;
@@ -277,8 +481,10 @@ export function createEngine({ canvas, quality = 'med' }) {
       }
     }
 
-    // render A (and B mid-fade) into targets, then composite
-    const a = slotA ? instance(slotA) : null;
+    // render A (and B mid-fade) into targets, then composite. A scene that is
+    // not `ready` is never drawn — that is the whole point of the warm
+    // pipeline — so its target simply stays cleared.
+    const a = slotA && ready.has(slotA) ? instances.get(slotA) : null;
     if (a) {
       a.update(dt, t, io);
       renderer.setRenderTarget(rtA);
@@ -286,8 +492,8 @@ export function createEngine({ canvas, quality = 'med' }) {
       renderer.clear();
       renderer.render(a.scene, a.camera);
     }
-    if (fading && slotB) {
-      const b = instance(slotB);
+    const b = fading && slotB && ready.has(slotB) ? instances.get(slotB) : null;
+    if (b) {
       b.update(dt, t, io);
       renderer.setRenderTarget(rtB);
       renderer.clear();
@@ -326,6 +532,34 @@ export function createEngine({ canvas, quality = 'med' }) {
       renderer.setRenderTarget(null);
       renderer.render(compScene, compCam);
     }
+  }
+
+  // --- scene control surface ---------------------------------------------------
+  // A scene declares its own actions and parameters in meta.controls, so the
+  // assignment panel can list them without instancing the scene, and the
+  // router drives them through the normal `scene:<id>:<key>` target grammar.
+  // Parameters reach a cached instance whether it is on screen or not (they
+  // are state); an action only reaches a scene that is actually visible,
+  // because an event fired at an off-screen scene has nowhere to land.
+  function controlsOf(id) {
+    const m = sceneList.find((s) => s.id === id);
+    return (m && m.controls) || null;
+  }
+  function onScreen(id) {
+    return id === slotA || (fading && id === slotB);
+  }
+  function sceneAction(id, key) {
+    if (!onScreen(id)) return false;
+    const inst = instances.get(id);
+    if (!inst || typeof inst.action !== 'function') return false;
+    inst.action(key);
+    return true;
+  }
+  function setSceneParam(id, key, value) {
+    const inst = instances.get(id);
+    if (!inst || typeof inst.setParam !== 'function') return false;
+    inst.setParam(key, value);
+    return true;
   }
 
   function bloomOf(id) {
@@ -432,6 +666,25 @@ export function createEngine({ canvas, quality = 'med' }) {
     },
     cutTo,
     prewarm,
+    // The GPU's real name, read from the stage's own context — the doctor
+    // used to open a second WebGL context just to ask, which on a cold GPU
+    // process was a half-second stall at boot and answered "WebKit WebGL".
+    get gpuName() {
+      const gl = renderer.getContext();
+      const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+      const name = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+      return typeof name === 'string' && name ? name : null;
+    },
+    sceneReady: (id) => ready.has(id),
+    // How far the warm pipeline is, for a progress readout: scenes ready
+    // against scenes ready-or-in-flight.
+    warmProgress() {
+      const inFlight = warmQueue.length + (warmBuilt ? 1 : 0) + (warmInFlight ? 1 : 0) + (warmLinked ? 1 : 0);
+      return { done: ready.size, total: ready.size + inFlight, busy: inFlight > 0 };
+    },
+    sceneAction,
+    setSceneParam,
+    sceneControls: controlsOf,
     setFrameHook(fn) {
       frameHook = typeof fn === 'function' ? fn : null;
     },
@@ -440,7 +693,7 @@ export function createEngine({ canvas, quality = 'med' }) {
       if (others.length) crossfadeTo(others[(Math.random() * others.length) | 0], seconds);
     },
     get currentScene() {
-      const id = fading && mix > 0.5 ? slotB : slotA;
+      const id = pending ? pending.id : fading && mix > 0.5 ? slotB : slotA;
       const meta = sceneList.find((s) => s.id === id);
       return meta || { id, name: id };
     },

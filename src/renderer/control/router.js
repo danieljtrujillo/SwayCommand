@@ -25,10 +25,12 @@ export function createRouter({ engine, sampler, synth, transport, midi, onDirty 
   const lastTouched = { id: null, at: 0 };
 
   const heldPunches = new Map(); // pad idx -> { param, prev, value }
+  const heldTrackPunches = new Map(); // pad idx -> { track, fx, param, prev, value }
   const lastKnobs = new Array(8).fill(null);
   const lastButtonVals = new Array(8).fill(0);
   const lastGesture = new Map(); // route index -> last mapped value
   const samplerKnobs = { master: 0.5, cutoff: 0.5, rate: 0.5, send: 0.5 };
+  const ganValues = new Map(); // 'gan:<plugin>:<control>[:axis]' -> 0..1, fed by the plugin frame
   let autoVJPrev = null; // engine autoVJ state before the timeline took over
 
   // An effect never lingers behind a cleared control (user rule): each frame
@@ -87,7 +89,7 @@ export function createRouter({ engine, sampler, synth, transport, midi, onDirty 
       case 'gesture:pulse': return io.gestures.pulse;
       case 'gesture:press': return io.gestures.press;
       case 'gesture:sway': return io.gestures.sway;
-      default: return 0;
+      default: return ganValues.get(source) || 0;
     }
   }
 
@@ -120,6 +122,15 @@ export function createRouter({ engine, sampler, synth, transport, midi, onDirty 
         }
         break;
       }
+      case 'scene':
+        engine.setSceneParam(t.scene, t.key, mapped);
+        break;
+      case 'track':
+        // A track's gain, its VST wet/dry, or one parameter of a chain entry.
+        if (t.fx) transport.setTrackParam(t.track, t.fx, t.key, mapped);
+        else if (t.key === 'gain') transport.setTrackGain(t.track, mapped);
+        else if (t.key === 'vstmix') transport.setVstMix(t.track, mapped);
+        break;
       // transport targets are toggles; a continuous control cannot drive them
     }
   }
@@ -142,10 +153,21 @@ export function createRouter({ engine, sampler, synth, transport, midi, onDirty 
           if (synthToggleCb) synthToggleCb(synthOn);
         }
         break;
+      case 'scene':
+        engine.sceneAction(t.scene, t.key); // scene events are momentary, not switches
+        break;
       case 'transport':
         if (t.key === 'playPause') transport.state.playing ? transport.pause() : transport.play();
         else if (t.key === 'stop') transport.stop();
         break;
+      case 'track': {
+        const tr = transport.trackById(t.track);
+        if (!tr) break;
+        if (t.fx && t.key === 'enabled') transport.setTrackParam(t.track, t.fx, 'enabled', transport.getTrackParam(t.track, t.fx, 'enabled') >= 0.5 ? 0 : 1);
+        else if (t.key === 'mute') transport.setTrackMute(t.track, !tr.muted);
+        else if (t.key === 'solo') transport.setTrackSolo(t.track, !tr.solo);
+        break;
+      }
     }
   }
 
@@ -168,10 +190,26 @@ export function createRouter({ engine, sampler, synth, transport, midi, onDirty 
       engine.autoVJ.enabled = false;
       if (a.transition.type === 'crossfade') engine.setScene(a.scene, a.transition.duration);
       else engine.cutTo(a.scene);
+    } else if (a.type === 'sceneAction') {
+      // The event reaches the named scene only while it is on screen — a
+      // black hole fired at a scene nobody can see has nowhere to land.
+      engine.sceneAction(a.scene, a.action);
     } else if (a.type === 'fxPunch' && !heldPunches.has(idx)) {
       rackOnByControl(); // a punch must land audibly
       heldPunches.set(idx, { param: a.param, prev: engine.fx.params[a.param], value: a.value });
       engine.setFxParam(a.param, a.value);
+    } else if (a.type === 'stem') {
+      // A stem comes in on the next grid boundary, phase-locked to the
+      // timeline (transport.launchStem); toggle pads stop on the next strike,
+      // gate pads on release.
+      const opts = { quant: a.quant, track: a.track, gain: a.gain };
+      if (a.mode === 'gate') transport.launchStem(a.media, opts);
+      else transport.toggleStem(a.media, opts);
+    } else if (a.type === 'trackFx' && !heldTrackPunches.has(idx)) {
+      const prev = transport.getTrackParam(a.track, a.fx, a.param);
+      if (prev === null || prev === undefined) return;
+      heldTrackPunches.set(idx, { track: a.track, fx: a.fx, param: a.param, prev, value: a.value });
+      transport.setTrackParam(a.track, a.fx, a.param, a.value);
     }
   }
 
@@ -182,6 +220,12 @@ export function createRouter({ engine, sampler, synth, transport, midi, onDirty 
       heldPunches.delete(idx);
       engine.setFxParam(punch.param, punch.prev);
     }
+    const tp = heldTrackPunches.get(idx);
+    if (tp) {
+      heldTrackPunches.delete(idx);
+      transport.setTrackParam(tp.track, tp.fx, tp.param, tp.prev);
+    }
+    if (a && a.type === 'stem' && a.mode === 'gate') transport.stopStem(a.media, a.quant);
     if (a && a.type === 'sample') sampler.release(a.pad ?? idx); // gate pads only; no-op otherwise
   }
 
@@ -235,6 +279,7 @@ export function createRouter({ engine, sampler, synth, transport, midi, onDirty 
     setAssignments(a) {
       assignments = a || defaultAssignments();
       heldPunches.clear();
+      heldTrackPunches.clear();
       lastGesture.clear();
       // A project load replays its own fx snapshot; start tracking from the
       // new table instead of diffing against the old one.
@@ -272,6 +317,10 @@ export function createRouter({ engine, sampler, synth, transport, midi, onDirty 
     // control ingestion, before the palette/intensity update.
     frame(dt, t, io) {
       transport.update();
+      // Scenes read the show clock through io (docs/SCENE_CONTRACT.md): the
+      // router owns the transport, so it is the one that mirrors it.
+      io.transport.playing = !!transport.state.playing;
+      io.transport.time = transport.state.position || 0;
       reconcileFx();
 
       // Restore autoVJ once the timeline lets go of the stage.
@@ -308,6 +357,24 @@ export function createRouter({ engine, sampler, synth, transport, midi, onDirty 
       for (const punch of heldPunches.values()) {
         engine.setFxParam(punch.param, punch.value);
       }
+      for (const tp of heldTrackPunches.values()) {
+        transport.setTrackParam(tp.track, tp.fx, tp.param, tp.value);
+      }
+    },
+
+    // .gan plugin surfaces post their control outputs to the page; the app
+    // feeds them here and they become route sources like gesture dimensions.
+    setGanValue(source, value) {
+      const v = Number(value);
+      if (!Number.isFinite(v)) return;
+      ganValues.set(source, Math.max(0, Math.min(1, v)));
+    },
+    ganValue(source) {
+      return ganValues.get(source) || 0;
+    },
+    // Touch-to-select from a software control (a .gan knob, a track head).
+    noteTouch(id) {
+      touch(id);
     },
 
     // midi.learn's first caller. Persists device-level overrides and marks
@@ -328,6 +395,8 @@ export function createRouter({ engine, sampler, synth, transport, midi, onDirty 
 
     dispose() {
       heldPunches.clear();
+      heldTrackPunches.clear();
+      ganValues.clear();
       touchCb = null;
     },
   };

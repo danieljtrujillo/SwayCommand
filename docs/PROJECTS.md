@@ -28,7 +28,8 @@ The `project` object:
 | `synth` | `enabled`, `preset`, `patch` (the full patch object, or `null` to load the preset by name) |
 | `media` | The media table — the **only** place file paths live. Each entry: `id`, `name`, `path` (project-relative when possible), `sha256`, `bytes`, `duration` |
 | `sampler` | `kit` (16 pad slots referencing media by id, each with `gain`, `pitch`, `loop`, `chokeGroup`, `mode`) and `knobs` (`master`, `cutoff`, `rate`, `send`) |
-| `timeline` | `loop` (`enabled`, `start`, `end`), `locators`, and exactly one audio track and one visual track (below) |
+| `timeline` | `bpm` (0 = unknown), `snap` (`bar` / `beat` / `half` / `quarter` / `off`), `loop` (`enabled`, `start`, `end`), `locators`, and any number of audio tracks plus exactly one visual track (below) |
+| `plugins` | Linked `.gan` surfaces: `id`, `name`, `path`, `controls[]` (`id`, `name`, `kind`) — the route sources a plugin contributes ([STUDIO.md](STUDIO.md#plugins-gan-surfaces-and-vst3)) |
 | `assignments` | `noteRouting`, `pads[16]`, `knobs[8]`, `buttons[8]`, `gestures[]` ([STUDIO.md](STUDIO.md)) |
 | `midiOverrides` | Learned CC bindings, keyed by control target ([MIDI.md](MIDI.md)) |
 
@@ -78,7 +79,8 @@ A trimmed example:
     "assignments": {
       "version": 1,
       "noteRouting": { "synth": "unassigned" },
-      "pads": [ { "type": "sample", "pad": 0 }, null ],
+      "pads": [ { "type": "sample", "pad": 0 },
+                 { "type": "sceneAction", "scene": "willidream", "action": "blackhole" }, null ],
       "knobs": [ { "target": "engine:hue", "min": 0, "max": 1, "curve": "detent" }, null ],
       "buttons": [ { "cc": null, "channel": null, "action": null } ],
       "gestures": [ { "source": "gesture:press", "target": "fx:glitch",
@@ -95,6 +97,8 @@ A trimmed example:
 
 `validateProject()` never throws on content: every missing key is filled with its default, out-of-range numbers are clamped, and anything unusable — a media entry without a path, a clip referencing unknown media, a knob with an invalid target — is dropped with a message appended to a `warnings` array. Unrecognized keys survive the round-trip, so data written by a newer minor version is not destroyed by an older one. Only two conditions reject a file outright, both in `readProject()`: `format` is not `"sway"`, or `format_version` is newer than the build supports. A size cap of 8 MB keeps the read channel from being pointed at non-project files.
 
+A pad action is one of `sample`, `scene` (switch the stage), `sceneAction` (fire an event the active scene declares), `fxPunch`, `stem` (launch a media file phase-locked to the grid: `media`, `quant`, `mode`, `track`, `gain`), or `trackFx` (a held punch on a track effect parameter: `track`, `fx`, `param`, `value`). A continuous target is `<namespace>:<key>` over the namespaces `engine`, `fx`, `synth`, `sampler` and `transport`; `scene:<sceneId>:<key>` for a parameter a scene declares in its `meta.controls` ([SCENE_CONTRACT.md](SCENE_CONTRACT.md#the-scene-control-surface)); or `track:<trackId>:gain`, `track:<trackId>:vstmix`, `track:<trackId>:<fxId>:<param>` for a track ([STUDIO.md](STUDIO.md#tracks-effects-and-sections)). Toggle targets add `track:<trackId>:mute` / `:solo` / `:<fxId>:enabled`. Route sources are the five gesture dimensions or a linked plugin's control, `gan:<pluginId>:<controlId>[:x|:y|:z]`. Scene ids and keys are not resolved at validation time — a project may reference a scene the build does not have, and the reference simply never fires — so a file written against a newer scene registry still loads.
+
 On open, the project store applies the document in a fixed order: synth patch first (a patch swap is silent; a scene cut is visible), then `engine.applyProject` (palette, Auto-VJ, effects snapshot, start scene as an instant cut, scene prewarm), then router assignments, MIDI overrides, the timeline into the transport, and the sampler knobs. Media then loads asynchronously — one decode at a time so the render loop keeps breathing — and the show starts before the stems finish streaming in.
 
 ## Media linking
@@ -104,20 +108,22 @@ On open, the project store applies the document in a fixed order: synth patch fi
 - On save, each path is stored **project-relative** when the file sits under the project's directory, absolute otherwise; `sha256` and `bytes` are filled from the file (over the `files:statAudio` channel) for later integrity checks. Audio is never copied or embedded.
 - On open, relative paths resolve against the project file's directory. A missing or unreadable file produces a warning and an empty pad or silent clip, never a failed load.
 - Reads are capped at 256 MB per file. Because compressed audio decodes to Float32 PCM, the loader also estimates the decoded size from the cached duration: above roughly 600 MB it warns, above roughly 1.5 GB it refuses to decode the file.
-- Files enter the project through the KIT drawer's LOAD button ([STUDIO.md](STUDIO.md)); the OS dialog filters to `wav`, `mp3`, `flac`, `ogg`, `m4a`, `aac`, `aiff`, `aif`, `opus`, and `webm`.
+- Files enter the project through the timeline's IMPORT (or a drop onto the band — one track per stem), through the KIT drawer's LOAD button ([STUDIO.md](STUDIO.md)), and as VST renders written by the sidecar into the user data directory; the OS dialog filters to `wav`, `mp3`, `flac`, `ogg`, `m4a`, `aac`, `aiff`, `aif`, `opus`, and `webm`.
 
 ## Timeline model
 
-Version 1 fixes the track layout: exactly one audio track and one visual track.
+Any number of audio tracks (stems) and exactly one visual track; `bpm` and `snap` define the grid everything lands on.
 
 | Element | Fields | Semantics |
 |---|---|---|
 | `loop` | `enabled`, `start`, `end` | The loop region; disabled automatically when `end ≤ start`. Set from the ruler with Shift+drag, toggled with LOOP or `L`. |
 | `locators` | `id`, `name`, `time`, `color` | Ruler markers. Double-click the ruler to add one; clicking within 6 px of one seeks to it. |
-| Audio clip | `id`, `name`, `media`, `start`, `end`, `offset`, `gain`, `fadeIn`, `fadeOut` | A slice of a media file placed on the lane; `offset` is the position inside the source. Scheduled sample-accurately by the transport ([AUDIO.md](AUDIO.md)). |
+| Audio track | `id`, `name`, `gain`, `muted`, `solo`, `clips[]`, `fx[]`, `vst`, `regions[]` | One stem lane. `fx` is the live effect chain: entries `{ id, kind, enabled, params }` over the kinds in `src/shared/trackfx.js`. `vst` is the rendered chain: `{ plugins: [{ path, name, params, rawState }], mix, renders: { <srcMediaId>: <wetMediaId> } }`. `regions` are the track's sections. |
+| Audio clip | `id`, `name`, `media`, `start`, `end`, `offset`, `gain`, `fadeIn`, `fadeOut` | A slice of a media file placed on the track; `offset` is the position inside the source. Scheduled sample-accurately by the transport ([AUDIO.md](AUDIO.md)); a clip whose media has a VST render plays dry and wet together under the track's `vst.mix`. |
+| Region (section) | `id`, `start`, `end`, `fx`, `param`, `value` | While the playhead is inside, the named parameter of chain entry `fx` (or `fx: "vst"`, `param: "mix"`) takes `value`; on exit it returns to what it was. Drawn as a band across the top of the track row. |
 | Visual clip | `id`, `scene`, `start`, `end`, `transition` (`cut` or `crossfade` + `duration`) | Entering the clip during playback fires the scene at the router: the transition applies at a played boundary; any seek lands as a cut. Auto-VJ is suspended while the timeline drives the stage and restored afterward. |
 
-Clips are kept sorted by start time; validation drops zero-length clips. Editing gestures on the band: drag a clip to move it, drag its edges to resize, double-click the visual lane to lay the current scene, drag a scene from the SCENES bank or a sample from the KIT drawer onto the matching lane, wheel to zoom, Shift+wheel to pan, `Delete` to remove the selected clip, arrow keys to nudge it by half a second.
+Clips and regions are kept sorted by start time; validation drops zero-length clips, regions naming an effect the track does not have, and renders whose media is gone; a document with no audio track gets one. Editing gestures on the band: drag a clip or region to move it, drag its trailing edge (either edge for visual clips) to resize, double-click the visual lane to lay the current scene, Shift+drag on a track to mark a section, drag a scene from the SCENES bank or a sample from the KIT drawer onto the matching lane, drop audio files from the desktop to import them, wheel to zoom, Shift+wheel to pan, `Delete` to remove the selected clip or section, arrow keys to nudge by a beat (half a second when the tempo is unknown). Moves and drops snap to the grid.
 
 ## Templates
 

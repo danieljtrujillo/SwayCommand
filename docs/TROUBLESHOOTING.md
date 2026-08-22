@@ -82,6 +82,30 @@ Symptom-oriented reference for known issues. Check-by-check detection methods an
 | Cause | The check is a point-in-time USB scan with per-OS tooling: `pnputil.exe /enum-devices /connected` (with a `Get-PnpDevice` PowerShell fallback) on Windows, `system_profiler SPUSBDataType` on macOS, `lsusb` on Linux. A missing scan tool — `lsusb` is not installed on all distributions — resolves to an empty device list rather than an error. A charge-only USB cable carries no data lines and prevents enumeration entirely (unconfirmed). |
 | Resolution | The USB scan is informational only; MIDI binding is independent of it. The MIDI layer ([`src/renderer/midi/midi.js`](../src/renderer/midi/midi.js)) binds any port whose name contains `Audima Labs The Sway` and hot-attaches on plug-in via the WebMIDI `statechange` event, so a Sway that enumerates as a MIDI device works even when the scan reports nothing. Re-running the checks after reseating the connection refreshes both the scan and the MIDI report. |
 
+## Sway plugged in, no scene responds, link pill reads BUSY or KEYS
+
+| | |
+|---|---|
+| Symptom | The Sway is connected and enumerates as a MIDI device, but no scene responds to the hand, pads, or knobs — in every scene — and the link pill in the top bar reads `BUSY` (or, in builds before the explicit open, `KEYS`). |
+| Cause | Windows allows one process to hold a MIDI input port. Another application — a DAW, Audima's companion, or a leftover instance of this application, including a headless one started for verification (`npm start` / `electron .`) that never quit — already owns the Sway's port, so this instance's open fails. The MIDI layer opens every bound input explicitly and marks the failure: `control.busy` is set, the MIDI monitor (K) logs `PORT BUSY <name>`, and the pill lights `BUSY`. |
+| Resolution | Close the other application or kill the stray instance (Task Manager, or `taskkill /PID <pid> /T /F` after `tasklist | findstr electron`), then unplug and replug the Sway or restart the application so the port is re-bound. |
+
+## First launch after an install stutters for several seconds
+
+| | |
+|---|---|
+| Symptom | The first launch after installing a build — or the first launch of a new build — is rough for a few seconds: the boot door reads `Warming visuals · n of m`, the cursor and the checks hesitate, and if ENTER is pressed early the stage hitches once per scene as it comes up. Every later launch is smooth. |
+| Cause | The GPU driver compiles every scene's shader programs the first time it meets them, synchronously, on the main thread, and on Windows compiles a program a second time the first time it is drawn into a render target of a new format. Chromium caches compiled programs on disk (`GPUCache` under the application's user-data directory), so the cost is paid once per build per machine. The engine's warm pipeline ([ENGINE.md](ENGINE.md#the-warm-pipeline)) takes as much of it off the frame as the platform allows — the link runs on the driver's threads through `KHR_parallel_shader_compile`, and it runs against a target of the scenes' own format so the second compile folds into the first — and the door waits for it (up to six seconds) before opening by itself. What remains synchronous is the PMREM environment the chrome scenes (`ferrofluid`, `chladni`, `valley`) use, built on first need. |
+| Resolution | Let the door open by itself. If every launch is slow, the program cache is not persisting: check that the user-data directory is writable, and that no second instance is running with the same directory (Chromium logs `Gpu Cache Creation failed` in that case and compiles cold every time). The per-scene costs are readable from a probe: `SWAYCOMMAND_PROBE="JSON.stringify(__swaycommand.state.engine.stats.warm)"` prints `buildMs` / `submitMs` / `linkMs` / `drawMs` per scene ([ENVIRONMENT.md](ENVIRONMENT.md)). |
+
+## Hand X and Y read the same axis, or X does nothing
+
+| | |
+|---|---|
+| Symptom | Moving the hand across the Sway drives the vertical response, or nothing; the MIDI monitor (K) shows `CC50=… → xy:y` — the X CC landing on Y. Every scene is affected. |
+| Cause | A MIDI-learn override. LEARN on the Y chip captured CC 50 — the CC the surface sends for X — as `xy:y`, and overrides **add** a binding rather than replacing one, so both CC 50 (override) and CC 38 (factory) drive Y and nothing drives X. Overrides persist in `settings.json` (`midiOverrides`) and in the project, so the fault survives a restart. |
+| Resolution | Select Y on the deck and press **UNLEARN** in the assignment panel header (it appears whenever the selected control carries an override), or clear `midiOverrides` in `settings.json` while the application is closed. The factory map is X on CC 50, Y on CC 38 ([MIDI.md](MIDI.md#factory-map)). |
+
 ## No audio reaction
 
 | | |

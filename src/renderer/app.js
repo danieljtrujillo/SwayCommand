@@ -21,6 +21,8 @@ import { createAssign } from './ui/assign.js';
 import { createDrawer } from './ui/drawer.js';
 import { createTimeline } from './ui/timeline.js';
 import { createLayout } from './ui/layout.js';
+import { estimateBpm } from './audio/bpm.js';
+import { uid } from '../shared/swayproject.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -84,6 +86,7 @@ function topModal() {
 // timeline selection, then the deck selection. "Back" does not exist.
 function escapePop() {
   if (popoverOpen()) return closePopover();
+  if (ui.assign.cancelBind()) return ui.surface.setArmed(false);
   if (ui.drawer.isOpen()) return ui.drawer.close();
   const modal = topModal();
   if (modal) {
@@ -127,12 +130,20 @@ function renderChecks() {
 async function rendererChecks() {
   const checks = [];
   try {
-    const probe = document.createElement('canvas');
-    const gl = probe.getContext('webgl2');
-    const info = gl ? gl.getParameter(gl.RENDERER) : null;
+    // The stage already holds a WebGL2 context; ask it rather than opening a
+    // second one (a cold-GPU-process stall, and it only ever said "WebKit
+    // WebGL"). The probe canvas is the fallback before the engine exists.
+    let info = state.engine ? state.engine.gpuName : null;
+    let gl = !!state.engine;
+    if (!state.engine) {
+      const probe = document.createElement('canvas');
+      const pgl = probe.getContext('webgl2');
+      gl = !!pgl;
+      info = pgl ? pgl.getParameter(pgl.RENDERER) : null;
+    }
     checks.push(
       gl
-        ? { id: 'gpu', label: 'Graphics (WebGL2)', status: 'ok', detail: `Ready — ${info}.` }
+        ? { id: 'gpu', label: 'Graphics (WebGL2)', status: 'ok', detail: `Ready — ${info || 'WebGL2'}.` }
         : { id: 'gpu', label: 'Graphics (WebGL2)', status: 'fail', detail: 'WebGL2 unavailable. Update your GPU drivers.' }
     );
   } catch (e) {
@@ -194,9 +205,17 @@ async function runDoctor() {
   enter.focus();
   if (worst === 'ok' && !state._autoAdvanced && !state.entered) {
     state._autoAdvanced = true;
-    setTimeout(() => {
-      if (!state.entered && modalOpen('system')) enterCockpit();
-    }, 1400);
+    // The door opens by itself once the checks pass — but not onto a stage
+    // that is still compiling its visuals. It waits for the warm pipeline,
+    // six seconds at most; ENTER opens it at once regardless.
+    const t0 = performance.now();
+    const tryOpen = () => {
+      if (state.entered || !modalOpen('system')) return;
+      const wp = state.engine ? state.engine.warmProgress() : { busy: false };
+      if (!wp.busy || performance.now() - t0 > 6000) enterCockpit();
+      else setTimeout(tryOpen, 150);
+    };
+    setTimeout(tryOpen, 1400);
   }
 }
 
@@ -852,6 +871,17 @@ function refreshDeck() {
     } else if (a.type === 'scene') {
       const meta = state.engine.sceneList.find((s) => s.id === a.scene);
       labels.push(meta ? meta.name : a.scene);
+    } else if (a.type === 'sceneAction') {
+      const meta = state.engine.sceneList.find((s) => s.id === a.scene);
+      const ctl = meta && meta.controls && meta.controls.actions.find((c) => c.key === a.action);
+      labels.push(ctl ? ctl.label : a.action);
+    } else if (a.type === 'stem') {
+      const p = state.projectStore.project();
+      const m = p && p.media.find((x) => x.id === a.media);
+      const st = state.transport.stemState(a.media);
+      labels.push((st === 'on' ? '▶ ' : st === 'pending' ? '… ' : '') + (m ? m.name.replace(/\.[a-z0-9]+$/i, '') : 'stem'));
+    } else if (a.type === 'trackFx') {
+      labels.push(a.fx === 'vst' ? 'vst mix' : a.param);
     } else {
       labels.push(a.param);
     }
@@ -869,6 +899,13 @@ function buttonLitStates() {
     if (t === 'synth:enabled') return state.router.synthEnabled;
     if (t === 'transport:playPause') return state.transport.state.playing;
     if (t.startsWith('fx:')) return !!state.engine.fx.params[t.slice(3)];
+    if (t.startsWith('track:')) {
+      const parts = t.split(':');
+      const tr = state.transport.trackById(parts[1]);
+      if (!tr) return false;
+      if (parts.length === 3) return parts[2] === 'mute' ? tr.muted : parts[2] === 'solo' ? tr.solo : false;
+      return state.transport.getTrackParam(tr.id, parts[2], 'enabled') >= 0.5;
+    }
     return false;
   });
 }
@@ -928,6 +965,10 @@ function wireKeyboard() {
       ui.drawer.toggle('rack');
     } else if (k === 'e') {
       ui.drawer.toggle('kit');
+    } else if (k === 'g') {
+      ui.drawer.toggle('plugins');
+    } else if (k === 'i') {
+      importAudio(null, { at: state.transport.snapTime(state.transport.state.position), trackId: null });
     } else if (k === 'p') {
       state.transport.state.playing ? state.transport.pause() : state.transport.play();
     } else if (k === 'l') {
@@ -1000,6 +1041,15 @@ function frameTick(now) {
   const eng = state.engine;
   const io = eng.io;
 
+  // While the door is shut, it says what the stage is doing behind it: on a
+  // cold shader cache (first launch after an install) the driver compiles
+  // every pooled scene, and that reads as a hang unless it is named.
+  if (!state.entered) {
+    const wp = eng.warmProgress();
+    const el = $('#boot-warm');
+    if (el) el.textContent = wp.busy ? `Warming visuals · ${wp.done} of ${wp.total}` : wp.total ? 'Visuals ready' : '';
+  }
+
   // top bar
   const sceneName = eng.currentScene ? eng.currentScene.name : '';
   if (sceneName !== lastScene) {
@@ -1017,8 +1067,11 @@ function frameTick(now) {
 
   const c = state.midi.control;
   const link = $('#pill-link');
-  link.textContent = c.isSway ? 'SWAY' : c.connected ? 'MIDI' : 'KEYS';
-  link.classList.toggle('pill-on', c.isSway || c.connected);
+  // BUSY: the port is there but another process holds it (Windows allows one
+  // opener per MIDI input) — the Sway is plugged in and cannot reach us.
+  link.textContent = c.busy ? 'BUSY' : c.isSway ? 'SWAY' : c.connected ? 'MIDI' : 'KEYS';
+  link.title = c.busy ? `${c.portName} is held by another process — close the other app or instance` : '';
+  link.classList.toggle('pill-on', !c.busy && (c.isSway || c.connected));
 
   const a = state.audio.state;
   $('#pill-in').textContent =
@@ -1049,6 +1102,287 @@ function frameTick(now) {
   }
 }
 
+// ---------------------------------------------------------------- stems: import
+
+// The intuitive path in: pick files (or drop them) and every one becomes a
+// stem on its own track at `at`, snapped to the grid; the first import into a
+// session with no tempo sets the tempo from the longest file. A drop onto a
+// particular track lays the file on THAT track instead.
+async function importAudio(paths, opts = {}) {
+  const store = state.projectStore;
+  const transport = state.transport;
+  let files;
+  if (Array.isArray(paths) && paths.length) {
+    files = paths.map((p) => ({ path: p, name: p.split(/[\\/]/).pop() }));
+  } else {
+    try {
+      files = await window.swaycommand.files.pickAudio();
+    } catch (err) {
+      notice(`Import: ${err.message}`, 6000);
+      return;
+    }
+  }
+  if (!files || !files.length) return;
+  const at = Number.isFinite(opts.at) ? opts.at : transport.snapTime(transport.state.position);
+  const single = opts.trackId && transport.trackById(opts.trackId);
+  let placed = 0;
+  let longest = null;
+  const failures = [];
+  for (const file of files) {
+    ui.timeline.setHint(`Loading ${file.name}…`, 20000);
+    try {
+      const media = await store.addMedia(file);
+      const buffer = await store.loadMediaBuffer(media.id);
+      if (!buffer) throw new Error('could not decode');
+      if (!longest || buffer.duration > longest.buffer.duration) longest = { buffer, media };
+      let track = single && placed === 0 && files.length === 1 ? single : null;
+      if (!track) {
+        // A new track per stem — unless the first track is still empty.
+        const empty = transport.tracks().find((t) => !t.clips.length && !t.fx.length && !t.vst.plugins.length);
+        track = empty || transport.addTrack();
+        track.name = file.name.replace(/\.[a-z0-9]+$/i, '').slice(0, 28);
+      }
+      await ui.timeline.placeMedia(media.id, track.id, at, file.name);
+      placed++;
+    } catch (err) {
+      failures.push(`${file.name}: ${err.message}`);
+    }
+  }
+  if (longest && !(transport.state.bpm > 0)) {
+    const est = estimateBpm(longest.buffer);
+    if (est && est.bpm > 0) {
+      transport.setBpm(est.bpm);
+      ui.timeline.setHint(`${placed} stem${placed === 1 ? '' : 's'} · tempo ${est.bpm} bpm from ${longest.media.name}`, 8000);
+    }
+  } else {
+    ui.timeline.setHint(failures.length ? `Loaded ${placed}. Failed: ${failures.join('; ')}` : `${placed} stem${placed === 1 ? '' : 's'} on the timeline`, 6000);
+  }
+  if (failures.length) console.warn('[import]', failures.join('; '));
+  ui.timeline.edited();
+  renderSamples();
+  refreshDeck();
+}
+
+// Files dropped anywhere else on the window must not navigate the page.
+function wireGlobalDrop() {
+  window.addEventListener('dragover', (e) => e.preventDefault());
+  window.addEventListener('drop', (e) => {
+    e.preventDefault();
+    if (e.target.closest && e.target.closest('#timeline')) return; // the band handles its own drops
+    const files = [...(e.dataTransfer.files || [])];
+    if (!files.length) return;
+    const paths = files.map((f) => window.swaycommand.files.pathOf(f)).filter((p) => /\.(wav|mp3|flac|ogg|m4a|aac|aiff?|opus|webm)$/i.test(p));
+    if (paths.length) importAudio(paths, { at: state.transport.snapTime(state.transport.state.position), trackId: null });
+    const gans = files.map((f) => window.swaycommand.files.pathOf(f)).filter((p) => /\.gan$/i.test(p));
+    for (const g of gans) loadGan(g);
+  });
+}
+
+// ---------------------------------------------------------------- plugins (.gan) and VST
+
+const plugins = { activeId: null, vst: null, vstList: [] };
+
+function pluginsOf() {
+  const p = state.projectStore.project();
+  return p ? p.plugins : [];
+}
+
+async function loadGan(ganPath) {
+  try {
+    const info = await window.swaycommand.plugins.openGan(ganPath);
+    const list = pluginsOf();
+    const existing = list.find((g) => g.id === info.id);
+    const entry = { id: info.id, name: info.name, path: ganPath, controls: info.controls };
+    if (existing) Object.assign(existing, entry);
+    else list.push(entry);
+    plugins.activeId = info.id;
+    plugins.activeUrl = info.url;
+    state.projectStore.markDirty();
+    renderPluginsPanel();
+    notice(`${info.name}: ${info.controls.length} control${info.controls.length === 1 ? '' : 's'} — click one to route it`);
+  } catch (err) {
+    notice(`.gan: ${err.message}`, 7000);
+  }
+}
+
+async function showGan(id) {
+  // A project's .gan may have been unpacked on another machine: re-open from its path.
+  let installed = [];
+  try {
+    installed = await window.swaycommand.plugins.listGan();
+  } catch {
+    /* list is best-effort */
+  }
+  let info = installed.find((g) => g.id === id);
+  const linked = pluginsOf().find((g) => g.id === id);
+  if (!info && linked) {
+    try {
+      info = await window.swaycommand.plugins.openGan(linked.path);
+    } catch (err) {
+      notice(`.gan: ${err.message}`, 7000);
+      return;
+    }
+  }
+  if (!info) return;
+  plugins.activeId = id;
+  plugins.activeUrl = info.url;
+  renderPluginsPanel();
+}
+
+function renderPluginsPanel() {
+  const list = pluginsOf();
+  const ul = $('#gan-list');
+  ul.innerHTML = list.length
+    ? list
+        .map(
+          (g) =>
+            `<li><button data-gan="${g.id}"${g.id === plugins.activeId ? ' class="current"' : ''}>${g.name}` +
+            `<span class="row-actions"><b data-gan-open="${g.id}">OPEN</b><b data-gan-remove="${g.id}">✕</b></span>` +
+            `<em>${g.controls.length} control${g.controls.length === 1 ? '' : 's'}</em>` +
+            `<span class="ctl-row">${g.controls.map((c) => `<i data-gan-ctl="gan:${g.id}:${c.id}" title="${c.kind}">${c.name}</i>`).join('')}</span></button></li>`
+        )
+        .join('')
+    : '<li class="none">No .gan plugins in this project. LOAD one from theDAW’s Foundry (or drop a .gan file on the window).</li>';
+  const stage = $('#gan-stage');
+  const frame = $('#gan-frame');
+  if (plugins.activeId && plugins.activeUrl) {
+    const g = list.find((x) => x.id === plugins.activeId);
+    $('#gan-stage-name').textContent = g ? g.name.toUpperCase() : plugins.activeId.toUpperCase();
+    if (frame.getAttribute('src') !== plugins.activeUrl) frame.setAttribute('src', plugins.activeUrl);
+    stage.hidden = false;
+  } else {
+    stage.hidden = true;
+    if (frame.getAttribute('src')) frame.removeAttribute('src');
+  }
+  renderVstPanel();
+}
+
+async function renderVstPanel(rescan) {
+  const pill = $('#vst-pill');
+  const note = $('#vst-note');
+  try {
+    plugins.vst = await window.swaycommand.vst.status();
+  } catch (err) {
+    plugins.vst = { ok: false, error: err.message };
+  }
+  const s = plugins.vst;
+  pill.textContent = s.ok ? `pedalboard ${s.pedalboard}` : 'NO HOST';
+  pill.classList.toggle('pill-on', !!s.ok);
+  note.textContent = s.ok ? s.python : s.error || '';
+  const ul = $('#vst-list');
+  if (!s.ok) {
+    ul.innerHTML = '<li class="none">VST3 needs a Python with pedalboard: theDAW’s own environment is found by itself; otherwise pick one with PYTHON…</li>';
+    return;
+  }
+  ul.innerHTML = '<li class="none">scanning…</li>';
+  try {
+    plugins.vstList = await window.swaycommand.vst.scan(!!rescan);
+  } catch (err) {
+    ul.innerHTML = `<li class="none">scan failed: ${err.message}</li>`;
+    return;
+  }
+  ul.innerHTML = plugins.vstList.length
+    ? plugins.vstList.map((p) => `<li><button title="${p.path.replace(/"/g, '&quot;')}">${p.name}<em>${p.vendor || ''}${p.category && p.category !== 'unknown' ? ' · ' + p.category : ''}</em></button></li>`).join('')
+    : '<li class="none">No VST3 plugins in the standard folders.</li>';
+}
+
+// Renders every stem on a track through its VST chain; each source media
+// gets a wet media beside it and the transport plays both under track.vst.mix.
+async function renderTrackVst(track, progress) {
+  const store = state.projectStore;
+  const p = store.project();
+  const medias = [...new Set(track.clips.map((c) => c.media))].map((id) => p.media.find((m) => m.id === id)).filter(Boolean);
+  if (!medias.length) throw new Error('no clips on this track');
+  if (!track.vst.plugins.length) throw new Error('no plugins on this track');
+  let n = 0;
+  for (const m of medias) {
+    progress && progress(`RENDERING ${++n}/${medias.length}…`);
+    const r = await window.swaycommand.vst.render(m.resolvedPath || m.path, track.vst.plugins, { tail: 3 });
+    const wetPath = r.output;
+    let wet = p.media.find((x) => (x.resolvedPath || x.path) === wetPath);
+    if (!wet) {
+      wet = { id: uid('m'), name: `${m.name.replace(/\.[a-z0-9]+$/i, '')} · vst`, path: wetPath, resolvedPath: wetPath, sha256: null, bytes: null, duration: null };
+      p.media.push(wet);
+    }
+    state.transport.setBuffer(wet.id, null);
+    ui.timeline.invalidateMedia(wet.id);
+    await store.loadMediaBuffer(wet.id);
+    state.transport.setRender(track.id, m.id, wet.id);
+  }
+  store.markDirty();
+  ui.timeline.render();
+}
+
+function wirePlugins() {
+  $('#btn-gan-load').addEventListener('click', async () => {
+    let picked = [];
+    try {
+      picked = await window.swaycommand.plugins.pickGan();
+    } catch (err) {
+      notice(`.gan: ${err.message}`, 6000);
+    }
+    for (const p of picked) await loadGan(p);
+  });
+  $('#btn-gan-close').addEventListener('click', () => {
+    plugins.activeId = null;
+    plugins.activeUrl = null;
+    renderPluginsPanel();
+  });
+  $('#gan-list').addEventListener('click', (e) => {
+    const ctl = e.target.closest('[data-gan-ctl]');
+    if (ctl) {
+      selectControl(ctl.dataset.ganCtl);
+      return;
+    }
+    const rm = e.target.closest('[data-gan-remove]');
+    if (rm) {
+      const list = pluginsOf();
+      const i = list.findIndex((g) => g.id === rm.dataset.ganRemove);
+      if (i >= 0) list.splice(i, 1);
+      if (plugins.activeId === rm.dataset.ganRemove) {
+        plugins.activeId = null;
+        plugins.activeUrl = null;
+      }
+      state.projectStore.markDirty();
+      renderPluginsPanel();
+      return;
+    }
+    const open = e.target.closest('[data-gan-open]') || e.target.closest('[data-gan]');
+    if (open) showGan(open.dataset.ganOpen || open.dataset.gan);
+  });
+  $('#btn-vst-rescan').addEventListener('click', () => renderVstPanel(true));
+  $('#btn-vst-python').addEventListener('click', async () => {
+    try {
+      await window.swaycommand.vst.pickPython();
+    } catch (err) {
+      notice(`VST: ${err.message}`, 6000);
+    }
+    renderVstPanel(true);
+    ui.assign.refresh();
+  });
+
+  // The plugin surface posts its control outputs; each becomes a route
+  // source (gan:<plugin>:<control>[:axis]) and touches the assignment rail.
+  let lastTouch = '';
+  window.addEventListener('message', (e) => {
+    const d = e.data;
+    if (!d || d.type !== 'updateValue' || !plugins.activeId || typeof d.id !== 'string') return;
+    const base = `gan:${plugins.activeId}:${d.id}`;
+    const r = state.router;
+    if (d.valueX !== undefined || d.valueY !== undefined || d.valueZ !== undefined) {
+      if (d.valueX !== undefined) r.setGanValue(`${base}:x`, d.valueX);
+      if (d.valueY !== undefined) r.setGanValue(`${base}:y`, d.valueY);
+      if (d.valueZ !== undefined) r.setGanValue(`${base}:z`, d.valueZ);
+    } else if (d.value !== undefined) {
+      r.setGanValue(base, typeof d.value === 'boolean' ? (d.value ? 1 : 0) : d.value);
+    }
+    if (lastTouch !== base) {
+      lastTouch = base;
+      r.noteTouch(base);
+    }
+  });
+}
+
 // ---------------------------------------------------------------- project glue
 
 function postProjectLoad() {
@@ -1062,6 +1396,7 @@ function postProjectLoad() {
   renderSamples();
   if (ui.drawer.isOpen('synth')) renderSynthPanel();
   if (ui.drawer.isOpen('rack')) renderFxPanel();
+  if (ui.drawer.isOpen('plugins')) renderPluginsPanel();
   $('#synth-enable').checked = state.synthEnabled;
 }
 
@@ -1134,6 +1469,7 @@ async function main() {
       if (tab === 'synth' && first) renderSynthPanel();
       if (tab === 'rack') renderFxPanel();
       if (tab === 'kit') renderSamples();
+      if (tab === 'plugins') renderPluginsPanel();
     },
   });
   ui.assign = createAssign({
@@ -1142,19 +1478,32 @@ async function main() {
     synth: state.synth,
     engine: state.engine,
     midi: state.midi,
+    transport: state.transport,
+    store: state.projectStore,
     fxRanges,
     fxDecks,
+    notice,
     onChanged: () => {
       state.projectStore.markDirty();
       refreshDeck();
     },
     onLearnArmed: (armed) => ui.surface.setArmed(armed),
+    onBindArmed: (spec) => ui.surface.setArmed(!!spec),
+    onTimelineChanged: () => ui.timeline && ui.timeline.edited(),
+    onSelectTrack: (id) => ui.timeline.selectTrack(id),
+    onSelectRegion: (trackId, regionId) => ui.timeline.selectRegion(trackId, regionId),
+    onRenderVst: renderTrackVst,
   });
   ui.timeline = createTimeline({
     transport: state.transport,
     engine: state.engine,
     store: state.projectStore,
     onEdit: () => state.projectStore.markDirty(),
+    onSelect: (id) => {
+      if (id) selectControl(id);
+      else if (ui.assign.current() && /^(track|region):/.test(ui.assign.current())) selectControl(null);
+    },
+    onImport: (paths, opts) => importAudio(paths, opts),
   });
   new ResizeObserver(() => ui.timeline.render()).observe($('#timeline'));
   ui.layout = createLayout({ root: $('#cockpit'), settings: window.swaycommand.settings });
@@ -1172,6 +1521,8 @@ async function main() {
   wireScenes();
   wireKeyboard();
   wireStageInput();
+  wirePlugins();
+  wireGlobalDrop();
   $('#input-src').addEventListener('click', openSourceMenu);
 
   // restore learned MIDI bindings
@@ -1194,6 +1545,10 @@ async function main() {
     selectControl,
     openProject: (p) => state.projectStore.openPath(p),
     saveProject: () => state.projectStore.save(),
+    importAudio,
+    loadGan,
+    timeline: () => ui.timeline,
+    assign: () => ui.assign,
   };
 
   // The stage runs from the first frame; the door covers it until ENTER.

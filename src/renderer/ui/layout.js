@@ -19,7 +19,7 @@ const DIMS = {
   deck: { prop: '--deck-h', axis: 'y', sign: -1, min: 80, max: 360, strip: 18, track: ['rows', 3] },
   input: { prop: '--input-h', axis: 'y', sign: -1, min: 120, max: 400, strip: 0, track: null },
 };
-const FALLBACK = { railLeft: 208, railRight: 208, tl: 100, deck: 160, input: 136 };
+const FALLBACK = { railLeft: 208, railRight: 208, tl: 170, deck: 160, input: 136 };
 
 // Collapsible regions: where the chip lives, which chevron it shows open and
 // closed, which dimension (if any) it pins to its strip size.

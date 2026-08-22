@@ -10,9 +10,15 @@ const doctor = require('./doctor');
 const audima = require('./audima');
 const driver = require('./driver-install');
 const projectfile = require('./projectfile');
+const ganfile = require('./ganfile');
+const vsthost = require('./vsthost');
 const { APP } = require('../shared/constants');
 
 let win = null;
+
+// gan:// serves unpacked .gan web-plugins to the renderer's plugin frame; a
+// privileged scheme has to be declared before the app is ready.
+ganfile.registerScheme();
 
 // Domains the renderer may ask the main process to open in the system browser.
 // Subdomains of each entry are accepted. The list covers the application's own
@@ -354,6 +360,42 @@ app.whenReady().then(() => {
   }));
   ipcMain.handle('settings:get', () => readSettings());
   ipcMain.handle('settings:set', (_e, patch) => writeSettings(patch));
+
+  // --- .gan web-plugins (control surfaces from theDAW's Foundry) ---
+  ganfile.installHandler();
+  ipcMain.handle('gan:pick', async () => {
+    const settings = readSettings();
+    const result = await dialog.showOpenDialog(win, {
+      title: 'Open a .gan plugin',
+      defaultPath: settings.lastGanDir || undefined,
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'GANTASMO web-plugin', extensions: ['gan'] }, { name: 'All files', extensions: ['*'] }],
+    });
+    if (result.canceled || !result.filePaths.length) return [];
+    writeSettings({ lastGanDir: path.dirname(result.filePaths[0]) });
+    return result.filePaths;
+  });
+  ipcMain.handle('gan:open', (_e, ganPath) => ganfile.open(ganPath));
+  ipcMain.handle('gan:list', () => ganfile.list());
+  ipcMain.handle('gan:remove', (_e, id) => ganfile.remove(id));
+
+  // --- VST3 through the pedalboard sidecar ---
+  vsthost.configure({ read: readSettings, write: writeSettings });
+  ipcMain.handle('vst:status', () => vsthost.status(readSettings(), writeSettings));
+  ipcMain.handle('vst:setPython', (_e, py) => vsthost.setPython(py, readSettings(), writeSettings));
+  ipcMain.handle('vst:pickPython', async () => {
+    const result = await dialog.showOpenDialog(win, {
+      title: 'Pick a Python that can import pedalboard',
+      properties: ['openFile'],
+      filters: process.platform === 'win32' ? [{ name: 'Python', extensions: ['exe'] }] : [],
+    });
+    if (result.canceled || !result.filePaths.length) return vsthost.status(readSettings(), writeSettings);
+    return vsthost.setPython(result.filePaths[0], readSettings(), writeSettings);
+  });
+  ipcMain.handle('vst:scan', (_e, refresh) => vsthost.scan(!!refresh));
+  ipcMain.handle('vst:params', (_e, pluginPath, state) => vsthost.params(pluginPath, state));
+  ipcMain.handle('vst:render', (_e, inputPath, plugins, opts) => vsthost.render(inputPath, plugins, opts));
+  ipcMain.handle('vst:editor', (_e, pluginPath, state) => vsthost.editor(pluginPath, state));
   ipcMain.handle('shell:openExternal', (_e, url) => {
     if (allowedExternal(url)) return shell.openExternal(url);
     return Promise.reject(new Error('URL not on the allowlist'));

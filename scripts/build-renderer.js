@@ -27,6 +27,8 @@ async function main() {
   for (const f of ['index.html', 'styles.css']) {
     fs.copyFileSync(path.join(root, 'src', 'renderer', f), path.join(dist, f));
   }
+  // The AudioWorklet module loads by URL beside the bundle (CSP: self only).
+  fs.copyFileSync(path.join(root, 'src', 'renderer', 'audio', 'dsp.worklet.js'), path.join(dist, 'dsp.worklet.js'));
   // Bundled display font — the CSP has no font-src, so remote fonts cannot load.
   const fontsSrc = path.join(root, 'src', 'renderer', 'fonts');
   if (fs.existsSync(fontsSrc)) {
