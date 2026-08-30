@@ -288,6 +288,11 @@ per frame and any shader error:
 node scripts/scene-harness.js <plan.json>
 ```
 
+Packaged builds come from a tag. Pushing `v*` runs
+[the release workflow](.github/workflows/release.yml), which builds the Windows
+installer, both macOS disk images and the Linux AppImage on their own runners
+and attaches them to a GitHub release. The builds are unsigned.
+
 Build system: [BUILD.md](docs/BUILD.md). Environment variables, settings file
 locations and network endpoints: [ENVIRONMENT.md](docs/ENVIRONMENT.md).
 

@@ -85,11 +85,13 @@ The `files` whitelist limits the package to:
 | `src/main/**/*` | main process |
 | `src/preload/**/*` | preload bridge |
 | `src/shared/**/*` | shared modules |
-| `dist/**/*` | renderer bundle, `index.html`, `styles.css` |
+| `dist/**/*` | renderer bundle, `index.html`, `styles.css`, the bundled font, and `media/` for the documentation viewer |
 | `projects/**/*` | bundled projects |
+| `docs/**/*.md` | the documentation the in-app viewer renders |
+| `README.md` | the first document in the viewer |
 | `package.json` | application manifest |
 
-The whitelisted files are packed into `resources/app.asar` (`asar: true`). `node_modules`, `docs/`, `scripts/`, and the bootstrap files are excluded by omission.
+The whitelisted files are packed into `resources/app.asar` (`asar: true`). `node_modules`, `scripts/`, the non-Markdown contents of `docs/` and the bootstrap files are excluded by omission. One file is deliberately left outside the archive: `extraResources` copies `src/main/vst-host.py` to `resources/vst-host.py`, because the Python interpreter has to read the sidecar from a real path.
 
 | Platform | Target | Icon | Metadata |
 |---|---|---|---|
@@ -106,6 +108,45 @@ NSIS options:
 | `runAfterFinish` | `true` | launches the application when an interactive installation completes; not applied by silent (`/S`) installations |
 | `deleteAppDataOnUninstall` | `false` | `%APPDATA%\SwayCommand` survives uninstallation |
 | `artifactName` | `SwayCommand-Setup-${version}.${ext}` | `SwayCommand-Setup-0.1.0.exe` at the current version |
+
+## Release workflow
+
+`.github/workflows/release.yml` produces the three packages on GitHub-hosted
+runners and attaches them to a GitHub release. Each installer is built on its
+own operating system, because NSIS needs Windows, the DMG needs macOS and the
+AppImage needs Linux; a single runner cannot produce all three.
+
+| Job | Runner | Command | Artifact |
+|---|---|---|---|
+| Windows installer | `windows-latest` | `npm run dist:win` | `.exe` and its `.blockmap` |
+| macOS disk image | `macos-latest` | `npm run dist:mac -- --arm64 --x64` | one `.dmg` per architecture |
+| Linux AppImage | `ubuntu-latest` | `npm run dist:linux` | `.AppImage` |
+| Publish release | `ubuntu-latest` | `gh release create` | the release itself |
+
+Two triggers start it. Pushing a tag matching `v*` runs it for that tag, and
+`workflow_dispatch` runs it for a tag given as an input, creating the tag at the
+checked-out commit if it does not exist. Whether the release is marked as a
+prerelease follows the dispatch input when one is supplied, and otherwise the
+tag: a semver prerelease carries a hyphen after the version (`v0.1.0-pre.1`),
+a finished release does not (`v0.1.0`).
+
+Before building, each job stamps the tag into `package.json` with
+`npm version --no-git-tag-version`. Artifact names come from `` in
+`electron-builder.yml`, so this is what makes a downloaded prerelease say which
+prerelease it is. The change is runner-local and is never committed.
+
+The builds are unsigned. No code-signing certificate is configured for either
+platform, and `CSC_IDENTITY_AUTO_DISCOVERY` is set to `false` so that
+electron-builder does not search the macOS keychain for a Developer ID and fail
+the build when it finds none. Windows SmartScreen and macOS Gatekeeper both
+treat the result as coming from an unidentified developer; the release notes
+the workflow writes tell a downloader how to proceed. Signing later means
+adding certificates as repository secrets and the matching electron-builder
+configuration, and changes nothing else about the workflow.
+
+The runner cost is worth knowing on a private repository, where Actions minutes
+are metered with a multiplier per platform: Linux counts once, Windows twice
+and macOS ten times. On a public repository standard runners are free.
 
 ## Release layout
 

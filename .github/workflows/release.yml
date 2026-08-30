@@ -1,0 +1,186 @@
+# Packaged builds for a release.
+#
+# Each installer has to be produced on its own operating system: NSIS needs
+# Windows, the DMG needs macOS, the AppImage needs Linux. The matrix builds all
+# three in parallel, uploads each one as a run artifact, and a final job hangs
+# them on a GitHub release.
+#
+# Two ways to start it:
+#   - push a tag, `git tag v0.1.0-pre.1 && git push origin v0.1.0-pre.1`
+#   - run it by hand from the Actions tab, supplying the tag as an input
+#
+# The builds are UNSIGNED. No certificate is configured for either platform, so
+# CSC_IDENTITY_AUTO_DISCOVERY is off to stop electron-builder reaching for a
+# keychain identity that is not there. What that means for the people who
+# download the result is written into the release notes below.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to publish, for example v0.1.0-pre.1'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark the release as a prerelease'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: Windows installer
+            script: dist:win
+          - os: macos-latest
+            label: macOS disk image
+            script: dist:mac
+            extra: -- --arm64 --x64
+          - os: ubuntu-latest
+            label: Linux AppImage
+            script: dist:linux
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Artifact names come from ${version} in electron-builder.yml, so stamping
+      # the tag into package.json is what makes a prerelease download say which
+      # prerelease it is. Runner-local; nothing is committed.
+      - name: Stamp the tag into package.json
+        shell: bash
+        run: |
+          TAG="${{ inputs.tag || github.ref_name }}"
+          npm version --no-git-tag-version --allow-same-version "${TAG#v}"
+          node -p "'building ' + require('./package.json').version"
+
+      - name: Build
+        shell: bash
+        run: npm run ${{ matrix.script }} ${{ matrix.extra }}
+        env:
+          # No Developer ID in this repository; without this electron-builder
+          # searches the keychain and fails the macOS build outright.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+            release/*.blockmap
+
+  publish:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List what will be published
+        run: ls -lh artifacts
+
+      - name: Write the release notes
+        shell: bash
+        run: |
+          cat > notes.md <<'NOTES'
+          Packaged builds of SwayCommand, produced by the Release workflow from
+          this tag's tree.
+
+          | Platform | File |
+          |---|---|
+          | Windows 10 or later, x64 | the `.exe`, a per-user NSIS installer |
+          | macOS 11 or later | the `arm64.dmg` on Apple silicon, the plain `.dmg` on Intel |
+          | Linux, glibc x64 | the `.AppImage` |
+
+          ## These builds are unsigned
+
+          No code-signing certificate is configured, so both desktop platforms
+          treat the download as coming from an unidentified developer.
+
+          Windows SmartScreen shows "Windows protected your PC". Choosing More
+          info, then Run anyway, installs it. The installer is per-user and
+          needs no elevation.
+
+          macOS refuses the application on first open. Removing the quarantine
+          attribute clears it:
+
+          ```sh
+          xattr -cr /Applications/SwayCommand.app
+          ```
+
+          Linux needs the AppImage marked executable:
+
+          ```sh
+          chmod +x SwayCommand-*.AppImage && ./SwayCommand-*.AppImage
+          ```
+
+          ## First run
+
+          The application opens on the Doctor, which reports the Sway over USB,
+          WebGL2, WebMIDI and audio input, and offers a fix where one exists.
+          A Sway is not required: every control has a mouse, keyboard and
+          generic-MIDI equivalent. Details in
+          [docs/DOCTOR.md](docs/DOCTOR.md) and
+          [docs/INSTALLATION.md](docs/INSTALLATION.md).
+          NOTES
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+          PRERELEASE_INPUT: ${{ inputs.prerelease }}
+        shell: bash
+        run: |
+          # An explicit input wins. Started from a tag push there is no input,
+          # so the tag decides: a semver prerelease carries a hyphen after the
+          # version (v0.1.0-pre.1), a finished release does not (v0.1.0).
+          case "$PRERELEASE_INPUT" in
+            true)  PRE=--prerelease ;;
+            false) PRE= ;;
+            *)     case "$TAG" in *-*) PRE=--prerelease ;; *) PRE= ;; esac ;;
+          esac
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" artifacts/* --clobber
+            gh release edit "$TAG" --notes-file notes.md
+          else
+            gh release create "$TAG" artifacts/* \
+              --target "$GITHUB_SHA" \
+              --title "SwayCommand $TAG" \
+              --notes-file notes.md \
+              $PRE
+          fi
+          gh release view "$TAG"
