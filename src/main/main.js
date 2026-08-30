@@ -66,6 +66,14 @@ const EXTERNAL_ALLOW = [
   'synesthesia.live',
   'elektronauts.com',
   'indiegogo.com',
+  // Cited by README.md's masthead.
+  'gantasmo.com',
+  'spotify.com',
+  'youtube.com',
+  'instagram.com',
+  'x.com',
+  'electronjs.org',
+  'threejs.org',
 ];
 
 function allowedExternal(url) {

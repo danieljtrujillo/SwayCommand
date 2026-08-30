@@ -38,10 +38,12 @@ The PNGs are then scaled and re-encoded to WebP at quality 0.80 (0.86 for the
 hero) through a canvas in the same Electron runtime. There is no native image
 dependency in this tree.
 
-Cold-cache warning: on a GPU shader cache that has never seen these scenes,
-`miraclemile` and `naturestomb` block the calling thread for one to two minutes
-on their first draw. That is the open compile regression recorded in
-[HANDOFF.md](../../HANDOFF.md), not a harness fault. A second run is fast.
+The plan's `electronArgs` mirror the two switches `src/main/main.js` sets,
+`--use-angle=gl` and `--gpu-program-cache-size-kb=524288`, so the stills render
+on the backend the application actually uses. Both matter here: without them the
+harness falls back to ANGLE's D3D11 path, where fxc unrolls the constant-trip
+loops in the largest shaders and the first draw of `naturestomb` costs 135 s
+against 5.2 s on GL, and `miraclemile` 103 s against 3.7 s.
 
 ## Replacing a still with a recording
 
