@@ -550,6 +550,12 @@ button { font-family: inherit; }
   color: var(--text-dim); padding: 10px 14px; border-bottom: 1px solid var(--panel-edge); white-space: nowrap;
 }
 .docs-body td { padding: 9px 14px; border-bottom: 1px solid rgba(255,255,255,.045); color: var(--text-dim); vertical-align: top; }
+
+/* Images the viewer draws (build-renderer copies docs/media/ to media/).
+   In a table cell the gallery thumbnails set the column width, so they are
+   capped there; standalone figures run to the prose measure. */
+.docs-body .doc-image { display: block; max-width: 100%; border: 1px solid var(--panel-edge); border-radius: var(--radius); margin: 0 0 14px; }
+.docs-body td .doc-image { width: 100%; min-width: 120px; margin-bottom: 6px; }
 .docs-body tr:last-child td { border-bottom: none; }
 .docs-external-note {
   position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);

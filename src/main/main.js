@@ -167,7 +167,10 @@ function listDocs() {
     let title = path.basename(rel, '.md');
     try {
       const head = fs.readFileSync(abs, 'utf8').slice(0, 4096);
-      const m = /^#\s+(.+)$/m.exec(head);
+      // The first heading names the document. README.md opens on a banner
+      // instead, because a wordmark image followed by the same word as an H1
+      // titles the page twice, so its alt text names it there.
+      const m = /^#\s+(.+)$/m.exec(head) || /^!\[([^\]]+)\]\(/m.exec(head);
       if (m) title = m[1].trim();
     } catch {
       /* fall back to the file name */

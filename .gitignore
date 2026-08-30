@@ -7,3 +7,6 @@ build/icon.png
 
 # tooling scratch
 .playwright-mcp/
+
+# Embedded build consumed by a host app (npm run build:renderer:embed)
+dist-embed/

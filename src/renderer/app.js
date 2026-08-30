@@ -183,11 +183,44 @@ async function rendererChecks() {
   return checks;
 }
 
+// A check that throws or never settles must not lock the blast door. Measured:
+// navigator.requestMIDIAccess() inside rendererChecks() does not settle until
+// the user answers Chromium's permission prompt, so awaiting it bare left
+// #btn-enter disabled - it ships disabled in index.html - with #boot-status
+// frozen on 'Checking your system' and nothing logged. That reads as a dead
+// application. doctor.run() has the same exposure on the desktop, where it
+// shells out to pnputil / Get-PnpDevice / lsusb.
+function settleCheck(promise, fallback, label) {
+  const guard = new Promise((resolve) => {
+    setTimeout(() => resolve({ __timedOut: true }), 6000);
+  });
+  return Promise.race([
+    Promise.resolve(promise).catch((err) => {
+      console.warn(`[doctor] ${label} check failed:`, err);
+      return fallback;
+    }),
+    guard,
+  ]).then((value) => {
+    if (value && value.__timedOut) {
+      console.warn(`[doctor] ${label} check timed out after 6s`);
+      return fallback;
+    }
+    return value;
+  });
+}
+
 async function runDoctor() {
   $('#boot-status').textContent = 'Checking your system…';
-  const [main, local] = await Promise.all([window.swaycommand.doctor.run(), rendererChecks()]);
-  state.checks = [...main, ...local];
-  renderChecks();
+  const [main, local] = await Promise.all([
+    settleCheck(window.swaycommand.doctor.run(), [], 'system'),
+    settleCheck(rendererChecks(), [], 'renderer'),
+  ]);
+  state.checks = [...(main || []), ...(local || [])];
+  try {
+    renderChecks();
+  } catch (err) {
+    console.warn('[doctor] renderChecks failed:', err);
+  }
 
   const worst = state.checks.some((c) => c.status === 'fail')
     ? 'fail'
@@ -258,6 +291,14 @@ function enterCockpit() {
   closeModal('system');
   if (state.entered) return;
   state.entered = true;
+  // createAudioEngine() builds its AudioContext at boot, which autoplay policy
+  // starts suspended (measured: repeated 'AudioContext was not allowed to
+  // start' warnings). This click is the one user gesture guaranteed to have
+  // happened, so resume here or the analyser reads silence and every scene
+  // renders flat.
+  if (state.audio && typeof state.audio.resume === 'function') {
+    Promise.resolve(state.audio.resume()).catch(() => {});
+  }
   const door = $('#door');
   door.classList.add('open');
   setTimeout(() => door.classList.add('gone'), 1000);
@@ -1365,6 +1406,11 @@ function wirePlugins() {
   // source (gan:<plugin>:<control>[:axis]) and touches the assignment rail.
   let lastTouch = '';
   window.addEventListener('message', (e) => {
+    // Only the plugin surface may drive plugin routes. Embedded, this window
+    // has a parent and siblings that can also post to it, so identify the
+    // sender rather than trusting any message that looks right.
+    const ganFrame = $('#gan-frame');
+    if (!ganFrame || e.source !== ganFrame.contentWindow) return;
     const d = e.data;
     if (!d || d.type !== 'updateValue' || !plugins.activeId || typeof d.id !== 'string') return;
     const base = `gan:${plugins.activeId}:${d.id}`;

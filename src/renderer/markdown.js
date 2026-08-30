@@ -1,9 +1,9 @@
 // Minimal Markdown renderer for the in-app documentation viewer.
 // Supports the subset the SwayCommand documentation actually uses: ATX headings,
 // fenced code, pipe tables, ordered/unordered lists, blockquotes, horizontal
-// rules, and the inline set (code spans, bold, italic, links). Source text is
-// HTML-escaped before any markup is generated; code spans are extracted first
-// so their contents are never re-processed.
+// rules, and the inline set (code spans, bold, italic, links, images). Source
+// text is HTML-escaped before any markup is generated; code spans are extracted
+// first so their contents are never re-processed.
 
 const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' };
 const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ESCAPES[c]);
@@ -33,6 +33,20 @@ function inline(src) {
   });
 
   text = escapeHtml(text);
+
+  // Images: ![alt](src), and BEFORE the link rule, which would otherwise eat
+  // the bracket pair and leave a stray '!'. Only the bundle's own media
+  // directory resolves: build-renderer.js copies docs/media/ to media/ beside
+  // index.html, so a document's `docs/media/x.webp` becomes `./media/x.webp`
+  // whether it is read from the repository root (README.md) or from docs/.
+  // Anything else, an external badge above all, renders as its alt text: the
+  // renderer's CSP is `img-src 'self' data:`, so a remote src would only ever
+  // draw a broken-image icon.
+  text = text.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_m, alt, src) => {
+    const local = /^(?:\.\/)?(?:docs\/)?(media\/[A-Za-z0-9._\/-]+)$/.exec(src);
+    if (!local || src.includes('..')) return alt;
+    return '<img class="doc-image" src="./' + local[1] + '" alt="' + alt + '" loading="lazy" />';
+  });
 
   // Links: [label](target). Targets are classified by the viewer at click time.
   text = text.replace(/\[([^\]]*)\]\(([^)\s]+)\)/g, (_m, label, href) => {
