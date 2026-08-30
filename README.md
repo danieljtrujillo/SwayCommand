@@ -1,10 +1,35 @@
 ![SwayCommand](docs/media/banner.webp)
 
-![license MIT](https://img.shields.io/badge/license-MIT-2de1fc?style=flat-square&labelColor=0b0f17)
-![Electron 43](https://img.shields.io/badge/electron-43-2de1fc?style=flat-square&labelColor=0b0f17)
-![three.js r185](https://img.shields.io/badge/three.js-r185-2de1fc?style=flat-square&labelColor=0b0f17)
-![GLSL3](https://img.shields.io/badge/shaders-GLSL3-ff2d95?style=flat-square&labelColor=0b0f17)
-![platform windows macos linux](https://img.shields.io/badge/platform-windows%20macos%20linux-2de1fc?style=flat-square&labelColor=0b0f17)
+**by [GANTASMO](https://gantasmo.com)**
+
+[![Electron 43](https://img.shields.io/badge/Electron-43-2de1fc?style=flat-square&labelColor=0b0f17&logo=electron&logoColor=white)](https://www.electronjs.org)
+[![three.js r185](https://img.shields.io/badge/three.js-r185-2de1fc?style=flat-square&labelColor=0b0f17&logo=threedotjs&logoColor=white)](https://threejs.org)
+[![GLSL3 on WebGL2](https://img.shields.io/badge/shaders-GLSL3%20on%20WebGL2-2de1fc?style=flat-square&labelColor=0b0f17&logo=webgl&logoColor=white)](docs/SCENE_CONTRACT.md)
+![Web Audio and AudioWorklet](https://img.shields.io/badge/audio-Web%20Audio%20%2B%20AudioWorklet-2de1fc?style=flat-square&labelColor=0b0f17)
+[![16 procedural scenes](https://img.shields.io/badge/scenes-16%20procedural-ff2d95?style=flat-square&labelColor=0b0f17)](#scenes)
+
+[![hardware Audima Sway](https://img.shields.io/badge/hardware-Audima%20Sway-ff2d95?style=flat-square&labelColor=0b0f17)](https://audima.com.au)
+![platform Windows macOS Linux](https://img.shields.io/badge/platform-Windows%20%2F%20macOS%20%2F%20Linux-2de1fc?style=flat-square&labelColor=0b0f17&logo=windows&logoColor=white)
+[![companion theDAW](https://img.shields.io/badge/companion-theDAW-7C3AED?style=flat-square&labelColor=0b0f17&logo=github&logoColor=white)](https://github.com/gantasmo/theDAW)
+[![license MIT](https://img.shields.io/badge/license-MIT-2de1fc?style=flat-square&labelColor=0b0f17)](LICENSE)
+![status active development](https://img.shields.io/badge/status-active%20development-F4A261?style=flat-square&labelColor=0b0f17)
+
+[![Listen on Spotify](https://img.shields.io/badge/Listen-Spotify-1DB954?style=flat-square&labelColor=0b0f17&logo=spotify&logoColor=white)](https://open.spotify.com/artist/4q5n0QgK6mvyuw8FRzhuNA)
+[![Watch on YouTube](https://img.shields.io/badge/Watch-YouTube-FF0000?style=flat-square&labelColor=0b0f17&logo=youtube&logoColor=white)](https://www.youtube.com/@GANTASMO)
+[![Follow @gantasmo on Instagram](https://img.shields.io/badge/Follow-%40gantasmo-E4405F?style=flat-square&labelColor=0b0f17&logo=instagram&logoColor=white)](https://www.instagram.com/gantasmo)
+[![Follow @gantasmo on X](https://img.shields.io/badge/Follow-%40gantasmo-000000?style=flat-square&labelColor=0b0f17&logo=x&logoColor=white)](https://x.com/gantasmo)
+[![Learn more at gantasmo.com](https://img.shields.io/badge/Learn%20More-gantasmo.com-7C3AED?style=flat-square&labelColor=0b0f17&logo=googlechrome&logoColor=white)](https://gantasmo.com)
+
+> **GANTASMO** is an amorphous entity by [Daniel Joaquin Trujillo](https://github.com/danieljtrujillo)
+> and [Josh Valenzuela](https://github.com/StarskreamEXE) that defies conventional
+> classification. We make thought provoking, highly technical, yet listenable music
+> inspired by the underappreciated pioneers of modern music. Beyond musical composition
+> and performance, GANTASMO is a powerhouse of research and development in the fields
+> Artificial Intelligence, Augmented Reality, Virtual Reality, the democratization of
+> musical tools and education, and the preservation and evolution of musical history
+> and traditions predating modern recording infrastructure.
+
+---
 
 SwayCommand is a desktop VJ instrument built around the Audima Labs Sway, a
 gesture MIDI controller whose sixteen infrared sensors read hand positions in
@@ -316,10 +341,24 @@ header.
 
 ## Legal
 
-SwayCommand is released under the [MIT license](LICENSE). "Sway" and "Audima
-Labs" are the property of Audima Labs Pty Ltd. In accordance with Audima's terms
+SwayCommand is released under the [MIT license](LICENSE), copyright 2026 Daniel
+Joaquin Trujillo and GANTASMO. Derived files stay under their own licenses and
+carry the upstream notice in their headers. "Sway" and "Audima Labs" are the
+property of Audima Labs Pty Ltd. In accordance with Audima's terms
 and conditions the application bundles no Audima software: the Doctor downloads
 the official driver package and companion application directly from
 `cdn.audima.com.au` onto the local machine, and verifies the companion
 application against Audima's published minisign signature before opening the
 installer.
+
+---
+
+[![Listen on Spotify](https://img.shields.io/badge/Listen-Spotify-1DB954?style=flat-square&labelColor=0b0f17&logo=spotify&logoColor=white)](https://open.spotify.com/artist/4q5n0QgK6mvyuw8FRzhuNA)
+[![Watch on YouTube](https://img.shields.io/badge/Watch-YouTube-FF0000?style=flat-square&labelColor=0b0f17&logo=youtube&logoColor=white)](https://www.youtube.com/@GANTASMO)
+[![Follow @gantasmo on Instagram](https://img.shields.io/badge/Follow-%40gantasmo-E4405F?style=flat-square&labelColor=0b0f17&logo=instagram&logoColor=white)](https://www.instagram.com/gantasmo)
+[![Follow @gantasmo on X](https://img.shields.io/badge/Follow-%40gantasmo-000000?style=flat-square&labelColor=0b0f17&logo=x&logoColor=white)](https://x.com/gantasmo)
+[![Learn more at gantasmo.com](https://img.shields.io/badge/Learn%20More-gantasmo.com-7C3AED?style=flat-square&labelColor=0b0f17&logo=googlechrome&logoColor=white)](https://gantasmo.com)
+
+Made by [Daniel Joaquin Trujillo](https://github.com/danieljtrujillo) and
+[Josh Valenzuela](https://github.com/StarskreamEXE) as
+[GANTASMO](https://gantasmo.com).

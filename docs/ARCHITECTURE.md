@@ -153,6 +153,13 @@ Navigation and window creation are locked down for every web contents the applic
 | `synesthesia.live` |
 | `elektronauts.com` |
 | `indiegogo.com` |
+| `gantasmo.com` |
+| `spotify.com` |
+| `youtube.com` |
+| `instagram.com` |
+| `x.com` |
+| `electronjs.org` |
+| `threejs.org` |
 
 The list covers the application's own endpoints plus every host cited by the bundled documentation, so a link followed in the documentation viewer resolves without widening the policy to arbitrary URLs. `cdn.audima.com.au` has no entry of its own: the subdomain rule admits it under `audima.com.au`. The same predicate guards the `shell:openExternal` IPC channel, which is the only path the viewer has to the system browser.
 
