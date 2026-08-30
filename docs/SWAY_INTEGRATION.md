@@ -119,3 +119,5 @@ The supported alternative: any SwayCommand-tuned preset is authored as a `.swayp
 ## Sources
 
 Every claim above traces to a primary source listed in [RESEARCH.md](RESEARCH.md): the firmware descriptor and USB identity to the official firmware archive, the factory map to the Base Project V2 file and the DAW scripts, the CDN behavior to empirical verification dated 2026-08-19, and the serial-protocol findings to binary analysis of the companion application's installer.
+
+The physical layout comes from pages 30 and 31 of Audima's user manual, captured under [`reference/sway-manual/`](reference/sway-manual/README.md). Those captures are working reference only: they reproduce a copyrighted document, and no image in that directory reaches a build, since `electron-builder.yml` packages `docs/**/*.md` alone.
