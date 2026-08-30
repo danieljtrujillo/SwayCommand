@@ -50,18 +50,20 @@ jobs:
           - os: windows-latest
             label: Windows installer
             script: dist:win
+            extra: -- --publish never
           - os: macos-latest
             label: macOS disk image
             script: dist:mac
-            extra: -- --arm64 --x64
+            extra: -- --arm64 --x64 --publish never
           - os: ubuntu-latest
             label: Linux AppImage
             script: dist:linux
+            extra: -- --publish never
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -78,6 +80,10 @@ jobs:
           npm version --no-git-tag-version --allow-same-version "${TAG#v}"
           node -p "'building ' + require('./package.json').version"
 
+      # --publish never matters: electron-builder sees a git tag in CI and
+      # implicitly publishes to GitHub Releases, which needs GH_TOKEN and fails
+      # the job after the installer it just built. Publishing is the separate
+      # job below, so electron-builder only has to package.
       - name: Build
         shell: bash
         run: npm run ${{ matrix.script }} ${{ matrix.extra }}
@@ -102,7 +108,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: actions/download-artifact@v4
         with:
