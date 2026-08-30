@@ -1,4 +1,5 @@
 // Audio analysis — WebAudio FFT split into smoothed bands with slow auto-gain
+import { hostAudio } from '../host/host-channel.js';
 // and a bass-onset beat detector (the Lasp/Akvj role in web form).
 //
 // "Just works" guarantee: if no microphone/line-in is available or permission
@@ -186,11 +187,17 @@ export async function createAudioEngine() {
   }
 
   function update(dt) {
-    analyser.getByteFrequencyData(freqData);
+    // Embedded with the host as the source: theDAW analyses its own master and
+    // posts bands here. Treat them as the raw read and fall through to the same
+    // AGC, smoothing and beat detection, so nothing downstream can tell the
+    // difference. A stale frame (host paused, tab hidden) decays to the local
+    // analyser rather than freezing the visuals on the last value.
+    const hostFresh = hostAudio.active && performance.now() - hostAudio.t < 500;
+    if (!hostFresh) analyser.getByteFrequencyData(freqData);
 
-    const rawBass = bandAvg(RANGES.bass);
-    const rawMid = bandAvg(RANGES.mid);
-    const rawHigh = bandAvg(RANGES.high);
+    const rawBass = hostFresh ? hostAudio.bass : bandAvg(RANGES.bass);
+    const rawMid = hostFresh ? hostAudio.mid : bandAvg(RANGES.mid);
+    const rawHigh = hostFresh ? hostAudio.high : bandAvg(RANGES.high);
     const rawLevel = rawBass * 0.5 + rawMid * 0.35 + rawHigh * 0.15;
 
     // slow AGC so quiet rooms and loud rigs both land in 0..1

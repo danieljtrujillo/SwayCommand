@@ -12,7 +12,9 @@
     "start": "npm run build:renderer && electron .",
     "dist:win": "npm run build:icon && npm run build:renderer && electron-builder --win",
     "dist:mac": "npm run build:icon && npm run build:renderer && electron-builder --mac",
-    "dist:linux": "npm run build:icon && npm run build:renderer && electron-builder --linux"
+    "dist:linux": "npm run build:icon && npm run build:renderer && electron-builder --linux",
+    "build:renderer:embed": "node scripts/build-renderer.js --embed --base=/sway-app/",
+    "build:all": "npm run build:renderer && npm run build:renderer:embed"
   },
   "devDependencies": {
     "electron": "^43.4.1",

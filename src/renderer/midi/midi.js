@@ -8,6 +8,7 @@
 //   * keeps a small monitor ring buffer for the HUD.
 
 import { FACTORY_MAP, SWAY_PORT_NAME, createControlState } from './swaymap.js';
+import { isFramed, onHostMidi } from '../host/host-channel.js';
 
 const MONITOR_SIZE = 14;
 
@@ -20,10 +21,26 @@ export async function createMidi({ onEvent } = {}) {
   let learnTarget = null;
   let learnResolve = null;
 
-  const supported = typeof navigator.requestMIDIAccess === 'function';
-  if (supported) {
+  // Embedded: the host owns the only MIDIAccess and relays raw bytes to us.
+  // Windows allows exactly ONE process to hold a MIDI input, so opening the
+  // port here would either take it away from the host or fail as PORT BUSY.
+  const relayed = isFramed();
+  const supported = relayed || typeof navigator.requestMIDIAccess === 'function';
+  if (!relayed && typeof navigator.requestMIDIAccess === 'function') {
     try {
-      access = await navigator.requestMIDIAccess({ sysex: false });
+      // requestMIDIAccess does not settle until the user answers Chromium's
+      // permission prompt - measured hanging indefinitely when it is never
+      // answered. Awaiting it bare wedges main(), leaving the blast door
+      // locked with no error anywhere. Give it a bounded wait and carry on
+      // without MIDI if it does not arrive; a late grant is picked up by the
+      // statechange handler below.
+      access = await Promise.race([
+        navigator.requestMIDIAccess({ sysex: false }),
+        new Promise((resolve) => setTimeout(() => resolve(null), 3000)),
+      ]);
+      if (!access) {
+        pushMonitor('MIDI permission not answered - continuing without it.');
+      }
     } catch (err) {
       console.warn('[midi] access denied/unavailable:', err.message);
     }
@@ -182,7 +199,21 @@ export async function createMidi({ onEvent } = {}) {
     control.portName = sway ? sway.name : targets.length ? targets.map((t) => t.name).join(', ') : null;
   }
 
-  if (access) {
+  if (relayed) {
+    // The host names the port so the link pill has something to show; every
+    // decode below is the hardware path, byte for byte.
+    control.connected = true;
+    control.isSway = true;
+    control.portName = 'theDAW (relayed)';
+    pushMonitor('Linked to the host application - MIDI is relayed.');
+    onHostMidi((data) => {
+      try {
+        handleMessage({ data }, 'theDAW');
+      } catch (err) {
+        console.error('[midi] relayed frame failed:', err);
+      }
+    });
+  } else if (access) {
     rescan();
     access.onstatechange = () => rescan(); // hot-plug / hot-unplug
   }
@@ -192,7 +223,11 @@ export async function createMidi({ onEvent } = {}) {
     monitor,
     supported,
     get available() {
-      return !!access;
+      // Embedded (relayed) mode never opens its own MIDIAccess — the host
+      // relays raw bytes — so `access` alone made the splash report "WebMIDI
+      // unavailable" while relayed MIDI was audibly playing. The relay IS
+      // availability.
+      return relayed || !!access;
     },
     // Resolves when the next CC arrives; that CC becomes the binding.
     learn(target) {
