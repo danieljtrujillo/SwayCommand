@@ -1,0 +1,347 @@
+{
+  "_comment": "Scene-harness plan behind docs/media/scenes/*.webp. See docs/media/README.md. Shots whose name starts with an underscore only set up the state the next shot photographs; their own PNGs are discarded.",
+  "width": 1280,
+  "height": 720,
+  "tier": "high",
+  "shots": [
+    {
+      "name": "beams",
+      "scene": "beams",
+      "frames": 260,
+      "dt": 0.01667,
+      "io": {
+        "palette": ["#ff2d95", "#7a0bc0", "#2de1fc", "#f9f871", "#ff6b35"],
+        "knobs": { "3": 0.55 },
+        "level": 0.62,
+        "bands": { "bass": 0.78, "mid": 0.52, "high": 0.44 },
+        "beat": 0.85,
+        "xy": { "x": 0.5, "y": 0.62 },
+        "gestures": { "pulse": 0.4, "press": 0.15, "sway": 0.3 },
+        "strikes": [2, 6, 11],
+        "transport": { "playing": true, "time": 8 }
+      }
+    },
+    {
+      "name": "swarm",
+      "scene": "swarm",
+      "frames": 300,
+      "dt": 0.01667,
+      "io": {
+        "palette": ["#4d1bff", "#00c2ff", "#ff2fb9", "#08f7fe", "#ffe66d"],
+        "level": 0.6,
+        "bands": { "bass": 0.72, "mid": 0.5, "high": 0.4 },
+        "beat": 0.7,
+        "xy": { "x": 0.62, "y": 0.58 },
+        "gestures": { "sway": 0.34, "press": 0.2, "pulse": 0.5 },
+        "strike": 4,
+        "transport": { "playing": true, "time": 12 }
+      }
+    },
+    {
+      "name": "_ribbons_settle",
+      "scene": "ribbons",
+      "frames": 300,
+      "dt": 0.01667,
+      "io": {
+        "palette": ["#ff2d95", "#7a0bc0", "#2de1fc", "#f9f871", "#ff6b35"],
+        "level": 0.8,
+        "bands": { "bass": 0.82, "mid": 0.9, "high": 0.5 },
+        "beat": 0.7,
+        "xy": { "x": 0.5, "y": 0.55 },
+        "gestures": { "sway": 0.12, "press": 0.62, "pulse": 0.6 },
+        "transport": { "playing": true, "time": 14 }
+      }
+    },
+    {
+      "name": "ribbons",
+      "scene": "ribbons",
+      "frames": 34,
+      "dt": 0.01667,
+      "io": { "beat": 0.95, "strikes": [3, 11] }
+    },
+    {
+      "name": "voxels",
+      "scene": "voxels",
+      "frames": 260,
+      "dt": 0.01667,
+      "io": {
+        "palette": ["#ffb300", "#ff6f00", "#8d5524", "#fff3c4", "#e63946"],
+        "level": 0.6,
+        "bands": { "bass": 0.8, "mid": 0.45, "high": 0.3 },
+        "beat": 0.9,
+        "xy": { "x": 0.62, "y": 0.55 },
+        "gestures": { "press": 0.1, "pulse": 0.5 },
+        "strikes": [3, 9],
+        "transport": { "playing": true, "time": 6 }
+      }
+    },
+    {
+      "name": "nebula",
+      "scene": "nebula",
+      "frames": 300,
+      "dt": 0.01667,
+      "io": {
+        "palette": ["#4d1bff", "#00c2ff", "#ff2fb9", "#08f7fe", "#ffe66d"],
+        "level": 0.34,
+        "bands": { "bass": 0.4, "mid": 0.36, "high": 0.3 },
+        "beat": 0.2,
+        "xy": { "x": 0.5, "y": 0.5 },
+        "gestures": { "sway": 0.55, "press": 0.12, "pulse": 0.15 },
+        "strike": 6,
+        "transport": { "playing": true, "time": 22 }
+      }
+    },
+    {
+      "name": "mandelbulb",
+      "scene": "mandelbulb",
+      "frames": 300,
+      "dt": 0.01667,
+      "io": {
+        "palette": ["#4d1bff", "#00c2ff", "#ff2fb9", "#08f7fe", "#ffe66d"],
+        "knobs": { "3": 0.5, "4": 0.45, "5": 0.6, "6": 0.5, "7": 0.5 },
+        "level": 0.55,
+        "bands": { "bass": 0.6, "mid": 0.5, "high": 0.45 },
+        "beat": 0.5,
+        "xy": { "x": 0.55, "y": 0.52 },
+        "gestures": { "sway": 0.42, "press": 0.25 },
+        "strike": 0,
+        "transport": { "playing": true, "time": 16 }
+      }
+    },
+    {
+      "name": "cymatic",
+      "scene": "cymatic",
+      "frames": 280,
+      "dt": 0.01667,
+      "io": {
+        "palette": ["#ffffff", "#9bf6ff", "#4361ee", "#7209b7", "#f72585"],
+        "knobs": { "3": 0.55, "4": 0.62 },
+        "level": 0.6,
+        "bands": { "bass": 0.55, "mid": 0.66, "high": 0.6 },
+        "beat": 0.7,
+        "xy": { "x": 0.58, "y": 0.55 },
+        "gestures": { "sway": 0.35, "press": 0.12, "pulse": 0.5 },
+        "strike": 5,
+        "transport": { "playing": true, "time": 9 }
+      }
+    },
+    {
+      "name": "_spectra_bass",
+      "scene": "spectra",
+      "frames": 90,
+      "dt": 0.01667,
+      "io": {
+        "palette": ["#39ff14", "#0affef", "#ff3131", "#cfff04", "#7df9ff"],
+        "knobs": { "3": 0.5, "4": 0.6, "5": 0.5, "6": 0.5, "7": 0.6 },
+        "level": 0.35,
+        "bands": { "bass": 0.7, "mid": 0.25, "high": 0.12 },
+        "beat": 0.8,
+        "xy": { "x": 0.5, "y": 0.5 },
+        "transport": { "playing": true, "time": 2 }
+      }
+    },
+    {
+      "name": "_spectra_mid",
+      "scene": "spectra",
+      "frames": 70,
+      "dt": 0.01667,
+      "io": { "level": 0.7, "bands": { "bass": 0.4, "mid": 0.8, "high": 0.55 }, "beat": 0.3 }
+    },
+    {
+      "name": "_spectra_high",
+      "scene": "spectra",
+      "frames": 70,
+      "dt": 0.01667,
+      "io": { "level": 0.5, "bands": { "bass": 0.85, "mid": 0.35, "high": 0.7 }, "beat": 0.9 }
+    },
+    {
+      "name": "spectra",
+      "scene": "spectra",
+      "frames": 60,
+      "dt": 0.01667,
+      "io": { "level": 0.68, "bands": { "bass": 0.6, "mid": 0.62, "high": 0.5 }, "beat": 0.6 }
+    },
+    {
+      "name": "_vjshader_pick",
+      "scene": "vjshader",
+      "frames": 120,
+      "dt": 0.01667,
+      "io": {
+        "palette": ["#080416", "#00c2ff", "#ff2fb9", "#4d1bff", "#ffe66d"],
+        "knobs": { "3": 0.38, "4": 0.5, "5": 0.44, "6": 0.5, "7": 0.35 },
+        "level": 0.5,
+        "bands": { "bass": 0.55, "mid": 0.45, "high": 0.4 },
+        "beat": 0.4,
+        "xy": { "x": 0.5, "y": 0.5 },
+        "strikes": [3, 12],
+        "transport": { "playing": true, "time": 11 }
+      }
+    },
+    {
+      "name": "vjshader",
+      "scene": "vjshader",
+      "frames": 220,
+      "dt": 0.01667,
+      "io": { "gestures": { "sway": 0.3, "press": 0.28 }, "beat": 0.5, "level": 0.58 }
+    },
+    {
+      "name": "ferrofluid",
+      "scene": "ferrofluid",
+      "frames": 300,
+      "dt": 0.01667,
+      "io": {
+        "palette": ["#12002a", "#ff2d95", "#2de1fc", "#7a0bc0", "#fff3c4"],
+        "level": 0.72,
+        "bands": { "bass": 0.85, "mid": 0.6, "high": 0.62 },
+        "beat": 0.8,
+        "xy": { "x": 0.58, "y": 0.5 },
+        "gestures": { "sway": 0.3, "press": 0.12, "pulse": 0.6 },
+        "strike": 6,
+        "transport": { "playing": true, "time": 13 }
+      }
+    },
+    {
+      "name": "chladni",
+      "scene": "chladni",
+      "frames": 300,
+      "dt": 0.01667,
+      "io": {
+        "palette": ["#04121c", "#2de1fc", "#ff2d95", "#0f4c5c", "#e0fbfc"],
+        "level": 0.66,
+        "bands": { "bass": 0.6, "mid": 0.72, "high": 0.62 },
+        "beat": 0.65,
+        "xy": { "x": 0.5, "y": 0.55 },
+        "gestures": { "sway": 0.4, "press": 0.18, "pulse": 0.45 },
+        "strike": 10,
+        "transport": { "playing": true, "time": 15 }
+      }
+    },
+    {
+      "name": "valley",
+      "scene": "valley",
+      "frames": 420,
+      "dt": 0.01667,
+      "io": {
+        "palette": ["#3c1053", "#ffc371", "#a83279", "#ff5f6d", "#ffd9e8"],
+        "level": 0.55,
+        "bands": { "bass": 0.6, "mid": 0.48, "high": 0.38 },
+        "beat": 0.5,
+        "xy": { "x": 0.5, "y": 0.44 },
+        "gestures": { "sway": 0.2, "press": 0.08, "pulse": 0.3 },
+        "transport": { "playing": true, "time": 20 }
+      }
+    },
+    {
+      "name": "lattice",
+      "scene": "lattice",
+      "frames": 400,
+      "dt": 0.01667,
+      "io": {
+        "palette": ["#4d1bff", "#00c2ff", "#ff2fb9", "#08f7fe", "#ffe66d"],
+        "level": 0.6,
+        "bands": { "bass": 0.7, "mid": 0.55, "high": 0.48 },
+        "beat": 0.7,
+        "xy": { "x": 0.56, "y": 0.55 },
+        "gestures": { "sway": 0.3, "press": 0.15, "pulse": 0.5 },
+        "strike": 3,
+        "transport": { "playing": true, "time": 18 }
+      }
+    },
+    {
+      "name": "_willidream_bang",
+      "scene": "willidream",
+      "frames": 620,
+      "dt": 0.01667,
+      "io": {
+        "palette": ["#ffffff", "#9bf6ff", "#4361ee", "#7209b7", "#f72585"],
+        "level": 0.55,
+        "bands": { "bass": 0.6, "mid": 0.5, "high": 0.45 },
+        "beat": 0.6,
+        "xy": { "x": 0.5, "y": 0.5 },
+        "transport": { "playing": true, "time": 0 }
+      }
+    },
+    {
+      "name": "willidream",
+      "scene": "willidream",
+      "frames": 200,
+      "dt": 0.01667,
+      "io": {
+        "level": 0.65,
+        "bands": { "bass": 0.75, "mid": 0.55, "high": 0.5 },
+        "beat": 0.8,
+        "xy": { "x": 0.54, "y": 0.52 },
+        "gestures": { "sway": 0.35, "press": 0.2, "pulse": 0.6 },
+        "actions": ["hyperspace"],
+        "transport": { "playing": true, "time": 10 }
+      }
+    },
+    {
+      "name": "_naturestomb_open",
+      "scene": "naturestomb",
+      "frames": 60,
+      "dt": 0.01667,
+      "io": {
+        "palette": ["#0f4c5c", "#5bc0be", "#9bf6ff", "#3a506b", "#e0fbfc"],
+        "knobs": { "4": 0.1, "5": 0.02, "6": 0.3 },
+        "level": 0.5,
+        "bands": { "bass": 0.5, "mid": 0.45, "high": 0.4 },
+        "transport": { "playing": true, "time": 1 }
+      }
+    },
+    {
+      "name": "_naturestomb_plate",
+      "scene": "naturestomb",
+      "frames": 420,
+      "dt": 0.01667,
+      "io": {
+        "knobs": { "4": 0.7, "5": 0.15, "6": 0.35 },
+        "level": 0.6,
+        "bands": { "bass": 0.62, "mid": 0.55, "high": 0.45 },
+        "beat": 0.6,
+        "gestures": { "sway": 0.3 },
+        "strikes": [2, 7]
+      }
+    },
+    {
+      "name": "naturestomb",
+      "scene": "naturestomb",
+      "frames": 300,
+      "dt": 0.01667,
+      "io": { "knobs": { "4": 0.9 }, "level": 0.62, "beat": 0.7, "strikes": [4] }
+    },
+    {
+      "name": "_miraclemile_open",
+      "scene": "miraclemile",
+      "frames": 90,
+      "dt": 0.01667,
+      "io": {
+        "palette": ["#2b0a1e", "#ffc371", "#ff5f6d", "#a83279", "#ffe9c9"],
+        "knobs": { "4": 0.3, "5": 0.05 },
+        "level": 0.5,
+        "bands": { "bass": 0.55, "mid": 0.45, "high": 0.4 },
+        "transport": { "playing": true, "time": 2 }
+      }
+    },
+    {
+      "name": "_miraclemile_act",
+      "scene": "miraclemile",
+      "frames": 260,
+      "dt": 0.01667,
+      "io": {
+        "knobs": { "4": 0.7, "5": 0.62 },
+        "level": 0.6,
+        "bands": { "bass": 0.68, "mid": 0.5, "high": 0.42 },
+        "beat": 0.7,
+        "xy": { "x": 0.5, "y": 0.5 }
+      }
+    },
+    {
+      "name": "miraclemile",
+      "scene": "miraclemile",
+      "frames": 150,
+      "dt": 0.01667,
+      "io": { "beat": 0.9, "level": 0.68, "strikes": [4, 9], "gestures": { "press": 0.9 } }
+    }
+  ]
+}

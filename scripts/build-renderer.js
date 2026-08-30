@@ -60,14 +60,14 @@ const DOC_ORDER = [
   'docs/RESEARCH.md',
 ];
 
-function copyDir(src, dst) {
+function copyDir(src, dst, keep) {
   if (!fs.existsSync(src)) return;
   fs.mkdirSync(dst, { recursive: true });
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
     const from = path.join(src, entry.name);
     const to = path.join(dst, entry.name);
-    if (entry.isDirectory()) copyDir(from, to);
-    else fs.copyFileSync(from, to);
+    if (entry.isDirectory()) copyDir(from, to, keep);
+    else if (!keep || keep(entry.name)) fs.copyFileSync(from, to);
   }
 }
 
@@ -156,6 +156,17 @@ async function main() {
   // Bundled display font — the CSP has no font-src, so remote fonts cannot load.
   copyDir(path.join(rendererDir, 'fonts'), path.join(outDir, 'fonts'));
 
+  // Images the documentation viewer draws. It renders README.md, whose scene
+  // gallery points at docs/media/; markdown.js rewrites that to ./media/, which
+  // is why the directory lands beside index.html rather than under docs/.
+  // Both targets need it: the desktop viewer and the embedded one render the
+  // same Markdown.
+  copyDir(
+    path.join(root, 'docs', 'media'),
+    path.join(outDir, 'media'),
+    (f) => /\.(webp|png|jpe?g|gif|svg)$/i.test(f), // not the provenance note or the harness plan
+  );
+
   if (EMBED) {
     // No main process over http, so what it used to read off disk ships inside
     // the bundle directory instead.
@@ -171,7 +182,9 @@ async function main() {
       fs.copyFileSync(abs, dest);
       let title = path.basename(rel, '.md');
       const head = fs.readFileSync(abs, 'utf8').slice(0, 4096);
-      const m = /^#\s+(.+)$/m.exec(head);
+      // Same fallback chain as listDocs() in main.js: first heading, else the
+      // alt text of a leading banner image, else the file name.
+      const m = /^#\s+(.+)$/m.exec(head) || /^!\[([^\]]+)\]\(/m.exec(head);
       if (m) title = m[1].trim();
       index.push({ id: rel, title });
     }
