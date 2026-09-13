@@ -60,6 +60,9 @@ export function createTransport(ctx, destinationNodes) {
   let pendingVisualCause = null;
   let seamQueued = false; // the next loop pass is already scheduled
   let seamAt = 0; // context time of the queued seam
+  // A scrub drag is under way: seeks move the playhead and the audio, and the
+  // visual lane holds its scene until endScrub() fires the one cut.
+  let scrubbing = false;
 
   // Live track graphs: trackId -> { input, vstDry, vstWet, chain: [{ entry, node }], gain, mute }
   const graphs = new Map();
@@ -344,7 +347,7 @@ export function createTransport(ctx, destinationNodes) {
       scheduleFrom(state.position);
     }
     pendingVisualCause = null;
-    fireVisual(visualClipAt(state.position), cause);
+    if (!scrubbing) fireVisual(visualClipAt(state.position), cause);
   }
 
   function pauseInternal() {
@@ -616,6 +619,19 @@ export function createTransport(ctx, destinationNodes) {
       seekInternal(seconds, 'seek');
     },
 
+    // Brackets a scrub drag. Seeks inside it land on the audio at once (one per
+    // frame at most, the timeline coalesces them) and leave the stage alone;
+    // endScrub() cuts to the scene under the playhead exactly once.
+    beginScrub() {
+      scrubbing = true;
+    },
+    endScrub() {
+      if (!scrubbing) return;
+      scrubbing = false;
+      pendingVisualCause = null;
+      fireVisual(visualClipAt(state.position), 'seek');
+    },
+
     setLoop(start, end, enabled) {
       state.loop.start = Math.max(0, start);
       state.loop.end = Math.max(state.loop.start, end);
@@ -655,6 +671,7 @@ export function createTransport(ctx, destinationNodes) {
         return;
       }
       updateRegions(state.position);
+      if (scrubbing) return; // the drag's release decides the scene
       const clip = visualClipAt(state.position);
       const id = clip ? clip.id : null;
       if (id !== state.activeVisualClip) fireVisual(clip, pendingVisualCause || 'boundary');

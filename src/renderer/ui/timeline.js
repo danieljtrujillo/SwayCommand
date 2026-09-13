@@ -1,10 +1,11 @@
 // Timeline band, a toolbar (import, add track, tempo, snap), a head column
-// (one row per lane: scenes, then every audio track with mute / solo), the
-// ruler with bar / beat grid, loop region and locators, one visual lane of
-// scene clips (DOM), N audio lanes with waveforms and effect regions (one
-// canvas), and a playhead. The clip, track and region objects it edits are
-// the project's own timeline objects; every structural change goes through
-// transport.refresh() and onEdit().
+// (one row per lane: scenes, then every audio track with mute / solo), an
+// overview strip holding the whole song with the visible window drawn on it,
+// the time band with bar / beat grid, loop region and locators, one visual
+// lane of scene clips (DOM), N audio lanes with waveforms and effect regions
+// (one canvas), a horizontal scrollbar, and a playhead. The clip, track and
+// region objects it edits are the project's own timeline objects; every
+// structural change goes through transport.refresh() and onEdit().
 //
 // Import is the intuitive path: IMPORT (or dropping files from the desktop
 // onto the band) lays every file down as its own track at the playhead,
@@ -12,6 +13,15 @@
 // the session has none. Dragging a kit sample onto a track lays it as a clip
 // on that track. Shift+drag on a track marks a SECTION, a region that
 // engages one effect parameter while the playhead crosses it.
+//
+// Scrubbing: dragging the time band or the overview seeks, and dragging the
+// overview's window pans. A drag is bracketed by transport.beginScrub() and
+// endScrub(), so the scene cuts once when it lets go; its seeks are coalesced
+// to one per animation frame; and while it runs only the playheads move (the
+// lanes redraw only when the pointer carries the view past a lane edge). With
+// the band or the overview focused, Left and Right step a beat, Shift a bar,
+// Home and End go to the ends. Ctrl+wheel zooms around the pointer, the wheel
+// pans, and while playing the view glides along with the playhead.
 
 import { uid } from '../../shared/swayproject.js';
 import { FX_KINDS } from '../../shared/trackfx.js';
@@ -20,13 +30,22 @@ const $ = (sel) => document.querySelector(sel);
 const EDGE = 8; // px resize zone on clip edges
 const PEAK_BUCKETS = 2048;
 const REGION_BAND = 0.34; // top fraction of an audio row where regions live
+const FOLLOW_AT = 0.75; // while playing, the view holds the playhead at this fraction of the lane
+const FOLLOW_HOLD_MS = 2000; // a manual pan, zoom or scroll pauses following this long
+const GLIDE_RATE = 10; // 1/s, how fast the view eases toward a playhead it lost
+const EDGE_SPEED = 8; // view travel in px/s per px the scrubbing pointer is past a lane edge
+const MIN_ROOM = 60; // seconds the view can always reach, even on an empty timeline
 
 export function createTimeline({ transport, engine, store, onEdit, onSelect, onImport }) {
   const root = $('#timeline');
+  const overview = $('#tl-overview');
   const ruler = $('#tl-ruler');
   const visualLane = $('#tl-visual');
   const audioCanvas = $('#tl-audio');
+  const scroller = $('#tl-scroll');
+  const scrollSize = $('#tl-scroll-size');
   const playhead = $('#tl-playhead');
+  const ovHead = $('#tl-ov-head');
   const heads = $('#tl-heads');
   const lanes = $('#tl-lanes');
   const bpmInput = $('#tl-bpm');
@@ -38,6 +57,9 @@ export function createTimeline({ transport, engine, store, onEdit, onSelect, onI
   let sel = null; // { kind: 'clip'|'region'|'track', id, track }
   const peaks = new Map(); // mediaId -> Float32Array(2 * PEAK_BUCKETS)
   const taps = [];
+  let locatorEnd = 0; // the last locator's time, refreshed on render
+  let followHoldUntil = 0;
+  let revealTarget = null; // a scroll (seconds) the view glides to after a jump it did not make
 
   function timeline() {
     return transport.collect();
@@ -60,6 +82,26 @@ export function createTimeline({ transport, engine, store, onEdit, onSelect, onI
     return transport.snapTime(t);
   }
 
+  function laneWidth() {
+    return lanes.clientWidth || 1;
+  }
+  function visibleSec() {
+    return laneWidth() / pxPerSec;
+  }
+  // The furthest time anything on the timeline reaches.
+  function songEnd() {
+    const s = transport.state;
+    return Math.max(s.duration || 0, s.position || 0, s.loop.end || 0, locatorEnd);
+  }
+  // The view scrolls until the song's end sits mid-lane.
+  function maxScroll() {
+    return Math.max(0, Math.max(songEnd(), MIN_ROOM) - visibleSec() * 0.5);
+  }
+  // What the overview maps onto its width: the song, or the view when that reaches further.
+  function overviewSpan() {
+    return Math.max(songEnd(), scrollX + visibleSec(), 1);
+  }
+
   function fitCanvas(canvas) {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const w = Math.round(canvas.clientWidth * dpr);
@@ -77,11 +119,22 @@ export function createTimeline({ transport, engine, store, onEdit, onSelect, onI
     return m ? `${m}:${s < 10 ? '0' : ''}${Math.floor(s)}` : `${Math.round(s * 10) / 10}`;
   }
 
+  // The slider value a screen reader reads: bar and beat when the tempo is known, and the clock.
+  function positionText(t) {
+    const m = Math.floor(t / 60);
+    const s = t - m * 60;
+    const clock = `${m}:${s < 10 ? '0' : ''}${s.toFixed(1)}`;
+    const bpm = transport.state.bpm;
+    if (!(bpm > 0)) return clock;
+    const beats = Math.floor(t / (60 / bpm) + 1e-6);
+    return `bar ${Math.floor(beats / 4) + 1} beat ${(beats % 4) + 1}, ${clock}`;
+  }
+
   function css(name) {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   }
 
-  // --- ruler ---------------------------------------------------------------------
+  // --- time band -----------------------------------------------------------------
 
   function renderRuler() {
     const dpr = fitCanvas(ruler);
@@ -91,7 +144,7 @@ export function createTimeline({ transport, engine, store, onEdit, onSelect, onI
     ctx.clearRect(0, 0, w, h);
     const accent = css('--accent') || '#2de1fc';
     const dim = css('--info') || '#64748b';
-    ctx.font = `${9 * dpr}px ${css('--mono') || 'monospace'}`;
+    ctx.font = `${10 * dpr}px ${css('--mono') || 'monospace'}`;
     ctx.fillStyle = dim;
     ctx.lineWidth = 1;
 
@@ -171,6 +224,53 @@ export function createTimeline({ transport, engine, store, onEdit, onSelect, onI
         ctx.restore();
       }
     }
+  }
+
+  // --- overview ---------------------------------------------------------------------
+
+  // The whole song in the lane width: scene clips across the top, every audio
+  // clip below, the loop, the locators, and the window the lanes show. Its
+  // playhead is a DOM mark (#tl-ov-head), so a seek never redraws this.
+  function renderOverview() {
+    const dpr = fitCanvas(overview);
+    const ctx = overview.getContext('2d');
+    const w = overview.width;
+    const h = overview.height;
+    ctx.clearRect(0, 0, w, h);
+    if (!w || !h) return;
+    const k = w / overviewSpan();
+    ctx.fillStyle = 'rgba(255,255,255,.03)';
+    ctx.fillRect(0, 0, w, h);
+
+    const loop = transport.state.loop;
+    if (loop.end > loop.start) {
+      ctx.fillStyle = loop.enabled ? 'rgba(45,225,252,.16)' : 'rgba(45,225,252,.06)';
+      ctx.fillRect(loop.start * k, 0, Math.max(dpr, (loop.end - loop.start) * k), h);
+    }
+
+    const split = Math.round(h * 0.4);
+    ctx.fillStyle = 'rgba(45,225,252,.45)';
+    for (const c of visualClips()) {
+      ctx.fillRect(c.start * k, dpr, Math.max(dpr, (c.end - c.start) * k - dpr), split - 2 * dpr);
+    }
+    ctx.fillStyle = 'rgba(143,160,184,.38)';
+    for (const t of tracks()) {
+      for (const c of t.clips) ctx.fillRect(c.start * k, split, Math.max(dpr, (c.end - c.start) * k - dpr), h - split - dpr);
+    }
+
+    const tl = timeline();
+    if (tl && tl.locators.length) {
+      ctx.fillStyle = css('--accent') || '#2de1fc';
+      for (const loc of tl.locators) ctx.fillRect(Math.round(loc.time * k), 0, dpr, h);
+    }
+
+    const x0 = scrollX * k;
+    const x1 = Math.min(w, (scrollX + visibleSec()) * k);
+    ctx.fillStyle = 'rgba(232,236,244,.08)';
+    ctx.fillRect(x0, 0, x1 - x0, h);
+    ctx.strokeStyle = 'rgba(232,236,244,.6)';
+    ctx.lineWidth = dpr;
+    ctx.strokeRect(x0 + dpr / 2, dpr / 2, Math.max(dpr, x1 - x0 - dpr), h - dpr);
   }
 
   // --- audio lanes -----------------------------------------------------------------
@@ -335,14 +435,12 @@ export function createTimeline({ transport, engine, store, onEdit, onSelect, onI
 
   function renderHeads() {
     const list = tracks();
-    const rulerH = ruler.clientHeight || 18;
-    const visualH = visualLane.clientHeight || 20;
     const { rowH } = rowGeom();
     const anySolo = list.some((t) => t.solo);
-    const html = [
-      `<div class="tl-head spacer" style="height:${rulerH}px;flex:0 0 ${rulerH}px"></div>`,
-      `<div class="tl-head spacer" style="height:${visualH}px;flex:0 0 ${visualH}px"><span class="nm">SCENES</span></div>`,
-    ];
+    // Spacers match the lane rows beside them: overview, time band, scenes, then the scrollbar under the tracks.
+    const spacer = (h, label) =>
+      `<div class="tl-head spacer" style="height:${h}px;flex:0 0 ${h}px">${label ? `<span class="nm">${label}</span>` : ''}</div>`;
+    const html = [spacer(overview.offsetHeight), spacer(ruler.offsetHeight), spacer(visualLane.offsetHeight || 20, 'SCENES')];
     for (const t of list) {
       const selected = sel && sel.kind === 'track' && sel.id === t.id;
       html.push(
@@ -353,6 +451,7 @@ export function createTimeline({ transport, engine, store, onEdit, onSelect, onI
           `</div>`
       );
     }
+    html.push(spacer(scroller.offsetHeight));
     heads.innerHTML = html.join('');
   }
 
@@ -362,12 +461,34 @@ export function createTimeline({ transport, engine, store, onEdit, onSelect, onI
     if (snapSel.value !== transport.state.snap) snapSel.value = transport.state.snap;
   }
 
-  function render() {
-    renderBar();
+  // The scrollbar under the lanes is a native scroller over a spacer as wide as
+  // the reachable timeline; its position and scrollX are kept equal both ways.
+  function syncScroller() {
+    const width = `${Math.ceil((maxScroll() + visibleSec()) * pxPerSec)}px`;
+    if (scrollSize.style.width !== width) scrollSize.style.width = width;
+    const want = scrollX * pxPerSec;
+    if (Math.abs(scroller.scrollLeft - want) >= 1) scroller.scrollLeft = want;
+  }
+
+  // What a scroll or a zoom changes: the band, the lanes, the overview window, the scrollbar, the playhead.
+  function renderView() {
     renderRuler();
     renderVisual();
     renderAudio();
+    renderOverview();
+    syncScroller();
+    placePlayhead(true);
+  }
+
+  function render() {
+    const tl = timeline();
+    locatorEnd = tl && tl.locators.length ? Math.max(...tl.locators.map((l) => l.time)) : 0;
+    scrollX = Math.min(scrollX, maxScroll());
+    const end = (transport.state.duration || 0).toFixed(1);
+    for (const el of [ruler, overview]) el.setAttribute('aria-valuemax', end);
+    renderBar();
     renderHeads();
+    renderView();
   }
 
   function edited() {
@@ -393,44 +514,226 @@ export function createTimeline({ transport, engine, store, onEdit, onSelect, onI
     if (text) setHint.t = setTimeout(() => (hint.textContent = ''), ms);
   }
 
+  // --- view: scroll, zoom, follow ---------------------------------------------------
+
+  function setScroll(sec, manual) {
+    const next = Math.max(0, Math.min(maxScroll(), sec));
+    if (manual) {
+      followHoldUntil = performance.now() + FOLLOW_HOLD_MS;
+      revealTarget = null;
+    }
+    if (Math.abs(next - scrollX) * pxPerSec < 0.01) return;
+    scrollX = next;
+    renderView();
+  }
+
+  function zoomAt(px, factor) {
+    const next = Math.min(400, Math.max(1.5, pxPerSec * factor));
+    if (next === pxPerSec) return;
+    const anchorT = scrollX + px / pxPerSec;
+    pxPerSec = next;
+    followHoldUntil = performance.now() + FOLLOW_HOLD_MS;
+    revealTarget = null;
+    scrollX = Math.max(0, Math.min(maxScroll(), anchorT - px / pxPerSec));
+    renderView();
+  }
+
+  // After a jump the view did not make itself (a key, a press on the overview),
+  // glide the playhead into view.
+  function reveal() {
+    const pos = transport.state.position;
+    const vis = visibleSec();
+    if (pos >= scrollX && pos <= scrollX + vis) return;
+    revealTarget = Math.max(0, pos - vis * 0.5);
+  }
+
+  // Runs every frame. Playing, the view rides along once the playhead passes
+  // FOLLOW_AT of the lane, and glides back to a playhead that left the view (a
+  // seek, the loop seam) instead of jumping a page.
+  let lastFollowAt = 0;
+  function follow(now) {
+    const dt = lastFollowAt ? Math.min(0.1, (now - lastFollowAt) / 1000) : 1 / 60;
+    lastFollowAt = now;
+    if (scrub && scrub.mode !== 'loop') return; // the pointer owns the view while it scrubs or pans
+    const s = transport.state;
+    const vis = visibleSec();
+    let target = revealTarget;
+    if (s.playing && now >= followHoldUntil) {
+      if (s.position > scrollX + vis * FOLLOW_AT) target = s.position - vis * FOLLOW_AT;
+      else if (s.position < scrollX) target = s.position - vis * 0.1;
+    }
+    if (target === null) return;
+    target = Math.max(0, Math.min(maxScroll(), target));
+    const gap = (target - scrollX) * pxPerSec;
+    // A gap no bigger than this frame's playback travel is the ride itself: land on it.
+    if (Math.abs(gap) <= Math.max(2, pxPerSec * dt * 1.5)) {
+      revealTarget = null;
+      if (Math.abs(gap) >= 0.01) {
+        scrollX = target;
+        renderView();
+      }
+      return;
+    }
+    scrollX += (target - scrollX) * (1 - Math.exp(-dt * GLIDE_RATE));
+    renderView();
+  }
+
+  let lastPlayheadX = null;
+  let lastOvX = null;
+  let lastValueText = '';
+  function placePlayhead(force) {
+    const pos = transport.state.position;
+    const w = laneWidth();
+    const x = timeToX(pos);
+    if (force || lastPlayheadX === null || Math.abs(x - lastPlayheadX) >= 0.5) {
+      lastPlayheadX = x;
+      playhead.style.opacity = x < 0 ? '0' : '1';
+      playhead.style.transform = `translateX(${Math.max(0, Math.min(w, x)).toFixed(1)}px)`;
+    }
+    const ox = Math.min(w - 1, (pos / overviewSpan()) * w);
+    if (force || lastOvX === null || Math.abs(ox - lastOvX) >= 0.5) {
+      lastOvX = ox;
+      ovHead.style.transform = `translateX(${ox.toFixed(1)}px)`;
+    }
+    const text = positionText(pos);
+    if (text !== lastValueText) {
+      lastValueText = text;
+      const now = pos.toFixed(1);
+      for (const el of [ruler, overview]) {
+        el.setAttribute('aria-valuenow', now);
+        el.setAttribute('aria-valuetext', text);
+      }
+    }
+  }
+
   // --- interactions ---------------------------------------------------------
 
-  // Ruler: drag scrubs; Shift+drag sets the loop region; double-click drops a
-  // locator; a locator click within 6 px jumps to it.
-  let rulerDrag = null;
+  // Scrubbing state. mode: 'scrub' seeks; 'loop' is a Shift+drag on the band
+  // setting the loop; 'press' is a press on the overview window that becomes
+  // 'pan' once it moves (or a seek if it never does).
+  let scrub = null;
+  let scrubRaf = 0;
+
+  function laneX(clientX) {
+    return clientX - lanes.getBoundingClientRect().left;
+  }
+  function bandTime(clientX) {
+    return xToTime(Math.max(0, Math.min(laneWidth(), laneX(clientX))));
+  }
+  function overviewTime(clientX) {
+    const w = laneWidth();
+    return (Math.max(0, Math.min(w, laneX(clientX))) / w) * overviewSpan();
+  }
+  function requestScrubFrame() {
+    if (!scrubRaf) scrubRaf = requestAnimationFrame(scrubFrame);
+  }
+
+  function startScrub(el, e, source) {
+    scrub = { el, id: e.pointerId, mode: 'scrub', source, clientX: e.clientX, lastT: null, edgeAt: 0 };
+    transport.beginScrub();
+    scrubFrame(performance.now()); // the press lands at once
+  }
+
+  // One frame of a drag: one seek at most, however many pointer moves arrived since the last.
+  function scrubFrame(now) {
+    scrubRaf = 0;
+    const s = scrub;
+    if (!s || s.mode === 'press') return;
+    if (s.mode === 'pan') {
+      setScroll(laneX(s.clientX) / s.k - s.grab, true);
+      return;
+    }
+    if (s.mode === 'loop') {
+      const t = snap(bandTime(s.clientX));
+      transport.setLoop(Math.min(s.from, t), Math.max(s.from, t), true);
+      const tl = timeline();
+      if (tl) tl.loop = transport.state.loop;
+      renderRuler();
+      renderOverview();
+      return;
+    }
+    if (s.source === 'band') {
+      // Past a lane edge the view travels toward the pointer, faster the further out it is.
+      const x = laneX(s.clientX);
+      const w = laneWidth();
+      const over = x < 0 ? x : x > w ? x - w : 0;
+      if (over) {
+        const dt = s.edgeAt ? Math.min(0.05, (now - s.edgeAt) / 1000) : 1 / 60;
+        s.edgeAt = now;
+        setScroll(scrollX + (over * EDGE_SPEED * dt) / pxPerSec);
+        requestScrubFrame();
+      } else {
+        s.edgeAt = 0;
+      }
+    }
+    const t = s.source === 'band' ? bandTime(s.clientX) : overviewTime(s.clientX);
+    if (t !== s.lastT) {
+      s.lastT = t;
+      transport.seek(t);
+    }
+    placePlayhead();
+  }
+
+  function finishScrub(e) {
+    const s = scrub;
+    if (!s || e.pointerId !== s.id) return;
+    scrub = null;
+    if (scrubRaf) {
+      cancelAnimationFrame(scrubRaf);
+      scrubRaf = 0;
+    }
+    if (s.el.hasPointerCapture(e.pointerId)) s.el.releasePointerCapture(e.pointerId);
+    const cancelled = e.type === 'pointercancel';
+    if (s.mode === 'loop') {
+      if (!cancelled) {
+        const t = snap(bandTime(e.clientX));
+        transport.setLoop(Math.min(s.from, t), Math.max(s.from, t), true);
+      }
+      const tl = timeline();
+      if (tl) tl.loop = transport.state.loop;
+      edited();
+      return;
+    }
+    if (s.mode === 'pan') return;
+    if (s.mode === 'press') {
+      // A press on the window that never moved seeks, like a press anywhere else on the strip.
+      if (!cancelled) {
+        transport.seek(overviewTime(e.clientX));
+        reveal();
+        placePlayhead(true);
+      }
+      return;
+    }
+    if (!cancelled) {
+      const t = s.source === 'band' ? bandTime(e.clientX) : overviewTime(e.clientX);
+      if (t !== s.lastT) transport.seek(t);
+    }
+    transport.endScrub(); // the drag's one scene cut
+    if (s.source === 'overview') reveal();
+    placePlayhead(true);
+  }
+
+  // Band: drag scrubs; Shift+drag sets the loop region; double-click drops a
+  // locator; a press within 6 px of a locator jumps to it.
   ruler.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || scrub) return;
     ruler.setPointerCapture(e.pointerId);
     const t = xToTime(e.offsetX);
     if (e.shiftKey) {
-      rulerDrag = { mode: 'loop', from: snap(t) };
-      transport.setLoop(rulerDrag.from, rulerDrag.from, false);
-    } else {
-      const tl = timeline();
-      const near = tl && tl.locators.find((l) => Math.abs(timeToX(l.time) - e.offsetX) < 6);
-      if (near) {
-        transport.seek(near.time);
-      } else {
-        rulerDrag = { mode: 'scrub' };
-        transport.seek(t);
-      }
+      scrub = { el: ruler, id: e.pointerId, mode: 'loop', source: 'band', clientX: e.clientX, from: snap(t) };
+      transport.setLoop(scrub.from, scrub.from, false);
+      renderRuler();
+      return;
     }
-    render();
-  });
-  ruler.addEventListener('pointermove', (e) => {
-    if (!rulerDrag) return;
-    const t = xToTime(e.offsetX);
-    if (rulerDrag.mode === 'scrub') transport.seek(t);
-    else {
-      const s = snap(t);
-      transport.setLoop(Math.min(rulerDrag.from, s), Math.max(rulerDrag.from, s), true);
-      const tl = timeline();
-      if (tl) tl.loop = transport.state.loop;
+    const tl = timeline();
+    const near = tl && tl.locators.find((l) => Math.abs(timeToX(l.time) - e.offsetX) < 6);
+    if (near) {
+      ruler.releasePointerCapture(e.pointerId);
+      transport.seek(near.time);
+      placePlayhead(true);
+      return;
     }
-    render();
-  });
-  ruler.addEventListener('pointerup', () => {
-    if (rulerDrag && rulerDrag.mode === 'loop') edited();
-    rulerDrag = null;
+    startScrub(ruler, e, 'band');
   });
   ruler.addEventListener('dblclick', (e) => {
     const tl = timeline();
@@ -439,20 +742,90 @@ export function createTimeline({ transport, engine, store, onEdit, onSelect, onI
     edited();
   });
 
-  // Zoom / pan anywhere on the lanes.
+  // Overview: a press on the window pans it (a press that never moves seeks);
+  // a press anywhere else seeks and drags on as a scrub.
+  overview.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || scrub) return;
+    overview.setPointerCapture(e.pointerId);
+    const w = laneWidth();
+    const k = w / overviewSpan();
+    const x0 = scrollX * k;
+    const x1 = (scrollX + visibleSec()) * k;
+    if (maxScroll() > 0 && x1 - x0 < w - 2 && e.offsetX >= x0 - 3 && e.offsetX <= x1 + 3) {
+      scrub = { el: overview, id: e.pointerId, mode: 'press', source: 'overview', clientX: e.clientX, startX: e.clientX, k, grab: e.offsetX / k - scrollX };
+      return;
+    }
+    startScrub(overview, e, 'overview');
+  });
+
+  // Keys on the band or the overview: Left / Right a beat, Shift a bar, Home / End.
+  // A held arrow scrubs, so its scene cut waits for the key to come up.
+  let keyScrub = false;
+  function endKeyScrub() {
+    if (!keyScrub) return;
+    keyScrub = false;
+    transport.endScrub();
+  }
+  function seekKey(e) {
+    const s = transport.state;
+    const step = transport.beatSeconds() * (e.shiftKey ? 4 : 1);
+    let t = null;
+    if (e.key === 'ArrowRight') t = (Math.floor(s.position / step + 1e-6) + 1) * step;
+    else if (e.key === 'ArrowLeft') t = Math.max(0, (Math.ceil(s.position / step - 1e-6) - 1) * step);
+    else if (e.key === 'Home') t = 0;
+    else if (e.key === 'End') t = Math.max(s.duration, s.loop.enabled ? s.loop.end : 0);
+    if (t === null) return;
+    e.preventDefault();
+    e.stopPropagation(); // the cockpit's own arrows nudge the selection
+    if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && !keyScrub) {
+      keyScrub = true;
+      transport.beginScrub();
+    }
+    transport.seek(t);
+    reveal();
+    placePlayhead(true);
+  }
+
+  for (const el of [ruler, overview]) {
+    el.addEventListener('pointermove', (e) => {
+      if (!scrub || scrub.el !== el || e.pointerId !== scrub.id) return;
+      scrub.clientX = e.clientX;
+      if (scrub.mode === 'press' && Math.abs(e.clientX - scrub.startX) > 3) scrub.mode = 'pan';
+      requestScrubFrame();
+    });
+    el.addEventListener('pointerup', finishScrub);
+    el.addEventListener('pointercancel', finishScrub);
+    el.addEventListener('keydown', seekKey);
+    el.addEventListener('keyup', (e) => {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') endKeyScrub();
+    });
+    el.addEventListener('blur', endKeyScrub);
+  }
+
+  // The scrollbar under the lanes.
+  scroller.addEventListener(
+    'scroll',
+    () => {
+      const sec = scroller.scrollLeft / pxPerSec;
+      if (Math.abs(sec - scrollX) * pxPerSec < 1) return; // the echo of syncScroller's own write
+      setScroll(sec, true);
+    },
+    { passive: true }
+  );
+
+  // Wheel anywhere on the lanes: Ctrl+wheel (a trackpad pinch arrives as one)
+  // zooms around the pointer; the wheel, either axis, pans.
   lanes.addEventListener(
     'wheel',
     (e) => {
       e.preventDefault();
-      if (e.shiftKey) {
-        scrollX = Math.max(0, scrollX + (e.deltaY || e.deltaX) / pxPerSec);
-      } else {
-        const rect = lanes.getBoundingClientRect();
-        const anchorT = xToTime(e.clientX - rect.left);
-        pxPerSec = Math.min(400, Math.max(1.5, pxPerSec * (e.deltaY > 0 ? 1 / 1.2 : 1.2)));
-        scrollX = Math.max(0, anchorT - (e.clientX - rect.left) / pxPerSec);
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? laneWidth() : 1;
+      if (e.ctrlKey || e.metaKey) {
+        zoomAt(laneX(e.clientX), Math.exp(-e.deltaY * unit * 0.0015));
+        return;
       }
-      render();
+      const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      setScroll(scrollX + (d * unit) / pxPerSec, true);
     },
     { passive: false }
   );
@@ -492,10 +865,12 @@ export function createTimeline({ transport, engine, store, onEdit, onSelect, onI
     }
     renderVisual();
   });
-  visualLane.addEventListener('pointerup', () => {
+  const endClipDrag = () => {
     if (clipDrag) edited();
     clipDrag = null;
-  });
+  };
+  visualLane.addEventListener('pointerup', endClipDrag);
+  visualLane.addEventListener('pointercancel', endClipDrag);
   visualLane.addEventListener('dblclick', (e) => {
     if (e.target.closest('[data-clip]')) return;
     const t = snap(xToTime(e.offsetX));
@@ -613,14 +988,14 @@ export function createTimeline({ transport, engine, store, onEdit, onSelect, onI
     }
     renderAudio();
   });
-  audioCanvas.addEventListener('pointerup', () => {
+  function endAudioDrag(e) {
     const d = audioDrag;
     audioDrag = null;
     if (!d) return;
     if (d.mode === 'region') {
       const a = Math.min(d.from, d.to);
       const b = Math.max(d.from, d.to);
-      if (b - a < 0.05) {
+      if (e.type === 'pointercancel' || b - a < 0.05) {
         render();
         return;
       }
@@ -629,10 +1004,10 @@ export function createTimeline({ transport, engine, store, onEdit, onSelect, onI
       let param = null;
       let value = 1;
       if (t.fx.length) {
-        const e = t.fx[0];
-        fx = e.id;
-        param = 'mix' in e.params ? 'mix' : Object.keys(e.params)[0];
-        value = param === 'mix' ? 1 : e.params[param];
+        const entry = t.fx[0];
+        fx = entry.id;
+        param = 'mix' in entry.params ? 'mix' : Object.keys(entry.params)[0];
+        value = param === 'mix' ? 1 : entry.params[param];
       } else if (t.vst.plugins.length) {
         fx = 'vst';
         param = 'mix';
@@ -648,7 +1023,9 @@ export function createTimeline({ transport, engine, store, onEdit, onSelect, onI
       return;
     }
     edited();
-  });
+  }
+  audioCanvas.addEventListener('pointerup', endAudioDrag);
+  audioCanvas.addEventListener('pointercancel', endAudioDrag);
   audioCanvas.addEventListener('dblclick', (e) => {
     const { track } = rowAt(e.offsetY);
     if (track) select({ kind: 'track', id: track.id });
@@ -771,28 +1148,21 @@ export function createTimeline({ transport, engine, store, onEdit, onSelect, onI
     render();
   });
 
-  let lastPlayheadX = -1;
   return {
     render,
     edited,
     placeMedia,
     setHint,
 
+    // Called every frame by the cockpit: follow the playhead, then place it.
     updatePlayhead() {
-      const x = timeToX(transport.state.position);
-      if (Math.abs(x - lastPlayheadX) < 0.5) return;
-      lastPlayheadX = x;
-      const w = lanes.clientWidth;
-      if (x < 0 || x > w) {
-        if (transport.state.playing && x > w) {
-          scrollX = transport.state.position;
-          render();
-        }
-        playhead.style.opacity = x < 0 ? '0' : '1';
-      } else {
-        playhead.style.opacity = '1';
-      }
-      playhead.style.transform = `translateX(${Math.max(0, Math.min(w, x)).toFixed(1)}px)`;
+      follow(performance.now());
+      placePlayhead();
+    },
+
+    // The view as numbers, for automation and probes.
+    view() {
+      return { pxPerSec, scrollX, visible: visibleSec(), maxScroll: maxScroll() };
     },
 
     deleteSelected() {

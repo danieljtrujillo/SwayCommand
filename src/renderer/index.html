@@ -12,19 +12,40 @@
   <div id="cockpit">
     <header id="topbar">
       <div id="mark">Sway<span>Command</span></div>
-      <button id="project-btn" class="cham" title="Project"></button>
+      <button id="project-btn" class="cham" title="Project" aria-haspopup="menu" aria-expanded="false" aria-controls="popover"></button>
       <div id="transport">
         <button id="t-play" class="cham" title="Play / pause (P)">▶</button>
         <button id="t-stop" class="cham" title="Stop">■</button>
         <span id="t-clock">00:00.0</span>
         <button id="t-loop" class="cham" title="Loop (L)">LOOP</button>
       </div>
+      <!-- Inside theDAW the row gains the keys marked data-hosted (ui/hostbar.js);
+           standalone they stay hidden and the header above is the whole bar. -->
+      <i class="hk-sep" data-hosted hidden></i>
+      <button id="host-scene" class="hk hk-menu" data-hosted hidden aria-haspopup="menu" aria-expanded="false" aria-controls="popover">
+        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="4" width="12" height="9" rx="1"/><path d="M4 2h8"/></g></svg>
+        <span class="hk-name"></span>
+        <svg class="hk-chev" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4.5 6.5 8 10l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
       <span id="scene-now"></span>
       <div id="status">
         <span class="pill" id="pill-link"></span>
         <span class="pill" id="pill-in"></span>
         <span class="pill pill-dim" id="pill-fps"></span>
       </div>
+      <button id="host-sway" class="hk hk-menu" data-hosted hidden aria-haspopup="dialog" aria-expanded="false" aria-controls="popover" aria-label="Audima Labs Sway status">
+        <i class="hk-dot"></i><span>Sway</span>
+        <svg class="hk-chev" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4.5 6.5 8 10l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <i class="hk-sep" data-hosted hidden></i>
+      <div id="host-tools" role="group" aria-label="Deck tools" data-hosted hidden>
+        <button class="hk hk-icon" data-drawer="synth" title="Synth (S)" aria-label="Synth (S)" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M1.5 8c1.5-4 3-4 4.5 0s3 4 4.5 0 3-4 4 0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+        <button class="hk hk-icon" data-drawer="rack" title="Rack (R)" aria-label="Rack (R)" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><g stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 2.5v11M8 2.5v11M13 2.5v11"/></g><g fill="currentColor"><circle cx="3" cy="10" r="1.9"/><circle cx="8" cy="5" r="1.9"/><circle cx="13" cy="8" r="1.9"/></g></svg></button>
+        <button class="hk hk-icon" data-drawer="kit" title="Kit (E)" aria-label="Kit (E)" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-width="1.4"><ellipse cx="8" cy="10" rx="5.5" ry="3"/><path d="M2.5 10V6.5M13.5 10V6.5"/><ellipse cx="8" cy="6.5" rx="5.5" ry="2.2"/></g></svg></button>
+        <button class="hk hk-icon" data-drawer="plugins" title="Plugins (G)" aria-label="Plugins (G)" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6 2v3M10 2v3M4 5h8v3a4 4 0 0 1-8 0zM8 12v2.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      </div>
+      <i class="hk-sep" data-hosted hidden></i>
+      <button id="host-help" class="hk hk-icon" data-hosted hidden title="Docs, help and shortcuts" aria-label="Docs, help and shortcuts" aria-haspopup="menu" aria-expanded="false" aria-controls="popover"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6.3 6.2a1.8 1.8 0 1 1 2.4 1.7c-.5.2-.7.6-.7 1.1v.4M8 11.6v.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
       <nav id="deckbar">
         <button class="cham" data-drawer="synth" title="S">SYNTH</button>
         <button class="cham" data-drawer="rack" title="R">RACK</button>
@@ -49,19 +70,68 @@
     <main id="stagecell">
       <canvas id="stage"></canvas>
       <svg id="door" viewBox="0 0 1000 560" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <!-- Brushed dark steel: a cool falloff down each panel, horizontal
+               grain, and a faint sheen toward the edges that meet. The grain's
+               frequencies are in viewBox units, so a stretched stage stretches
+               the streaks along x and they still read as brushing. -->
+          <linearGradient id="door-steel" x1="0" y1="0" x2="0.18" y2="1">
+            <stop offset="0" stop-color="#14121b" />
+            <stop offset="0.5" stop-color="#0e0c14" />
+            <stop offset="1" stop-color="#07060b" />
+          </linearGradient>
+          <linearGradient id="door-sheen-left" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#ffffff" stop-opacity="0" />
+            <stop offset="0.8" stop-color="#ffffff" stop-opacity="0.012" />
+            <stop offset="1" stop-color="#ffffff" stop-opacity="0.05" />
+          </linearGradient>
+          <linearGradient id="door-sheen-right" x1="1" y1="0" x2="0" y2="0">
+            <stop offset="0" stop-color="#ffffff" stop-opacity="0" />
+            <stop offset="0.8" stop-color="#ffffff" stop-opacity="0.012" />
+            <stop offset="1" stop-color="#ffffff" stop-opacity="0.05" />
+          </linearGradient>
+          <filter id="door-brush" x="0" y="0" width="1" height="1" color-interpolation-filters="sRGB">
+            <feTurbulence type="fractalNoise" baseFrequency="0.0035 0.75" numOctaves="2" seed="11" />
+            <feColorMatrix type="matrix" values="0 0 0 0 0.84  0 0 0 0 0.87  0 0 0 0 0.95  0.2 0 0 0 -0.075" />
+          </filter>
+        </defs>
         <g id="door-left">
-          <rect x="0" y="0" width="500" height="560" fill="var(--door-fill)" />
-          <path d="M 500 0 V 200 C 420 208 420 352 500 360 V 560" fill="none" stroke="var(--line)" stroke-width="2" vector-effect="non-scaling-stroke" />
-          <path d="M 30 30 H 440 L 470 60 V 180 L 380 180" fill="none" stroke="var(--line-dim)" vector-effect="non-scaling-stroke" />
-          <path d="M 30 530 H 440 L 470 500 V 380 L 380 380" fill="none" stroke="var(--line-dim)" vector-effect="non-scaling-stroke" />
-          <path id="lock-left" d="M 470 280 C 466 200 560 200 560 280" fill="none" stroke="var(--line)" stroke-width="2" vector-effect="non-scaling-stroke" />
+          <rect x="0" y="0" width="500" height="560" fill="url(#door-steel)" />
+          <rect x="0" y="0" width="500" height="560" fill="#000" filter="url(#door-brush)" />
+          <rect x="0" y="0" width="500" height="560" fill="url(#door-sheen-left)" />
+          <path class="door-groove" d="M 30 30 H 440 L 470 60 V 180 L 380 180" />
+          <path class="door-groove" d="M 30 530 H 440 L 470 500 V 380 L 380 380" />
+          <path class="door-groove" d="M 500 0 V 200 C 420 208 420 352 500 360 V 560" />
+          <path class="door-etch" d="M 30 30 H 440 L 470 60 V 180 L 380 180" />
+          <path class="door-etch" d="M 30 530 H 440 L 470 500 V 380 L 380 380" />
+          <path class="door-etch bright" d="M 500 0 V 200 C 420 208 420 352 500 360 V 560" />
+          <path class="door-bevel" d="M 0 1 H 499" />
+          <path class="door-bevel" d="M 498.5 0 V 560" />
+          <path class="door-seam" d="M 0 559.5 H 500" />
+          <path class="door-seam" d="M 500 0 V 560" />
+          <g id="lock-left">
+            <path class="door-groove" d="M 470 280 C 466 200 560 200 560 280" />
+            <path class="door-etch bright" d="M 470 280 C 466 200 560 200 560 280" />
+          </g>
         </g>
         <g id="door-right">
-          <rect x="500" y="0" width="500" height="560" fill="var(--door-fill)" />
-          <path d="M 500 0 V 200 C 580 208 580 352 500 360 V 560" fill="none" stroke="var(--line)" stroke-width="2" vector-effect="non-scaling-stroke" />
-          <path d="M 970 30 H 560 L 530 60 V 180 L 620 180" fill="none" stroke="var(--line-dim)" vector-effect="non-scaling-stroke" />
-          <path d="M 970 530 H 560 L 530 500 V 380 L 620 380" fill="none" stroke="var(--line-dim)" vector-effect="non-scaling-stroke" />
-          <path id="lock-right" d="M 530 280 C 534 360 440 360 440 280" fill="none" stroke="var(--line)" stroke-width="2" vector-effect="non-scaling-stroke" />
+          <rect x="500" y="0" width="500" height="560" fill="url(#door-steel)" />
+          <rect x="500" y="0" width="500" height="560" fill="#000" filter="url(#door-brush)" />
+          <rect x="500" y="0" width="500" height="560" fill="url(#door-sheen-right)" />
+          <path class="door-groove" d="M 970 30 H 560 L 530 60 V 180 L 620 180" />
+          <path class="door-groove" d="M 970 530 H 560 L 530 500 V 380 L 620 380" />
+          <path class="door-groove" d="M 500 0 V 200 C 580 208 580 352 500 360 V 560" />
+          <path class="door-etch" d="M 970 30 H 560 L 530 60 V 180 L 620 180" />
+          <path class="door-etch" d="M 970 530 H 560 L 530 500 V 380 L 620 380" />
+          <path class="door-etch bright" d="M 500 0 V 200 C 580 208 580 352 500 360 V 560" />
+          <path class="door-bevel" d="M 501 1 H 1000" />
+          <path class="door-bevel" d="M 501.5 0 V 560" />
+          <path class="door-seam" d="M 500 559.5 H 1000" />
+          <path class="door-seam" d="M 500 0 V 560" />
+          <g id="lock-right">
+            <path class="door-groove" d="M 530 280 C 534 360 440 360 440 280" />
+            <path class="door-etch bright" d="M 530 280 C 534 360 440 360 440 280" />
+          </g>
         </g>
       </svg>
       <div id="notice"></div>
@@ -74,7 +144,7 @@
       </section>
       <section id="input-box" class="framed">
         <div class="rail-label">INPUT</div>
-        <button id="input-src" title="Analysis source"></button>
+        <button id="input-src" title="Analysis source" aria-haspopup="menu" aria-expanded="false" aria-controls="popover"></button>
         <div class="meter"><i id="input-meter"></i></div>
         <canvas id="input-wave"></canvas>
       </section>
@@ -98,10 +168,13 @@
       <div id="tl-body">
         <div id="tl-heads"></div>
         <div id="tl-lanes">
-          <canvas id="tl-ruler"></canvas>
+          <canvas id="tl-overview" tabindex="0" role="slider" aria-label="Song overview" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></canvas>
+          <canvas id="tl-ruler" tabindex="0" role="slider" aria-label="Playhead" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></canvas>
           <div id="tl-visual" class="tl-lane" data-lane="visual"></div>
           <canvas id="tl-audio"></canvas>
+          <div id="tl-scroll"><div id="tl-scroll-size"></div></div>
           <div id="tl-playhead"></div>
+          <i id="tl-ov-head"></i>
         </div>
       </div>
     </section>
@@ -193,6 +266,7 @@
           <tr><td><b>P</b> · <b>L</b> · <b>I</b></td><td>play/pause · loop · import stems</td></tr>
           <tr><td><b>S</b> · <b>R</b> · <b>E</b> · <b>G</b></td><td>synth · rack · kit · plugins</td></tr>
           <tr><td>Timeline</td><td>drop audio files onto it (one track per stem) · click a track head to edit its effects and bind them · Shift+drag on a track marks a section for an effect</td></tr>
+          <tr><td>Scrub</td><td>drag the time band or the song overview above it · drag the overview's window to pan · wheel pans, Ctrl+wheel zooms · on a focused band, Left and Right step a beat, Shift a bar, Home and End go to the ends</td></tr>
           <tr><td><b>D</b> · <b>K</b> · <b>F</b> · <b>O</b></td><td>docs · MIDI monitor · fullscreen · solo view</td></tr>
           <tr><td><b>Esc</b></td><td>closes the topmost panel, then clears the selection</td></tr>
         </table>
@@ -220,7 +294,7 @@
     </div>
 
     <pre id="midi-monitor" class="midi-monitor"></pre>
-    <div id="popover" hidden></div>
+    <div id="popover" role="menu" hidden></div>
   </div>
 
   <script src="./renderer.bundle.js"></script>

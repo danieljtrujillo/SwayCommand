@@ -13,11 +13,40 @@
 //
 // Everything here is inert in the desktop app: bridge.js only installs it when
 // there is no Electron preload.
+//
+// Protocol v1, host to cockpit: sway/host-ready, sway/visibility, sway/midi,
+// sway/audio-source (host | input), sway/analysis, sway/host-status
+// ({ hardware, tone }), sway/host-scenes ({ rows, recent, error }).
+// Cockpit to host: sway/ready (with caps), sway/set-audio-source, sway/request-
+// scenes, sway/open-scene ({ name } or { path }), sway/choose-scene-file.
+// Every addition is optional on both sides: a host that ignores caps keeps its
+// own bar, and a cockpit that never sends them gets today's two headers.
 
 const PROTOCOL = 1;
 
+/**
+ * What this cockpit can carry for the host. 'host-header': ui/hostbar.js folds
+ * the host's own bar into #topbar, so the host may hide its bar. 'host-scenes':
+ * the cockpit shows the host's scene list and asks the host to open one.
+ */
+export const HOST_CAPS = ['host-header', 'host-scenes'];
+
 /** Set by the host handshake; used to pin outbound posts. */
 let hostOrigin = null;
+
+/** The host's name from its handshake ('theDAW'), or null before it. */
+let hostName = null;
+
+/**
+ * What the host last said about itself, for ui/hostbar.js. Each field stays
+ * null until the host sends it; a message replaces its field whole.
+ */
+export const hostState = {
+  audioSource: null, // 'host' | 'input'
+  status: null, // { hardware: string, tone: 'off' | 'none' | 'ok' }
+  scenes: null, // { rows: [{ name, path, builtin, mtime }], recent: [{ name, path }], error }
+};
+const eventListeners = new Map(); // message type -> Set of callbacks
 
 /** Latest analysis frame from the host, consumed by engine/audio.js. */
 export const hostAudio = {
@@ -46,9 +75,38 @@ export function onHostVisibility(cb) {
   return () => visibilityListeners.delete(cb);
 }
 
+/** Called after the channel has applied a message of `type` (sway/host-ready, sway/audio-source, sway/host-status, sway/host-scenes). */
+export function onHostEvent(type, cb) {
+  if (!eventListeners.has(type)) eventListeners.set(type, new Set());
+  eventListeners.get(type).add(cb);
+  return () => eventListeners.get(type).delete(cb);
+}
+
+function emit(type) {
+  const set = eventListeners.get(type);
+  if (!set) return;
+  for (const cb of set) {
+    try {
+      cb();
+    } catch (err) {
+      console.error(`[host] ${type} listener threw:`, err);
+    }
+  }
+}
+
 /** True when a host is driving this cockpit (i.e. we are embedded). */
 export function hasHost() {
   return hostOrigin !== null;
+}
+
+/** True once the handshake came from a host that named itself `name`. */
+export function hostIs(name) {
+  return hostName === name;
+}
+
+/** True when theDAW frames this cockpit and has answered its handshake. */
+export function framedByTheDAW() {
+  return isFramed() && hasHost() && hostIs('theDAW');
 }
 
 /**
@@ -103,7 +161,33 @@ export function installHostChannel() {
     switch (d.type) {
       case 'sway/host-ready':
         hostOrigin = e.origin;
+        hostName = typeof d.host === 'string' ? d.host : null;
+        emit(d.type);
         break;
+
+      case 'sway/host-status': {
+        const tone = d.tone === 'off' || d.tone === 'ok' ? d.tone : 'none';
+        hostState.status = { hardware: typeof d.hardware === 'string' ? d.hardware : '', tone };
+        emit(d.type);
+        break;
+      }
+
+      case 'sway/host-scenes': {
+        const text = (v) => (typeof v === 'string' ? v : '');
+        const rows = Array.isArray(d.rows) ? d.rows : [];
+        const recent = Array.isArray(d.recent) ? d.recent : [];
+        hostState.scenes = {
+          rows: rows
+            .filter((r) => r && typeof r.name === 'string')
+            .map((r) => ({ name: r.name, path: text(r.path), builtin: r.builtin === true, mtime: Number(r.mtime) || 0 })),
+          recent: recent
+            .filter((r) => r && typeof r.path === 'string' && r.path)
+            .map((r) => ({ name: text(r.name) || r.path.split(/[\\/]/).pop(), path: r.path })),
+          error: text(d.error) || null,
+        };
+        emit(d.type);
+        break;
+      }
 
       case 'sway/midi': {
         if (!Array.isArray(d.data)) break;
@@ -132,6 +216,8 @@ export function installHostChannel() {
         // 'input' = the cockpit opens its own input device, as it does
         // standalone, so stop honouring stale host frames.
         hostAudio.active = d.source === 'host';
+        hostState.audioSource = d.source === 'input' ? 'input' : 'host';
+        emit(d.type);
         break;
 
       case 'sway/visibility': {
@@ -154,7 +240,7 @@ export function installHostChannel() {
 
   // Announce readiness. The host queues anything it wanted to send before this
   // and flushes on receipt, so a race during boot loses nothing.
-  const announce = () => postToHost({ type: 'sway/ready', app: 'swaycommand' });
+  const announce = () => postToHost({ type: 'sway/ready', app: 'swaycommand', caps: HOST_CAPS });
   if (document.readyState === 'complete') announce();
   else window.addEventListener('load', announce, { once: true });
   // Also announce immediately: the host tolerates duplicates, and 'load' can be
