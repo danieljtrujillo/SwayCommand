@@ -7,7 +7,7 @@
 //     controller a first-class citizen;
 //   * keeps a small monitor ring buffer for the HUD.
 
-import { FACTORY_MAP, SWAY_PORT_NAME, createControlState } from './swaymap.js';
+import { FACTORY_MAP, SWAY_PORT_NAME, createControlState, displayPortName } from './swaymap.js';
 import { hostOwnsMidi, onHostMidi } from '../host/host-channel.js';
 
 const MONITOR_SIZE = 14;
@@ -190,7 +190,7 @@ export async function createMidi({ onEvent } = {}) {
       if (typeof input.open === 'function') {
         input.open().catch((err) => {
           control.busy = true;
-          pushMonitor(`PORT BUSY ${input.name}, held by another process (${err && err.name ? err.name : 'open failed'})`);
+          pushMonitor(`PORT BUSY ${displayPortName(input.name)}, held by another process (${err && err.name ? err.name : 'open failed'})`);
         });
       }
     }

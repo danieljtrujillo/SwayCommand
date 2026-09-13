@@ -14,7 +14,9 @@ import { createTransport } from './audio/transport.js';
 import { createProjectStore } from './project/projectstore.js';
 import { createRouter } from './control/router.js';
 import { initFrames } from './ui/frame.js';
-import { openPopover, closePopover, popoverOpen, wirePopover } from './ui/popover.js';
+import { openPopover, closePopover, popoverOpen, popoverAnchor, wirePopover } from './ui/popover.js';
+import { createHostBar } from './ui/hostbar.js';
+import { displayPortName } from './midi/swaymap.js';
 import { createWave } from './ui/wave.js';
 import { createSurface } from './ui/surface.js';
 import { createAssign } from './ui/assign.js';
@@ -50,6 +52,7 @@ const ui = {
   timeline: null,
   wave: null,
   layout: null,
+  hostbar: null,
 };
 
 const studio = {
@@ -157,9 +160,9 @@ async function rendererChecks() {
       label: 'MIDI',
       status: 'ok',
       detail: c.isSway
-        ? `Sway online: “${c.portName}”, factory map armed.`
+        ? `Sway online: ${displayPortName(c.portName)}, factory map armed.`
         : c.connected
-          ? `No Sway yet, but listening on: ${c.portName}. Incoming CC and note messages are matched against the Sway factory map.`
+          ? `No Sway yet, but listening on: ${displayPortName(c.portName)}. Incoming CC and note messages are matched against the Sway factory map.`
           : 'No MIDI devices right now. Hot-plug any time, mouse & keyboard are fully mapped meanwhile.',
     });
   } else {
@@ -732,9 +735,29 @@ function updateProjectButton() {
   const btn = $('#project-btn');
   btn.textContent = state.projectStore.state.name;
   btn.classList.toggle('dirty', state.projectStore.state.dirty);
+  if (ui.hostbar) ui.hostbar.setScene(state.projectStore.state.name, state.projectStore.state.dirty);
+}
+
+// New, Open, Save, Save as, a recent file and a template: one handler for every
+// menu that offers them (the project menu, and the scene menu inside theDAW).
+async function runProjectChoice(choice, data) {
+  const store = state.projectStore;
+  const guard = () => !store.state.dirty || window.confirm('Discard unsaved changes?');
+  try {
+    if (choice === 'new' && guard()) await store.openTemplate('first-flight');
+    else if (choice === 'open' && guard()) await store.openFromDialog();
+    else if (choice === 'save') await store.save();
+    else if (choice === 'saveas') await store.saveAs();
+    else if (choice === 'recent' && guard()) await store.openPath(data.path);
+    else if (choice === 'template' && guard()) await store.openTemplate(data.id);
+  } catch (err) {
+    notice(`Project: ${err.message}`, 7000);
+  }
+  postProjectLoad();
 }
 
 async function openProjectMenu() {
+  if (popoverAnchor() === $('#project-btn')) return closePopover();
   const store = state.projectStore;
   const [recent, templates] = await Promise.all([
     window.swaycommand.project.recent().catch(() => []),
@@ -759,20 +782,7 @@ async function openProjectMenu() {
       rows.push(`<button class="pop-item" data-choice="template" data-id="${t.id}">${t.name}<span>${t.vibe}</span></button>`);
     }
   }
-  openPopover($('#project-btn'), rows.join(''), async (choice, data) => {
-    const guard = () => !store.state.dirty || window.confirm('Discard unsaved changes?');
-    try {
-      if (choice === 'new' && guard()) await store.openTemplate('first-flight');
-      else if (choice === 'open' && guard()) await store.openFromDialog();
-      else if (choice === 'save') await store.save();
-      else if (choice === 'saveas') await store.saveAs();
-      else if (choice === 'recent' && guard()) await store.openPath(data.path);
-      else if (choice === 'template' && guard()) await store.openTemplate(data.id);
-    } catch (err) {
-      notice(`Project: ${err.message}`, 7000);
-    }
-    postProjectLoad();
-  });
+  openPopover($('#project-btn'), rows.join(''), runProjectChoice);
 }
 
 function wireTopbar() {
@@ -796,6 +806,7 @@ function wireTopbar() {
 // ---------------------------------------------------------------- input box
 
 async function openSourceMenu() {
+  if (popoverAnchor() === $('#input-src')) return closePopover();
   let inputs = [];
   try {
     inputs = await state.audio.listInputs();
@@ -1101,9 +1112,11 @@ function frameTick(now) {
     }
   }
   $('#t-clock').textContent = fmtClock(state.transport.state.position);
-  $('#t-play').textContent = state.transport.state.playing ? '❚❚' : '▶';
+  // Inside theDAW the keys are glyphs and .on alone switches play to pause (ui/hostbar.js).
+  if (!ui.hostbar.active) $('#t-play').textContent = state.transport.state.playing ? '❚❚' : '▶';
   $('#t-play').classList.toggle('on', state.transport.state.playing);
   $('#t-loop').classList.toggle('on', state.transport.state.loop.enabled);
+  if (ui.hostbar.active) ui.hostbar.paintTransport(state.transport.state.loop.enabled);
   $('#pill-fps').textContent = eng.stats.fps;
 
   const c = state.midi.control;
@@ -1111,7 +1124,7 @@ function frameTick(now) {
   // BUSY: the port is there but another process holds it (Windows allows one
   // opener per MIDI input), the Sway is plugged in and cannot reach us.
   link.textContent = c.busy ? 'BUSY' : c.isSway ? 'SWAY' : c.connected ? 'MIDI' : 'KEYS';
-  link.title = c.busy ? `${c.portName} is held by another process, close the other app or instance` : '';
+  link.title = c.busy ? `${displayPortName(c.portName)} is held by another process, close the other app or instance` : '';
   link.classList.toggle('pill-on', !c.busy && (c.isSway || c.connected));
 
   const a = state.audio.state;
@@ -1553,6 +1566,15 @@ async function main() {
   });
   new ResizeObserver(() => ui.timeline.render()).observe($('#timeline'));
   ui.layout = createLayout({ root: $('#cockpit'), settings: window.swaycommand.settings });
+  ui.hostbar = createHostBar({
+    project: () => state.projectStore.state,
+    runProjectChoice,
+    templates: () => window.swaycommand.project.templates(),
+    toggleDrawer: (tab) => ui.drawer.toggle(tab),
+    openDocs: () => (modalOpen('docs') ? closeModal('docs') : openDocs()),
+    openHelp: () => (modalOpen('help') ? closeModal('help') : openModal('help')),
+    fps: () => state.engine.stats.fps,
+  });
   state.router.onTouch((id) => {
     if (!ui.assign.followEnabled() || popoverOpen()) return;
     if (ui.assign.current() !== id) selectControl(id);
@@ -1595,6 +1617,7 @@ async function main() {
     loadGan,
     timeline: () => ui.timeline,
     assign: () => ui.assign,
+    hostbar: () => ui.hostbar,
   };
 
   // The stage runs from the first frame; the door covers it until ENTER.
