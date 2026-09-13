@@ -22,7 +22,13 @@
 // DFU driver installer, WASAPI loopback -- report themselves unsupported here
 // rather than pretending. The desktop app remains the place for those.
 
+import { framedByTheDAW } from './host-channel.js';
+
 const BUILD = typeof __SWAY_EMBED_BUILD__ !== 'undefined' ? __SWAY_EMBED_BUILD__ : {};
+
+// theDAW's SWAY tab boots into this template (SwayView's DEFAULT_TEMPLATE), so
+// inside theDAW the TEMPLATES list leads with it.
+const THEDAW_FIRST_TEMPLATE = 'will-i-dream';
 
 const SETTINGS_KEY = 'sway:settings';
 const RECENTS_KEY = 'sway:recents';
@@ -105,7 +111,10 @@ async function templateIndex() {
 }
 
 async function listTemplates() {
-  const order = await templateIndex();
+  let order = await templateIndex();
+  if (framedByTheDAW() && order.includes(THEDAW_FIRST_TEMPLATE)) {
+    order = [THEDAW_FIRST_TEMPLATE, ...order.filter((id) => id !== THEDAW_FIRST_TEMPLATE)];
+  }
   const out = [];
   for (const id of order) {
     try {
@@ -238,15 +247,17 @@ function pushRecent(path, name) {
   writeJson(RECENTS_KEY, list.slice(0, 10));
 }
 
+// Both dialogs resolve to { path } or null, the shape main.js returns and
+// projectstore.js reads (picked.path).
 async function openDialog() {
   const paths = await pickFiles({ multiple: false, accept: '.sway,application/json' });
-  return paths[0] || null;
+  return paths[0] ? { path: paths[0] } : null;
 }
 
 async function saveDialog(name) {
   const safe = String(name || 'project').replace(/[\\/:*?"<>|]/g, '_');
   const withExt = safe.toLowerCase().endsWith('.sway') ? safe : `${safe}.sway`;
-  return `swayproject:/${withExt}`;
+  return { path: `swayproject:/${withExt}` };
 }
 
 async function readProject(filePath) {
@@ -265,9 +276,26 @@ async function readProject(filePath) {
   return { doc, path: filePath, dir: null, warnings };
 }
 
+// Inside theDAW every save also lands as a real .sway in theDAW's
+// data/sway-projects (POST /api/sway/project-save), so it survives cleared
+// browser storage and appears in theDAW's scene lists. Fire and forget: a
+// mirror that fails never fails the save.
+function mirrorToTheDAW(filePath, doc) {
+  try {
+    fetch(api('/api/sway/project-save'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: filePath.split('/').pop() || filePath, doc }),
+    }).catch(() => {});
+  } catch {
+    /* the localStorage copy is the durable half */
+  }
+}
+
 async function writeProject(filePath, doc) {
   const store = projectStore();
   store[filePath] = doc;
+  if (framedByTheDAW()) mirrorToTheDAW(filePath, doc);
   const ok = writeJson(PROJECTS_KEY, store);
   pushRecent(filePath, filePath.split('/').pop() || filePath);
   // Also hand the user a real file, since browser storage is not a place to

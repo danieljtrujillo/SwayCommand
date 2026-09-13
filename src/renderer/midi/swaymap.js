@@ -7,6 +7,15 @@
 
 export const SWAY_PORT_NAME = 'Audima Labs The Sway';
 
+/**
+ * A port name as a person reads it. The port is named "Audima Labs The Sway"
+ * and port matching keeps that string; the product is the Audima Labs Sway,
+ * and every label says so.
+ */
+export function displayPortName(name) {
+  return typeof name === 'string' ? name.replace(/Audima Labs The Sway/gi, 'Audima Labs Sway') : name;
+}
+
 export const FACTORY_MAP = {
   channel: 0, // MIDI channel 1 (0-indexed)
 

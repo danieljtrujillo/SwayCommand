@@ -14,9 +14,12 @@ export function createDrawer({ onOpenTab }) {
     for (const tab of TABS) {
       $(`#deck-${tab}`).hidden = tab !== current;
     }
-    // The deckbar is the drawer's tab strip, its buttons show the open tab.
-    for (const btn of document.querySelectorAll('#deckbar [data-drawer]')) {
-      btn.classList.toggle('on', btn.dataset.drawer === current);
+    // The deck keys are the drawer's tab strip (#deckbar, or the icon keys in
+    // theDAW's header), and they show the open tab.
+    for (const btn of document.querySelectorAll('#topbar [data-drawer]')) {
+      const on = btn.dataset.drawer === current;
+      btn.classList.toggle('on', on);
+      btn.setAttribute('aria-pressed', String(on));
     }
   }
 
