@@ -16,6 +16,7 @@ import { createRouter } from './control/router.js';
 import { initFrames } from './ui/frame.js';
 import { openPopover, closePopover, popoverOpen, popoverAnchor, wirePopover } from './ui/popover.js';
 import { createHostBar } from './ui/hostbar.js';
+import { hostState, onHostEvent } from './host/host-channel.js';
 import { displayPortName } from './midi/swaymap.js';
 import { createWave } from './ui/wave.js';
 import { createSurface } from './ui/surface.js';
@@ -1167,7 +1168,9 @@ async function importAudio(paths, opts = {}) {
   const transport = state.transport;
   let files;
   if (Array.isArray(paths) && paths.length) {
-    files = paths.map((p) => ({ path: p, name: p.split(/[\\/]/).pop() }));
+    // A path string, or { path, name } when the caller knows a better name
+    // than the path's last segment (a host's library entry served by URL).
+    files = paths.map((p) => (typeof p === 'string' ? { path: p, name: p.split(/[\\/]/).pop() } : p));
   } else {
     try {
       files = await window.swaycommand.files.pickAudio();
@@ -1190,6 +1193,8 @@ async function importAudio(paths, opts = {}) {
       if (!buffer) throw new Error('could not decode');
       if (!longest || buffer.duration > longest.buffer.duration) longest = { buffer, media };
       let track = single && placed === 0 && files.length === 1 ? single : null;
+      // An empty track takes the file's name, as a new one would.
+      if (track && !track.clips.length) track.name = file.name.replace(/\.[a-z0-9]+$/i, '').slice(0, 28);
       if (!track) {
         // A new track per stem, unless the first track is still empty.
         const empty = transport.tracks().find((t) => !t.clips.length && !t.fx.length && !t.vst.plugins.length);
@@ -1565,6 +1570,15 @@ async function main() {
     onImport: (paths, opts) => importAudio(paths, opts),
   });
   new ResizeObserver(() => ui.timeline.render()).observe($('#timeline'));
+  // The host's answer to a track's right-click menu: audio by URL onto that
+  // track (or the first empty one when the host names none).
+  onHostEvent('sway/load-audio', () => {
+    const req = hostState.loadAudio;
+    if (!req) return;
+    hostState.loadAudio = null;
+    const at = req.at !== null ? req.at : state.transport.snapTime(state.transport.state.position);
+    importAudio([{ path: req.path, name: req.name }], { at, trackId: req.trackId });
+  });
   ui.layout = createLayout({ root: $('#cockpit'), settings: window.swaycommand.settings });
   ui.hostbar = createHostBar({
     project: () => state.projectStore.state,
