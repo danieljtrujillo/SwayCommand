@@ -18,7 +18,10 @@
 // sway/audio-source (host | input), sway/analysis, sway/host-status
 // ({ hardware, tone }), sway/host-scenes ({ rows, recent, error }).
 // Cockpit to host: sway/ready (with caps), sway/set-audio-source, sway/request-
-// scenes, sway/open-scene ({ name } or { path }), sway/choose-scene-file.
+// scenes, sway/open-scene ({ name } or { path }), sway/choose-scene-file,
+// sway/track-menu ({ trackId, name, empty, x, y }: a right-click on a track).
+// Host to cockpit, in answer: sway/load-audio ({ trackId, path, name, at }),
+// where path is a URL the cockpit can fetch (the host's library serves it).
 // Every addition is optional on both sides: a host that ignores caps keeps its
 // own bar, and a cockpit that never sends them gets today's two headers.
 
@@ -29,7 +32,7 @@ const PROTOCOL = 1;
  * the host's own bar into #topbar, so the host may hide its bar. 'host-scenes':
  * the cockpit shows the host's scene list and asks the host to open one.
  */
-export const HOST_CAPS = ['host-header', 'host-scenes'];
+export const HOST_CAPS = ['host-header', 'host-scenes', 'host-track-menu'];
 
 /** Set by the host handshake; used to pin outbound posts. */
 let hostOrigin = null;
@@ -45,6 +48,7 @@ export const hostState = {
   audioSource: null, // 'host' | 'input'
   status: null, // { hardware: string, tone: 'off' | 'none' | 'ok' }
   scenes: null, // { rows: [{ name, path, builtin, mtime }], recent: [{ name, path }], error }
+  loadAudio: null, // { trackId, path, name, at }: the last sway/load-audio, consumed by app.js
 };
 const eventListeners = new Map(); // message type -> Set of callbacks
 
@@ -219,6 +223,18 @@ export function installHostChannel() {
         hostState.audioSource = d.source === 'input' ? 'input' : 'host';
         emit(d.type);
         break;
+
+      case 'sway/load-audio': {
+        if (typeof d.path !== 'string' || !d.path) break;
+        hostState.loadAudio = {
+          trackId: typeof d.trackId === 'string' && d.trackId ? d.trackId : null,
+          path: d.path,
+          name: typeof d.name === 'string' && d.name ? d.name : d.path.split(/[\\/]/).pop(),
+          at: Number.isFinite(d.at) ? Number(d.at) : null,
+        };
+        emit(d.type);
+        break;
+      }
 
       case 'sway/visibility': {
         hostVisibility.visible = d.visible !== false;

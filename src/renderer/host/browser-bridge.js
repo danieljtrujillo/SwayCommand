@@ -206,10 +206,20 @@ function pickFiles({ multiple = true, accept = '' } = {}) {
   });
 }
 
+/** A media path that is a URL the host serves (its library, a stem). */
+const isUrlPath = (p) => /^(https?:\/\/|\/api\/)/.test(p);
+
 async function readAudio(filePath) {
   const file = fileRegistry.get(filePath);
   if (file) {
     return new Uint8Array(await file.arrayBuffer());
+  }
+  if (isUrlPath(filePath)) {
+    // Media the host handed over by URL (sway/load-audio): fetched as is, so it
+    // survives a reload as long as the host still serves it.
+    const res = await fetch(filePath);
+    if (!res.ok) throw new Error(`Cannot read ${filePath}: HTTP ${res.status}`);
+    return new Uint8Array(await res.arrayBuffer());
   }
   // A path from a saved project: ask theDAW, which also transcodes formats
   // Chromium cannot decode.
@@ -224,6 +234,7 @@ async function readAudio(filePath) {
 
 async function statAudio(filePath) {
   const file = fileRegistry.get(filePath);
+  if (!file && isUrlPath(filePath)) return { size: 0, sha256: '', missing: false };
   if (!file) return { size: 0, sha256: '', missing: true };
   const buf = await file.arrayBuffer();
   const digest = await crypto.subtle.digest('SHA-256', buf);
