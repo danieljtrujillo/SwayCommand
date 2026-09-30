@@ -16,6 +16,7 @@ import { createRouter } from './control/router.js';
 import { initFrames } from './ui/frame.js';
 import { openPopover, closePopover, popoverOpen, popoverAnchor, wirePopover } from './ui/popover.js';
 import { createHostBar } from './ui/hostbar.js';
+import { hostState, onHostEvent, framedByTheDAW, choosePluginFile } from './host/host-channel.js';
 import { displayPortName } from './midi/swaymap.js';
 import { createWave } from './ui/wave.js';
 import { createSurface } from './ui/surface.js';
@@ -1167,7 +1168,9 @@ async function importAudio(paths, opts = {}) {
   const transport = state.transport;
   let files;
   if (Array.isArray(paths) && paths.length) {
-    files = paths.map((p) => ({ path: p, name: p.split(/[\\/]/).pop() }));
+    // A path string, or { path, name } when the caller knows a better name
+    // than the path's last segment (a host's library entry served by URL).
+    files = paths.map((p) => (typeof p === 'string' ? { path: p, name: p.split(/[\\/]/).pop() } : p));
   } else {
     try {
       files = await window.swaycommand.files.pickAudio();
@@ -1190,6 +1193,8 @@ async function importAudio(paths, opts = {}) {
       if (!buffer) throw new Error('could not decode');
       if (!longest || buffer.duration > longest.buffer.duration) longest = { buffer, media };
       let track = single && placed === 0 && files.length === 1 ? single : null;
+      // An empty track takes the file's name, as a new one would.
+      if (track && !track.clips.length) track.name = file.name.replace(/\.[a-z0-9]+$/i, '').slice(0, 28);
       if (!track) {
         // A new track per stem, unless the first track is still empty.
         const empty = transport.tracks().find((t) => !t.clips.length && !t.fx.length && !t.vst.plugins.length);
@@ -1246,7 +1251,9 @@ async function loadGan(ganPath) {
     const info = await window.swaycommand.plugins.openGan(ganPath);
     const list = pluginsOf();
     const existing = list.find((g) => g.id === info.id);
-    const entry = { id: info.id, name: info.name, path: ganPath, controls: info.controls };
+    // The file the host keeps for it (inside theDAW, its installed copy), so a
+    // plugin opened by id reopens from a path on another machine too.
+    const entry = { id: info.id, name: info.name, path: info.source || ganPath, controls: info.controls };
     if (existing) Object.assign(existing, entry);
     else list.push(entry);
     plugins.activeId = info.id;
@@ -1349,9 +1356,16 @@ async function renderTrackVst(track, progress) {
   if (!medias.length) throw new Error('no clips on this track');
   if (!track.vst.plugins.length) throw new Error('no plugins on this track');
   let n = 0;
+  const warnings = [];
   for (const m of medias) {
     progress && progress(`RENDERING ${++n}/${medias.length}...`);
     const r = await window.swaycommand.vst.render(m.resolvedPath || m.path, track.vst.plugins, { tail: 3 });
+    // The desktop rejects a failed render; the embedded bridge answers
+    // { ok: false, detail } instead, and a wet media with no file is never made.
+    if (!r || r.ok === false || typeof r.output !== 'string' || !r.output) {
+      throw new Error((r && (r.detail || r.error)) || `${m.name}: nothing was rendered`);
+    }
+    for (const w of r.warnings || []) warnings.push(`${m.name}: ${w}`);
     const wetPath = r.output;
     let wet = p.media.find((x) => (x.resolvedPath || x.path) === wetPath);
     if (!wet) {
@@ -1365,10 +1379,50 @@ async function renderTrackVst(track, progress) {
   }
   store.markDirty();
   ui.timeline.render();
+  // A state or parameter the host could not apply rendered at defaults; say
+  // so rather than let the render pass for the sound that was dialled in.
+  if (warnings.length) notice(`VST render: ${warnings.join('; ')}`, 9000);
+}
+
+const escHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+// Inside theDAW a browser file picker yields no path theDAW could open, so
+// LOAD lists theDAW's installed .gan plugins and offers its file dialog
+// (sway/choose-plugin-file, answered by sway/plugin-file).
+async function chooseGanFromHost(anchor) {
+  let installed = [];
+  try {
+    installed = await window.swaycommand.plugins.listGan();
+  } catch {
+    /* the file row below still works */
+  }
+  const rows = installed.map(
+    (g) =>
+      `<button class="pop-item" data-choice="installed" data-id="${escHtml(g.id)}" title="${escHtml(g.source || g.id)}">` +
+      `<b class="pop-name">${escHtml(g.name)}</b><span>${g.controls.length} control${g.controls.length === 1 ? '' : 's'}</span></button>`
+  );
+  const html =
+    (rows.length ? `<div class="pop-label">INSTALLED IN THEDAW</div>${rows.join('')}` : '<div class="pop-note">theDAW has no .gan plugins installed.</div>') +
+    '<button class="pop-item pop-action" data-choice="file"><b class="pop-name">Open a .gan file...</b></button>';
+  openPopover(
+    anchor,
+    html,
+    async (choice, data) => {
+      if (choice === 'installed') return loadGan(data.id);
+      if (choice !== 'file') return;
+      notice('Choose a .gan file in theDAW...', 60000);
+      const r = await choosePluginFile();
+      if (r.failure) return notice(`.gan: ${r.failure}`, 7000);
+      if (!r.path) return notice('No .gan chosen', 2500);
+      return loadGan(r.path);
+    },
+    { owner: 'gan-load', label: 'Load a .gan plugin' }
+  );
 }
 
 function wirePlugins() {
   $('#btn-gan-load').addEventListener('click', async () => {
+    if (framedByTheDAW()) return chooseGanFromHost($('#btn-gan-load'));
     let picked = [];
     try {
       picked = await window.swaycommand.plugins.pickGan();
@@ -1565,6 +1619,15 @@ async function main() {
     onImport: (paths, opts) => importAudio(paths, opts),
   });
   new ResizeObserver(() => ui.timeline.render()).observe($('#timeline'));
+  // The host's answer to a track's right-click menu: audio by URL onto that
+  // track (or the first empty one when the host names none).
+  onHostEvent('sway/load-audio', () => {
+    const req = hostState.loadAudio;
+    if (!req) return;
+    hostState.loadAudio = null;
+    const at = req.at !== null ? req.at : state.transport.snapTime(state.transport.state.position);
+    importAudio([{ path: req.path, name: req.name }], { at, trackId: req.trackId });
+  });
   ui.layout = createLayout({ root: $('#cockpit'), settings: window.swaycommand.settings });
   ui.hostbar = createHostBar({
     project: () => state.projectStore.state,

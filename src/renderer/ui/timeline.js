@@ -24,6 +24,7 @@
 // pans, and while playing the view glides along with the playhead.
 
 import { uid } from '../../shared/swayproject.js';
+import { hasHost, postToHost } from '../host/host-channel.js';
 import { FX_KINDS } from '../../shared/trackfx.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -1064,6 +1065,29 @@ export function createTimeline({ transport, engine, store, onEdit, onSelect, onI
     edited();
     return clip;
   }
+
+  // Right-click on a track (its head or its lane) inside a host: the host
+  // shows its own menu for the track (its library, a file, a link) and answers
+  // with sway/load-audio. Standalone, the browser's menu stays.
+  function askHostForTrackMenu(e, track) {
+    if (!hasHost() || !track) return;
+    e.preventDefault();
+    postToHost({
+      type: 'sway/track-menu',
+      trackId: track.id,
+      name: track.name,
+      empty: !track.clips.length,
+      x: e.clientX,
+      y: e.clientY,
+    });
+  }
+  heads.addEventListener('contextmenu', (e) => {
+    const head = e.target.closest('[data-track]');
+    askHostForTrackMenu(e, head ? transport.trackById(head.dataset.track) : null);
+  });
+  audioCanvas.addEventListener('contextmenu', (e) => {
+    askHostForTrackMenu(e, rowAt(e.offsetY).track);
+  });
 
   // Heads: click selects the track; M / S toggle; double-click renames.
   heads.addEventListener('click', (e) => {
