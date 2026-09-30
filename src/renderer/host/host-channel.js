@@ -22,6 +22,11 @@
 // sway/track-menu ({ trackId, name, empty, x, y }: a right-click on a track).
 // Host to cockpit, in answer: sway/load-audio ({ trackId, path, name, at }),
 // where path is a URL the cockpit can fetch (the host's library serves it).
+// Cockpit to host: sway/choose-plugin-file (the LOAD .gan chooser's "Open a
+// .gan file" row); host to cockpit, in answer: sway/plugin-file ({ path, name }
+// for a picked file, { path: null } for a cancel, { path: null, failure } when
+// the host cannot pick). A host that can answer lists 'plugin-file' in its
+// sway/host-ready caps; one that never answers is covered by a short wait.
 // Every addition is optional on both sides: a host that ignores caps keeps its
 // own bar, and a cockpit that never sends them gets today's two headers.
 
@@ -31,14 +36,29 @@ const PROTOCOL = 1;
  * What this cockpit can carry for the host. 'host-header': ui/hostbar.js folds
  * the host's own bar into #topbar, so the host may hide its bar. 'host-scenes':
  * the cockpit shows the host's scene list and asks the host to open one.
+ * 'host-plugin-file': the cockpit may ask the host to pick a .gan file.
  */
-export const HOST_CAPS = ['host-header', 'host-scenes', 'host-track-menu'];
+export const HOST_CAPS = ['host-header', 'host-scenes', 'host-track-menu', 'host-plugin-file'];
+
+/** The host cap that says sway/choose-plugin-file gets an answer. */
+export const HOST_CAP_PLUGIN_FILE = 'plugin-file';
+
+/** How long a host that announced 'plugin-file' may keep its dialog open. */
+export const PLUGIN_FILE_WAIT_MS = 10 * 60 * 1000;
+/** How long to wait for a host that announced nothing before giving up. */
+export const PLUGIN_FILE_PROBE_MS = 4000;
 
 /** Set by the host handshake; used to pin outbound posts. */
 let hostOrigin = null;
 
 /** The host's name from its handshake ('theDAW'), or null before it. */
 let hostName = null;
+
+/** The caps the host listed in its handshake, or [] before it. */
+let hostCaps = [];
+
+/** Answers this cockpit is waiting for: answer type -> { resolve, timer }. */
+const pendingAnswers = new Map();
 
 /**
  * What the host last said about itself, for ui/hostbar.js. Each field stays
@@ -108,6 +128,63 @@ export function hostIs(name) {
   return hostName === name;
 }
 
+/** True when the host listed `cap` in its sway/host-ready. */
+export function hostCan(cap) {
+  return hostCaps.includes(cap);
+}
+
+/**
+ * Posts `request` and resolves with the next `answerType` message's data, or
+ * null when none arrives within `timeoutMs`. A second ask for the same answer
+ * type settles the first with null, so one dialog is ever awaited.
+ */
+export function askHost(request, answerType, timeoutMs) {
+  return new Promise((resolve) => {
+    const prior = pendingAnswers.get(answerType);
+    if (prior) {
+      clearTimeout(prior.timer);
+      prior.resolve(null);
+    }
+    const timer = setTimeout(() => {
+      pendingAnswers.delete(answerType);
+      resolve(null);
+    }, timeoutMs);
+    pendingAnswers.set(answerType, { resolve, timer });
+    postToHost(request);
+  });
+}
+
+function settleAnswer(answerType, data) {
+  const waiting = pendingAnswers.get(answerType);
+  if (!waiting) return;
+  clearTimeout(waiting.timer);
+  pendingAnswers.delete(answerType);
+  waiting.resolve(data);
+}
+
+/**
+ * Asks the host to pick a .gan file on its machine. Resolves { path, name }
+ * for a pick, { path: null, failure: null } for a cancel, and { path: null,
+ * failure } when the host cannot pick or never answered.
+ */
+export async function choosePluginFile() {
+  const announced = hostCan(HOST_CAP_PLUGIN_FILE);
+  const answer = await askHost(
+    { type: 'sway/choose-plugin-file' },
+    'sway/plugin-file',
+    announced ? PLUGIN_FILE_WAIT_MS : PLUGIN_FILE_PROBE_MS,
+  );
+  if (!answer) {
+    return {
+      path: null,
+      failure: announced
+        ? 'theDAW did not answer the file request.'
+        : 'This theDAW cannot pick a .gan file for the cockpit yet; choose one of its installed plugins.',
+    };
+  }
+  return answer;
+}
+
 /** True when theDAW frames this cockpit and has answered its handshake. */
 export function framedByTheDAW() {
   return isFramed() && hasHost() && hostIs('theDAW');
@@ -166,8 +243,20 @@ export function installHostChannel() {
       case 'sway/host-ready':
         hostOrigin = e.origin;
         hostName = typeof d.host === 'string' ? d.host : null;
+        hostCaps = Array.isArray(d.caps) ? d.caps.filter((c) => typeof c === 'string') : [];
         emit(d.type);
         break;
+
+      case 'sway/plugin-file': {
+        const text = (v) => (typeof v === 'string' ? v : '');
+        const path = text(d.path) || null;
+        settleAnswer(d.type, {
+          path,
+          name: path ? text(d.name) || path.split(/[\\/]/).pop() : null,
+          failure: text(d.failure) || null,
+        });
+        break;
+      }
 
       case 'sway/host-status': {
         const tone = d.tone === 'off' || d.tone === 'ok' ? d.tone : 'none';
