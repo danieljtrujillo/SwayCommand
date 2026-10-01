@@ -16,7 +16,8 @@ import { createRouter } from './control/router.js';
 import { initFrames } from './ui/frame.js';
 import { openPopover, closePopover, popoverOpen, popoverAnchor, wirePopover } from './ui/popover.js';
 import { createHostBar } from './ui/hostbar.js';
-import { hostState, onHostEvent, framedByTheDAW, choosePluginFile } from './host/host-channel.js';
+import { hostState, onHostEvent, framedByTheDAW, choosePluginFile, hostCan, isFramed, HOST_CAP_RACK_FX } from './host/host-channel.js';
+import { adoptHostFx, HOST_FX_KEY } from './audio/hostfx.js';
 import { displayPortName } from './midi/swaymap.js';
 import { createWave } from './ui/wave.js';
 import { createSurface } from './ui/surface.js';
@@ -1628,6 +1629,34 @@ async function main() {
     const at = req.at !== null ? req.at : state.transport.snapTime(state.transport.state.position);
     importAudio([{ path: req.path, name: req.name }], { at, trackId: req.trackId });
   });
+  // A host that lists 'rack-fx' has put its effect API on this window. Once it
+  // is adopted, every track's EFFECTS list offers the host's effects, and the
+  // entries a project already holds are built and heard.
+  const adoptRackFx = async () => {
+    if (!hostCan(HOST_CAP_RACK_FX)) return;
+    let api = null;
+    try {
+      api = window[HOST_FX_KEY];
+    } catch {
+      api = null;
+    }
+    if (!(await adoptHostFx(api, state.audio.ctx))) return;
+    try {
+      state.transport.refreshHostFx();
+      ui.assign.refresh();
+      ui.timeline.render();
+    } catch (err) {
+      console.warn('[hostfx] the host effects could not be put on the tracks:', err && err.message);
+    }
+  };
+  onHostEvent('sway/host-ready', adoptRackFx);
+  adoptRackFx();
+  // The host's effect code lives in the host's page and outlives this frame:
+  // when the frame goes (a scene opened in theDAW reloads it), every track
+  // graph is disposed so no host effect is left running on a dead context.
+  if (isFramed()) {
+    window.addEventListener('pagehide', () => state.transport && state.transport.dispose());
+  }
   ui.layout = createLayout({ root: $('#cockpit'), settings: window.swaycommand.settings });
   ui.hostbar = createHostBar({
     project: () => state.projectStore.state,

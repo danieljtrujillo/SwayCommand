@@ -15,7 +15,7 @@
 const FORMAT = 'sway';
 const FORMAT_VERSION = 1;
 
-const { FX_KINDS, fxDefaults, fxClamp } = require('./trackfx');
+const { FX_KINDS, fxSpec, fxDefaults, fxClamp, isHostKind, hostFxId } = require('./trackfx');
 
 const PALETTE_FALLBACK = ['#ff2d95', '#7a0bc0', '#2de1fc', '#f9f871', '#ff6b35'];
 const GESTURE_SOURCES = ['xy:x', 'xy:y', 'gesture:pulse', 'gesture:press', 'gesture:sway'];
@@ -131,6 +131,34 @@ function defaultAudioTrack(id, name) {
     fx: [],
     vst: { plugins: [], mix: 1, renders: {} },
     regions: [],
+  };
+}
+
+// A chain entry whose effect the embedding host supplies (kind `host:<id>`,
+// theDAW's rack). Its parameter schema lives in the host: with the host's
+// catalog registered the values are clamped to it, and without it (the desktop
+// app, or before the host has answered) every finite number is kept as it is,
+// so the entry survives a round trip through a cockpit that cannot play it.
+// `label` is the effect's name for a list drawn where the catalog is absent.
+// A cockpit older than this kind drops the entry on load, as it does any kind
+// it has no row for.
+function hostFxEntry(id, e) {
+  const spec = fxSpec(e.kind);
+  const params = spec ? fxDefaults(e.kind) : {};
+  if (isObj(e.params)) {
+    for (const [k, v] of Object.entries(e.params)) {
+      const n = Number(v);
+      if (typeof v === 'boolean' || v === null || v === '' || !Number.isFinite(n)) continue;
+      if (!spec) params[k] = n;
+      else if (spec.params[k]) params[k] = fxClamp(e.kind, k, n);
+    }
+  }
+  return {
+    id,
+    kind: e.kind,
+    enabled: e.enabled !== false,
+    params,
+    label: (spec && spec.label) || (typeof e.label === 'string' && e.label) || hostFxId(e.kind),
   };
 }
 
@@ -322,11 +350,12 @@ function validateProject(input) {
     trackIds.add(id);
     const fxIds = new Set();
     const fx = (Array.isArray(audioIn.fx) ? audioIn.fx : [])
-      .filter((e) => isObj(e) && FX_KINDS[e.kind])
+      .filter((e) => isObj(e) && (FX_KINDS[e.kind] || isHostKind(e.kind)))
       .map((e) => {
         let eid = str(e.id, uid('fx'));
         if (fxIds.has(eid)) eid = uid('fx');
         fxIds.add(eid);
+        if (isHostKind(e.kind)) return hostFxEntry(eid, e);
         const params = fxDefaults(e.kind);
         if (isObj(e.params)) {
           for (const k of Object.keys(params)) {

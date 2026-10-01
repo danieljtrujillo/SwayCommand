@@ -13,8 +13,8 @@
 // is queued a quarter second before the seam), so it is sample-accurate too.
 //
 // Per track: clips -> [vst dry / wet mix] -> track input -> effect chain (live
-// Web Audio nodes from audio/trackfx.js, in chain order) -> track gain -> mute
-// / solo -> master. A track's VST chain is rendered offline (main/vsthost.js)
+// Web Audio nodes from audio/trackfx.js, and the embedding host's own effects
+// from audio/hostfx.js, in chain order) -> track gain -> mute / solo -> master. A track's VST chain is rendered offline (main/vsthost.js)
 // to a wet media per source file; clips that have one play dry and wet
 // together under `track.vst.mix`. Regions engage one parameter of one chain
 // entry while the playhead is inside them. Stems launched from pads
@@ -24,7 +24,8 @@
 
 import { createFxNode, ensureWorklet } from './trackfx.js';
 import { defaultAudioTrack, uid } from '../../shared/swayproject.js';
-import { fxDefaults, fxClamp } from '../../shared/trackfx.js';
+import { createHostFxNode } from './hostfx.js';
+import { fxSpec, fxDefaults, fxClamp, isHostKind } from '../../shared/trackfx.js';
 
 const LOOKAHEAD = 0.25; // seconds before the loop seam the next pass is queued
 const QUANT_BEATS = { none: 0, beat: 1, bar: 4, twoBars: 8, fourBars: 16 };
@@ -136,12 +137,16 @@ export function createTransport(ctx, destinationNodes) {
     const next = [];
     for (const entry of track.fx) {
       let c = keep.get(entry.id);
-      if (c && c.node.kind !== entry.kind) {
+      if (c && (c.node.kind !== entry.kind || c.stale)) {
         c.node.dispose();
         c = null;
       }
       if (!c) {
-        const node = createFxNode(ctx, entry.kind, entry.params, { bpm });
+        // A `host:<id>` entry is built by the host's own effect code on this
+        // context; with no host it is a pass-through that keeps its place.
+        const node = isHostKind(entry.kind)
+          ? createHostFxNode(ctx, entry.kind, entry.params)
+          : createFxNode(ctx, entry.kind, entry.params, { bpm });
         if (!node) continue;
         c = { entry, node };
       } else {
@@ -762,6 +767,8 @@ export function createTransport(ctx, destinationNodes) {
       const params = fxDefaults(kind);
       if (!t || !params) return null;
       const entry = { id: uid('fx'), kind, enabled: true, params };
+      // A host effect carries its name, for a list drawn outside its host.
+      if (isHostKind(kind)) entry.label = fxSpec(kind).label;
       t.fx.push(entry);
       syncGraphs();
       return entry;
@@ -775,6 +782,30 @@ export function createTransport(ctx, destinationNodes) {
       t.regions = t.regions.filter((r) => r.fx !== fxId);
       syncGraphs();
       return true;
+    },
+    // The host's effect catalog arrived or changed: every `host:<id>` entry
+    // gets the values its schema asks for, and its node is built again, so an
+    // entry that was passing through starts to sound.
+    refreshHostFx() {
+      for (const t of audioTracks()) {
+        for (const entry of t.fx) {
+          const spec = isHostKind(entry.kind) ? fxSpec(entry.kind) : null;
+          if (!spec) continue;
+          for (const [k, s] of Object.entries(spec.params)) {
+            entry.params[k] = entry.params[k] === undefined ? s[2] : fxClamp(entry.kind, k, entry.params[k]);
+          }
+          if (!entry.label) entry.label = spec.label;
+        }
+        const g = graphs.get(t.id);
+        if (!g) continue;
+        let any = false;
+        for (const c of g.chain) {
+          if (!isHostKind(c.node.kind)) continue;
+          c.stale = true;
+          any = true;
+        }
+        if (any) wireChain(t, g);
+      }
     },
     moveFx(trackId, fxId, dir) {
       const t = trackById(trackId);

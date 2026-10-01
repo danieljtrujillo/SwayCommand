@@ -4,7 +4,9 @@
 // / visual / punch / scene event / stem / track punch), knobs pick a
 // continuous target with a range, buttons learn a CC and pick a toggle,
 // gesture dimensions and .gan controls hold modulation routes, tracks hold
-// their effect chain and VST chain, sections hold one parameter and a value.
+// their effect chain (the cockpit's own effects and, inside theDAW, every
+// effect of theDAW's rack) and VST chain, sections hold one parameter and a
+// value.
 // All edits mutate the project's live objects (the router and the transport
 // hold the same references) and report through onChanged so the deck labels
 // and the dirty flag stay true.
@@ -15,7 +17,8 @@
 // knob a continuous control over the parameter's range, a gesture a route.
 
 import { parseTarget, QUANTS } from '../../shared/swayproject.js';
-import { FX_KINDS, FX_ORDER } from '../../shared/trackfx.js';
+import { FX_KINDS, FX_ORDER, fxSpec, fxLabel, isHostKind, hostFxOrder } from '../../shared/trackfx.js';
+import { hostFxReady, hostFxDegraded } from '../audio/hostfx.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -174,11 +177,11 @@ export function createAssign(deps) {
         ];
         if (t.vst.plugins.length) rows.push(`<option value="track:${esc(t.id)}:vstmix" data-min="0" data-max="1"${`track:${t.id}:vstmix` === current ? ' selected' : ''}>vst wet / dry</option>`);
         for (const e of t.fx) {
-          const spec = FX_KINDS[e.kind];
+          const spec = fxSpec(e.kind);
           if (!spec) continue;
           for (const [k, s] of Object.entries(spec.params)) {
             const v = `track:${t.id}:${e.id}:${k}`;
-            rows.push(`<option value="${esc(v)}" data-min="${s[0]}" data-max="${s[1]}"${v === current ? ' selected' : ''}>${esc(spec.label)} · ${k}</option>`);
+            rows.push(`<option value="${esc(v)}" data-min="${s[0]}" data-max="${s[1]}"${v === current ? ' selected' : ''}>${esc(spec.label)} · ${esc(paramName(k, s))}</option>`);
           }
         }
         return `<optgroup label="TRACK · ${esc(t.name.toUpperCase())}">${rows.join('')}</optgroup>`;
@@ -195,7 +198,7 @@ export function createAssign(deps) {
         ];
         for (const e of t.fx) {
           const v = `track:${t.id}:${e.id}:enabled`;
-          rows.push(`<option value="${esc(v)}"${v === current ? ' selected' : ''}>${esc(FX_KINDS[e.kind] ? FX_KINDS[e.kind].label : e.kind)} on / off</option>`);
+          rows.push(`<option value="${esc(v)}"${v === current ? ' selected' : ''}>${esc(fxLabel(e))} on / off</option>`);
         }
         return `<optgroup label="TRACK · ${esc(t.name.toUpperCase())}">${rows.join('')}</optgroup>`;
       })
@@ -344,7 +347,7 @@ export function createAssign(deps) {
         if (a.fx === 'vst') [lo, hi] = [0, 1];
         else {
           const e = tr.fx.find((x) => x.id === a.fx);
-          const s = e && FX_KINDS[e.kind] && FX_KINDS[e.kind].params[a.param];
+          const s = e && fxSpec(e.kind) && fxSpec(e.kind).params[a.param];
           if (s) [lo, hi] = [s[0], s[1]];
         }
       }
@@ -425,17 +428,32 @@ export function createAssign(deps) {
 
   // --- tracks ----------------------------------------------------------------------
 
+  // A host effect's param spec carries a fifth slot (shared/trackfx.js): its
+  // display name, step, log travel, unit text and the value of each option.
+  function paramName(key, spec) {
+    const extra = spec && spec[4];
+    return extra && extra.name ? extra.name.toLowerCase() : key;
+  }
+  function nearest(values, value) {
+    let best = 0;
+    for (let i = 1; i < values.length; i++) if (Math.abs(values[i] - value) < Math.abs(values[best] - value)) best = i;
+    return best;
+  }
   function slider(attr, spec, value) {
-    const [lo, hi, , unit] = spec;
+    const [lo, hi, , unit, extra] = spec;
     if (unit === 'enum') {
-      return `<select ${attr}>${(spec.options || []).map((o, i) => `<option value="${i}"${Math.round(value) === i ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+      // A host pick sets the value its option names; a cockpit pick its index.
+      const values = extra && extra.values;
+      const at = values ? nearest(values, value) : Math.round(value);
+      return `<select ${attr}>${(spec.options || []).map((o, i) => `<option value="${values ? values[i] : i}"${at === i ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
     }
     // Log-mapped slider for frequencies: the range input carries 0..1000.
-    if (unit === 'hz') {
+    if (unit === 'hz' || (extra && extra.log)) {
       const pos = Math.round((Math.log(value / lo) / Math.log(hi / lo)) * 1000);
       return `<input type="range" ${attr} data-log-lo="${lo}" data-log-hi="${hi}" min="0" max="1000" step="1" value="${Math.max(0, Math.min(1000, pos))}">`;
     }
-    return `<input type="range" ${attr} min="${lo}" max="${hi}" step="${(hi - lo) / 200}" value="${value}">`;
+    const step = extra && extra.step > 0 ? extra.step : (hi - lo) / 200;
+    return `<input type="range" ${attr} min="${lo}" max="${hi}" step="${step}" value="${value}">`;
   }
   function sliderValue(el) {
     if (el.dataset.logLo) {
@@ -445,7 +463,15 @@ export function createAssign(deps) {
     }
     return Number(el.value);
   }
-  function unitText(unit, v) {
+  function unitText(unit, v, extra) {
+    if (extra) {
+      // A host effect's value, in the unit its host names.
+      if (unit === 'enum') return '';
+      if (extra.percent) return `${Math.round(v * 100)}%`;
+      if (extra.suffix === 'Hz' && v >= 1000) return `${(v / 1000).toFixed(2)}k`;
+      const digits = extra.step >= 1 ? 0 : extra.step >= 0.1 ? 1 : 2;
+      return `${Number(v).toFixed(digits)}${extra.suffix ? ` ${extra.suffix}` : ''}`;
+    }
     if (unit === 'hz') return v >= 1000 ? `${(v / 1000).toFixed(2)}k` : `${Math.round(v)}`;
     if (unit === 'db') return `${v.toFixed(1)}dB`;
     if (unit === 'beats') return v >= 1 ? `${v}b` : `1/${Math.round(1 / v)}`;
@@ -469,6 +495,19 @@ export function createAssign(deps) {
     return out;
   }
 
+  // The head row of a chain entry: its name (a host effect is tagged with its
+  // host), the on / off switch, the two moves and the remove.
+  function fxHead(t, e, ei) {
+    return (
+      `<div class="fx-entry-head"><span class="nm">${esc(fxLabel(e))}</span>` +
+      (isHostKind(e.kind) ? '<span class="fx-host" title="An effect of theDAW">theDAW</span>' : '') +
+      `<button class="chip${e.enabled ? ' on' : ''}" data-fx-on="${e.id}">${e.enabled ? 'ON' : 'OFF'}</button>` +
+      `<button class="chip" data-fx-move="${e.id}:-1" ${ei === 0 ? 'disabled' : ''}>▲</button>` +
+      `<button class="chip" data-fx-move="${e.id}:1" ${ei === t.fx.length - 1 ? 'disabled' : ''}>▼</button>` +
+      `<button class="chip" data-fx-del="${e.id}">✕</button></div>`
+    );
+  }
+
   function renderTrack(id) {
     const t = trackOf(id);
     if (!t) {
@@ -481,28 +520,35 @@ export function createAssign(deps) {
     rows.push(`<div class="assign-row"><span></span><button class="chip${t.muted ? ' on' : ''}" data-tr-mute>MUTE</button><button class="chip${t.solo ? ' on' : ''}" data-tr-solo>SOLO</button><span style="flex:1"></span><button class="chip" data-tr-delete title="Remove this track">DELETE</button></div>`);
 
     // Live effect chain.
-    rows.push(`<div class="assign-sub">EFFECTS <select data-fx-add class="chip" style="margin-left:auto"><option value="">+ add...</option>${FX_ORDER.map((k) => `<option value="${k}">${esc(FX_KINDS[k].label)}</option>`).join('')}</select></div>`);
+    // The cockpit's own effects, then every effect of the host's rack.
+    const own = FX_ORDER.map((k) => `<option value="${k}">${esc(FX_KINDS[k].label)}</option>`).join('');
+    const hostKinds = hostFxOrder();
+    const hostOptions = hostKinds.map((k) => `<option value="${esc(k)}">${esc(fxSpec(k).label)}</option>`).join('');
+    const addOptions = hostKinds.length ? `<optgroup label="SWAY">${own}</optgroup><optgroup label="THEDAW">${hostOptions}</optgroup>` : own;
+    rows.push(`<div class="assign-sub">EFFECTS <select data-fx-add class="chip" style="margin-left:auto" aria-label="Add an effect"><option value="">+ add...</option>${addOptions}</select></div>`);
     if (!t.fx.length) rows.push('<div class="assign-note">No effects yet. Add one, set it, then BIND a parameter to a pad (a held punch), a knob (continuous) or a gesture. Shift+drag on the track marks a section where it engages by itself.</div>');
     t.fx.forEach((e, ei) => {
-      const spec = FX_KINDS[e.kind];
-      if (!spec) return;
+      const spec = fxSpec(e.kind);
+      const hosted = isHostKind(e.kind);
+      if (!spec && !hosted) return;
+      if (!spec) {
+        // A host effect with no host to play it: it keeps its place and its
+        // values, and the track passes through it unchanged.
+        const why = hostFxReady()
+          ? 'This theDAW has no effect by this name. The track passes through it unchanged.'
+          : 'Needs theDAW. Open this project in the SWAY tab of theDAW to hear it. Here the track passes through it unchanged.';
+        rows.push(`<div class="fx-entry${e.enabled ? '' : ' off'}" data-fx="${e.id}">${fxHead(t, e, ei)}<div class="fx-host-note">${why}</div></div>`);
+        return;
+      }
       const params = Object.entries(spec.params)
         .map(([k, s]) => {
           const bound = boundBy(t, e.id, k);
           const armed = pendingBind && pendingBind.fx === e.id && pendingBind.param === k && pendingBind.track === t.id;
-          return `<div class="fx-param"><span title="${k}">${k}</span>${slider(`data-fx-param="${e.id}:${k}"`, Object.assign([...s], { options: spec.options && spec.options[k] }), e.params[k])}<b class="${bound.length ? 'bound' : ''}" title="${esc(bound.join(', '))}">${unitText(s[3], e.params[k])}</b><button class="chip${armed ? ' armed' : ''}" data-bind="${e.id}:${k}" title="${bound.length ? 'on ' + esc(bound.join(', ')) : 'Put this on a control'}">${bound.length ? '●' : 'BIND'}</button></div>`;
+          return `<div class="fx-param"><span title="${esc((s[4] && s[4].tip) || k)}">${esc(paramName(k, s))}</span>${slider(`data-fx-param="${e.id}:${k}"`, Object.assign([...s], { options: spec.options && spec.options[k] }), e.params[k])}<b class="${bound.length ? 'bound' : ''}" title="${esc(bound.join(', '))}">${unitText(s[3], e.params[k], s[4])}</b><button class="chip${armed ? ' armed' : ''}" data-bind="${e.id}:${k}" title="${bound.length ? 'on ' + esc(bound.join(', ')) : 'Put this on a control'}">${bound.length ? '●' : 'BIND'}</button></div>`;
         })
         .join('');
-      rows.push(
-        `<div class="fx-entry${e.enabled ? '' : ' off'}" data-fx="${e.id}">
-          <div class="fx-entry-head"><span class="nm">${esc(spec.label)}</span>
-            <button class="chip${e.enabled ? ' on' : ''}" data-fx-on="${e.id}">${e.enabled ? 'ON' : 'OFF'}</button>
-            <button class="chip" data-fx-move="${e.id}:-1" ${ei === 0 ? 'disabled' : ''}>▲</button>
-            <button class="chip" data-fx-move="${e.id}:1" ${ei === t.fx.length - 1 ? 'disabled' : ''}>▼</button>
-            <button class="chip" data-fx-del="${e.id}">✕</button></div>
-          ${params}
-        </div>`
-      );
+      const degraded = hosted && hostFxDegraded(e.kind) ? '<div class="fx-host-note">theDAW could not load the audio module of this effect, so part of it is silent.</div>' : '';
+      rows.push(`<div class="fx-entry${e.enabled ? '' : ' off'}" data-fx="${e.id}">${fxHead(t, e, ei)}${degraded}${params}</div>`);
     });
 
     // VST chain (offline render through the sidecar).
@@ -556,7 +602,8 @@ export function createAssign(deps) {
   function regionLabel(t, r) {
     if (r.fx === 'vst') return 'vst wet / dry';
     const e = t.fx.find((x) => x.id === r.fx);
-    return e ? `${FX_KINDS[e.kind] ? FX_KINDS[e.kind].label : e.kind} · ${r.param}` : r.param;
+    const s = e && fxSpec(e.kind) && fxSpec(e.kind).params[r.param];
+    return e ? `${fxLabel(e)} · ${paramName(r.param, s)}` : r.param;
   }
 
   function renderRegion(trackId, regionId) {
@@ -568,9 +615,11 @@ export function createAssign(deps) {
     }
     const targets = [];
     for (const e of t.fx) {
-      const spec = FX_KINDS[e.kind];
+      const spec = fxSpec(e.kind);
       if (!spec) continue;
-      for (const [k, s] of Object.entries(spec.params)) targets.push({ v: `${e.id}:${k}`, label: `${spec.label} · ${k}`, lo: s[0], hi: s[1], unit: s[3] });
+      for (const [k, s] of Object.entries(spec.params)) {
+        targets.push({ v: `${e.id}:${k}`, label: `${spec.label} · ${paramName(k, s)}`, lo: s[0], hi: s[1], unit: s[3], extra: s[4], options: spec.options && spec.options[k] });
+      }
     }
     if (t.vst.plugins.length) targets.push({ v: 'vst:mix', label: 'vst wet / dry', lo: 0, hi: 1 });
     const cur = `${r.fx}:${r.param}`;
@@ -578,7 +627,7 @@ export function createAssign(deps) {
     const rows = [
       `<div class="assign-note">TRACK · ${esc(t.name)} · ${fmt(r.start)}s, ${fmt(r.end)}s</div>`,
       `<div class="assign-row"><span>EFFECT</span><select data-rg-target>${targets.map((x) => `<option value="${esc(x.v)}"${x.v === cur ? ' selected' : ''}>${esc(x.label)}</option>`).join('')}</select></div>`,
-      `<div class="assign-row"><span>VALUE</span>${slider('data-rg-value', [curSpec.lo, curSpec.hi, r.value, curSpec.unit], Math.max(curSpec.lo, Math.min(curSpec.hi, r.value)))}<b>${unitText(curSpec.unit, r.value)}</b></div>`,
+      `<div class="assign-row"><span>VALUE</span>${slider('data-rg-value', Object.assign([curSpec.lo, curSpec.hi, r.value, curSpec.unit, curSpec.extra], { options: curSpec.options }), Math.max(curSpec.lo, Math.min(curSpec.hi, r.value)))}<b>${unitText(curSpec.unit, r.value, curSpec.extra)}</b></div>`,
       `<div class="assign-row"><span>START</span><input type="number" data-rg-start step="0.01" min="0" value="${r.start}"> s</div>`,
       `<div class="assign-row"><span>END</span><input type="number" data-rg-end step="0.01" min="0" value="${r.end}"> s</div>`,
       `<div class="assign-row"><span></span><button class="chip" data-rg-track>TRACK</button><button class="chip" data-rg-del>DELETE</button></div>`,
@@ -888,8 +937,8 @@ export function createAssign(deps) {
       const v = sliderValue(el);
       if (tr) transport.setTrackParam(tr.id, fxId, key, v);
       const en = tr && tr.fx.find((x) => x.id === fxId);
-      const s = en && FX_KINDS[en.kind] && FX_KINDS[en.kind].params[key];
-      if (b) b.textContent = unitText(s && s[3], v);
+      const s = en && fxSpec(en.kind) && fxSpec(en.kind).params[key];
+      if (b) b.textContent = unitText(s && s[3], v, s && s[4]);
       return;
     }
     if (el.matches('[data-tr-gain]') && selected && selected.startsWith('track:')) {
@@ -984,10 +1033,11 @@ export function createAssign(deps) {
         if (pendingBind && pendingBind.fx === fxId && pendingBind.param === key) return armBind(null);
         if (fxId === 'vst') return armBind({ track: tr.id, fx: 'vst', param: 'mix', lo: 0, hi: 1, value: 1, label: `${tr.name} · vst wet / dry` });
         const en = tr.fx.find((x) => x.id === fxId);
-        const s = en && FX_KINDS[en.kind] && FX_KINDS[en.kind].params[key];
+        const spec = en && fxSpec(en.kind);
+        const s = spec && spec.params[key];
         if (!s) return;
-        const isMix = key === 'mix' || key === 'depth';
-        return armBind({ track: tr.id, fx: fxId, param: key, lo: s[0], hi: s[1], value: isMix ? s[1] : en.params[key], label: `${tr.name} · ${FX_KINDS[en.kind].label} ${key}` });
+        const isMix = key === 'mix' || key === 'depth' || key === spec.mix;
+        return armBind({ track: tr.id, fx: fxId, param: key, lo: s[0], hi: s[1], value: isMix ? s[1] : en.params[key], label: `${tr.name} · ${spec.label} ${paramName(key, s)}` });
       }
       if (e.target.closest('[data-bind-gain]')) {
         if (pendingBind && pendingBind.fx === 'gain') return armBind(null);
