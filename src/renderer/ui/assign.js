@@ -1017,6 +1017,8 @@ export function createAssign(deps) {
         renderBody();
         try {
           const r = await window.swaycommand.vst.params(p.path, { params: p.params, rawState: p.rawState });
+          // The desktop rejects; the embedded bridge answers { ok: false, error }.
+          if (r && r.ok === false) throw new Error(r.error || r.detail || 'the VST host did not answer');
           if (vstParamsOpen && vstParamsOpen.index === pi) vstParamsOpen.rows = r.params || [];
         } catch (err) {
           deps.notice && deps.notice(`VST: ${err.message}`, 6000);
@@ -1032,6 +1034,8 @@ export function createAssign(deps) {
         renderBody();
         try {
           const r = await window.swaycommand.vst.editor(p.path, { params: p.params, rawState: p.rawState });
+          // The desktop rejects; the embedded bridge answers { ok: false, error }.
+          if (r && r.ok === false) throw new Error(r.error || r.detail || 'the plugin window did not open');
           if (r && r.rawState) p.rawState = r.rawState;
           if (r && r.params) {
             p.params = {};
