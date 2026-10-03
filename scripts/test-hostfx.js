@@ -136,6 +136,46 @@ check('a host effect this catalog lacks keeps its values', () => {
 
 trackfx.registerHostFx([]);
 
+// --- VST3 rows and the instruments' buses
+
+check('every VST3 row gets an id unique in the project, and keeps its state and host', () => {
+  const doc = defaultProject();
+  const tracks = doc.project.timeline.tracks;
+  tracks.splice(1, 0, { ...JSON.parse(JSON.stringify(tracks[0])), id: 'audio-2' });
+  tracks[0].vst.plugins = [
+    { path: 'C:/p/a.vst3', name: 'A', rawState: 'QUJD', stateHost: 'thedaw' },
+    { id: 'vst-1', path: 'C:/p/b.vst3', stateHost: 'nonsense' },
+  ];
+  tracks[1].vst.plugins = [{ id: 'vst-1', path: 'C:/p/c.vst3' }];
+  const { doc: out } = validateProject(doc);
+  const [t1, t2] = out.project.timeline.tracks;
+  const ids = [...t1.vst.plugins, ...t2.vst.plugins].map((r) => r.id);
+  assert.equal(new Set(ids).size, 3, `ids ${ids.join(', ')}`);
+  assert.equal(t1.vst.plugins[1].id, 'vst-1', 'the first holder of an id keeps it');
+  assert.equal(t1.vst.plugins[0].rawState, 'QUJD');
+  assert.equal(t1.vst.plugins[0].stateHost, 'thedaw');
+  assert.equal(t1.vst.plugins[1].stateHost, null, 'an unknown host reads as none');
+  assert.equal(t1.vst.live, true, 'a chain is live unless it says otherwise');
+});
+
+check('a project holds the kit and synth buses, with their chains, and nothing else', () => {
+  const doc = defaultProject();
+  doc.project.timeline.buses = [
+    { id: 'bus-synth', name: 'Renamed', fx: [OWN_ENTRY], clips: [{ media: 'x', start: 0, end: 1 }], vst: { live: false, plugins: [{ path: 'C:/p/s.vst3' }] } },
+    { id: 'bus-other', fx: [] },
+  ];
+  doc.project.assignments.pads[1] = { type: 'trackFx', track: 'bus-synth', fx: 'fx-own', param: 'cutoff', value: 200 };
+  const { doc: out } = validateProject(doc);
+  const buses = out.project.timeline.buses;
+  assert.deepEqual(buses.map((b) => `${b.id}:${b.source}:${b.type}:${b.name}`), ['bus-kit:kit:bus:Kit', 'bus-synth:synth:bus:Synth']);
+  assert.equal(buses[1].fx[0].id, 'fx-own');
+  assert.equal(buses[1].clips.length, 0, 'a bus has no clips');
+  assert.equal(buses[1].vst.live, true, 'a bus chain is always live');
+  assert.equal(buses[1].vst.plugins[0].path, 'C:/p/s.vst3');
+  assert.ok(out.project.assignments.pads[1], 'a pad may punch a bus effect');
+  assert.equal(out.project.timeline.tracks.some((t) => t.type === 'bus'), false, 'buses are not timeline tracks');
+});
+
 if (process.exitCode) {
   console.error(`hostfx: FAILED (${checks} checks)`);
 } else {

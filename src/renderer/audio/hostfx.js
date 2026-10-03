@@ -13,6 +13,9 @@
 //                             built by the host's own effect code on the
 //                             context it is given
 //
+// and, with the 'vst-live' cap, a `vst` namespace that runs VST3 plugins live
+// (see "live VST3" below).
+//
 // adoptHostFx() takes that object, registers its catalog as `host:<id>` kinds
 // (shared/trackfx.js) and keeps it for createHostFxNode(), which the transport
 // calls for a chain entry of such a kind. The node it returns has the shape of
@@ -141,4 +144,138 @@ export function resetHostFx() {
   adopting = null;
   degraded = [];
   registerHostFx([]);
+}
+
+// --- live VST3 ---------------------------------------------------------------
+//
+// A host that lists the 'vst-live' cap also hangs `vst` on its API object:
+//
+//   available()                     false when the host has no plugin host
+//                                   binary on this machine
+//   build(audioContext, row, sink)  one plugin row as a live node on that
+//                                   context: { input, output, status(),
+//                                   params(), setParam(index, value),
+//                                   openWindow(), dispose() }. The node passes
+//                                   audio through until the plugin is running,
+//                                   then carries it; it is never silent.
+//   transport(info)                 where this cockpit's transport is, for
+//                                   every plugin it runs (tempo-synced
+//                                   effects, a delay that must reset on a seek)
+//   capture()                       asks every running plugin for its state
+//                                   now; each one arrives through its sink
+//   forget(rowId)                   the row left the project
+//
+// `row` is a track's VST3 row ({ id, path, name, rawState, stateHost }); the
+// row id names the running plugin, so it survives every rebuild. `sink` gets
+// `state(rawState, stateHost)` whenever the host captures one (its window, a
+// save, theDAW closing) and `change()` when the status, the latency or the
+// parameter list moved.
+
+/** True when the adopted host runs VST3 plugins live. */
+export function hostVstReady() {
+  if (!api || !api.vst || typeof api.vst.build !== 'function') return false;
+  try {
+    return api.vst.available() !== false;
+  } catch {
+    return false;
+  }
+}
+
+const IDLE_STATUS = { state: 'idle', detail: null, latency: 0 };
+
+// One live plugin row. Without a host (or with one that cannot run plugins)
+// the node passes audio through and reports itself idle.
+export function createHostVstNode(ctx, row, sink) {
+  let handle = null;
+  if (hostVstReady()) {
+    try {
+      const built = api.vst.build(ctx, row, sink);
+      if (built && built.input && built.output) handle = built;
+    } catch (err) {
+      console.warn(`[hostfx] ${row.name} could not be built live:`, err && err.message);
+    }
+  }
+  let input;
+  let output;
+  if (handle) {
+    input = handle.input;
+    output = handle.output;
+  } else {
+    input = ctx.createGain();
+    output = ctx.createGain();
+    input.connect(output);
+  }
+  const call = (name, ...args) => {
+    if (!handle || typeof handle[name] !== 'function') return undefined;
+    try {
+      return handle[name](...args);
+    } catch (err) {
+      console.warn(`[hostfx] ${row.name} ${name}:`, err && err.message);
+      return undefined;
+    }
+  };
+  return {
+    row,
+    input,
+    output,
+    live: handle !== null,
+    /** { state: 'idle'|'starting'|'live'|'error'|'unavailable', detail, latency (seconds) } */
+    status() {
+      const s = call('status');
+      return s && typeof s === 'object' ? { ...IDLE_STATUS, ...s } : IDLE_STATUS;
+    },
+    /** The running plugin's own parameter list, or [] before it reports one. */
+    params() {
+      const list = call('params');
+      return Array.isArray(list) ? list : [];
+    },
+    setParam(index, value) {
+      call('setParam', index, value);
+    },
+    openWindow() {
+      call('openWindow');
+    },
+    dispose() {
+      if (handle && typeof handle.dispose === 'function') {
+        call('dispose');
+        return;
+      }
+      try {
+        input.disconnect();
+        output.disconnect();
+      } catch {
+        /* detached already */
+      }
+    },
+  };
+}
+
+/** Tells every plugin the host runs for this cockpit where the transport is. */
+export function hostVstTransport(info) {
+  if (!hostVstReady() || typeof api.vst.transport !== 'function') return;
+  try {
+    api.vst.transport(info);
+  } catch (err) {
+    console.warn('[hostfx] the host did not take the transport:', err && err.message);
+  }
+}
+
+/** Asks every running plugin for its state; resolves when they answered (or timed out). */
+export async function hostVstCapture() {
+  if (!hostVstReady() || typeof api.vst.capture !== 'function') return;
+  try {
+    await api.vst.capture();
+  } catch (err) {
+    console.warn('[hostfx] the plugin states could not be captured:', err && err.message);
+  }
+}
+
+/** The row left the project: the host may let its plugin go. */
+export function hostVstForget(rowId) {
+  if (!hostVstReady() || typeof api.vst.forget !== 'function') return;
+  try {
+    api.vst.forget(rowId);
+  } catch {
+    /* nothing to let go of */
+  }
 }

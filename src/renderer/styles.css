@@ -809,6 +809,11 @@ body.lay-drag-y, body.lay-drag-y * { cursor: row-resize !important; user-select:
 .assign-note b { color: var(--accent2); font-weight: 400; }
 .vst-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; font: 11px var(--mono); color: var(--text-dim); }
 .vst-row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A live plugin's state: a dot and one word. */
+.vst-state { flex: none; font-size: 10px; letter-spacing: 0.06em; color: var(--text-dim); white-space: nowrap; }
+.vst-state-live { color: #3ddc97; }
+.vst-state-starting { color: #f2c94c; }
+.vst-state-error, .vst-state-unavailable { color: #ff6b6b; }
 .region-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; font: 10.5px var(--mono); color: var(--text-dim); cursor: pointer; }
 .region-row:hover, .region-row.selected { color: var(--accent); }
 .region-row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

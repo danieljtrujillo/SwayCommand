@@ -16,9 +16,9 @@
 // touch on the Sway) takes it, a pad becomes a punch to the value shown, a
 // knob a continuous control over the parameter's range, a gesture a route.
 
-import { parseTarget, QUANTS } from '../../shared/swayproject.js';
+import { parseTarget, QUANTS, uid } from '../../shared/swayproject.js';
 import { FX_KINDS, FX_ORDER, fxSpec, fxLabel, isHostKind, hostFxOrder } from '../../shared/trackfx.js';
-import { hostFxReady, hostFxDegraded } from '../audio/hostfx.js';
+import { hostFxReady, hostFxDegraded, hostVstReady, hostVstForget } from '../audio/hostfx.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -111,6 +111,7 @@ export function createAssign(deps) {
     if (t.ns === 'button') return `BUTTON ${Number(t.key) + 1}`;
     if (t.ns === 'track') {
       const tr = trackOf(t.key);
+      if (tr && tr.type === 'bus') return `${tr.name.toUpperCase()} · EFFECTS`;
       return tr ? `TRACK · ${tr.name.toUpperCase()}` : 'TRACK';
     }
     if (t.ns === 'region') return 'SECTION';
@@ -167,10 +168,15 @@ export function createAssign(deps) {
       .join('');
   }
 
+  // The tracks, then the kit's and the synth's buses.
+  function insertTracks() {
+    return [...transport.tracks(), ...transport.buses()];
+  }
+  const groupLabel = (t) => (t.type === 'bus' ? `${t.name.toUpperCase()} · EFFECTS` : `TRACK · ${t.name.toUpperCase()}`);
+
   // Every track's continuous targets: gain, VST wet/dry, each chain param.
   function trackParamOptions(current) {
-    return transport
-      .tracks()
+    return insertTracks()
       .map((t) => {
         const rows = [
           `<option value="track:${esc(t.id)}:gain" data-min="0" data-max="1.5"${`track:${t.id}:gain` === current ? ' selected' : ''}>level</option>`,
@@ -184,23 +190,20 @@ export function createAssign(deps) {
             rows.push(`<option value="${esc(v)}" data-min="${s[0]}" data-max="${s[1]}"${v === current ? ' selected' : ''}>${esc(spec.label)} · ${esc(paramName(k, s))}</option>`);
           }
         }
-        return `<optgroup label="TRACK · ${esc(t.name.toUpperCase())}">${rows.join('')}</optgroup>`;
+        return `<optgroup label="${esc(groupLabel(t))}">${rows.join('')}</optgroup>`;
       })
       .join('');
   }
   function trackToggleOptions(current) {
-    return transport
-      .tracks()
+    return insertTracks()
       .map((t) => {
-        const rows = [
-          `<option value="track:${esc(t.id)}:mute"${`track:${t.id}:mute` === current ? ' selected' : ''}>mute</option>`,
-          `<option value="track:${esc(t.id)}:solo"${`track:${t.id}:solo` === current ? ' selected' : ''}>solo</option>`,
-        ];
+        const rows = [`<option value="track:${esc(t.id)}:mute"${`track:${t.id}:mute` === current ? ' selected' : ''}>mute</option>`];
+        if (t.type !== 'bus') rows.push(`<option value="track:${esc(t.id)}:solo"${`track:${t.id}:solo` === current ? ' selected' : ''}>solo</option>`);
         for (const e of t.fx) {
           const v = `track:${t.id}:${e.id}:enabled`;
           rows.push(`<option value="${esc(v)}"${v === current ? ' selected' : ''}>${esc(fxLabel(e))} on / off</option>`);
         }
-        return `<optgroup label="TRACK · ${esc(t.name.toUpperCase())}">${rows.join('')}</optgroup>`;
+        return `<optgroup label="${esc(groupLabel(t))}">${rows.join('')}</optgroup>`;
       })
       .join('');
   }
@@ -258,7 +261,9 @@ export function createAssign(deps) {
   function renderBody() {
     if (!selected) {
       body.innerHTML =
-        '<div class="empty">Click a control on the deck, or touch it on the Sway, to edit what it does.<br><br>Click a track head on the timeline to add effects to that track and bind them to pads and knobs.</div>';
+        '<div class="empty">Click a control on the deck, or touch it on the Sway, to edit what it does.<br><br>Click a track head on the timeline to add effects to that track and bind them to pads and knobs.</div>' +
+        '<div class="assign-sub">INSTRUMENTS</div>' +
+        '<div class="assign-row"><span></span><button class="chip" data-bus-open="bus-kit" title="The kit’s effects and VST3 plugins">KIT</button><button class="chip" data-bus-open="bus-synth" title="The synth’s effects and VST3 plugins">SYNTH</button></div>';
       return;
     }
     const t = ctlParts(selected);
@@ -495,6 +500,15 @@ export function createAssign(deps) {
     return out;
   }
 
+  // A live plugin's state as a dot and one word; the detail and the latency
+  // ride in the tooltip.
+  function liveBadge(st) {
+    const word = { live: 'LIVE', starting: 'STARTING', error: 'STOPPED', unavailable: 'UNAVAILABLE' }[st.state] || 'WAITING';
+    const ms = st.state === 'live' && st.latency > 0 ? `, ${Math.round(st.latency * 1000)} ms` : '';
+    const tip = st.detail ? `${st.detail}${ms}` : st.state === 'live' ? `Running in theDAW${ms}` : 'theDAW is starting the plugin';
+    return `<span class="vst-state vst-state-${esc(st.state)}" title="${esc(tip)}">● ${word}</span>`;
+  }
+
   // The head row of a chain entry: its name (a host effect is tagged with its
   // host), the on / off switch, the two moves and the remove.
   function fxHead(t, e, ei) {
@@ -514,10 +528,15 @@ export function createAssign(deps) {
       body.innerHTML = '<div class="empty">This track is gone.</div>';
       return;
     }
+    // A bus is the kit's or the synth's insert: fixed name, no clips, no
+    // sections, nothing to delete.
+    const isBus = t.type === 'bus';
     const rows = [bindNote()];
-    rows.push(`<div class="assign-row"><span>NAME</span><input type="text" data-tr-name value="${esc(t.name)}"></div>`);
+    if (isBus) rows.push(`<div class="assign-note">Everything the ${esc(t.name.toLowerCase())} plays goes through these effects, then these VST3 plugins, to the master.</div>`);
+    else rows.push(`<div class="assign-row"><span>NAME</span><input type="text" data-tr-name value="${esc(t.name)}"></div>`);
     rows.push(`<div class="assign-row"><span>LEVEL</span><input type="range" data-tr-gain min="0" max="1.5" step="0.01" value="${t.gain}"><b>${t.gain.toFixed(2)}</b><button class="chip" data-bind-gain title="Put the level on a control">BIND</button></div>`);
-    rows.push(`<div class="assign-row"><span></span><button class="chip${t.muted ? ' on' : ''}" data-tr-mute>MUTE</button><button class="chip${t.solo ? ' on' : ''}" data-tr-solo>SOLO</button><span style="flex:1"></span><button class="chip" data-tr-delete title="Remove this track">DELETE</button></div>`);
+    if (isBus) rows.push(`<div class="assign-row"><span></span><button class="chip${t.muted ? ' on' : ''}" data-tr-mute>MUTE</button></div>`);
+    else rows.push(`<div class="assign-row"><span></span><button class="chip${t.muted ? ' on' : ''}" data-tr-mute>MUTE</button><button class="chip${t.solo ? ' on' : ''}" data-tr-solo>SOLO</button><span style="flex:1"></span><button class="chip" data-tr-delete title="Remove this track">DELETE</button></div>`);
 
     // Live effect chain.
     // The cockpit's own effects, then every effect of the host's rack.
@@ -526,7 +545,13 @@ export function createAssign(deps) {
     const hostOptions = hostKinds.map((k) => `<option value="${esc(k)}">${esc(fxSpec(k).label)}</option>`).join('');
     const addOptions = hostKinds.length ? `<optgroup label="SWAY">${own}</optgroup><optgroup label="THEDAW">${hostOptions}</optgroup>` : own;
     rows.push(`<div class="assign-sub">EFFECTS <select data-fx-add class="chip" style="margin-left:auto" aria-label="Add an effect"><option value="">+ add...</option>${addOptions}</select></div>`);
-    if (!t.fx.length) rows.push('<div class="assign-note">No effects yet. Add one, set it, then BIND a parameter to a pad (a held punch), a knob (continuous) or a gesture. Shift+drag on the track marks a section where it engages by itself.</div>');
+    if (!t.fx.length) {
+      rows.push(
+        isBus
+          ? '<div class="assign-note">No effects yet. Add one, set it, then BIND a parameter to a pad (a held punch), a knob (continuous) or a gesture.</div>'
+          : '<div class="assign-note">No effects yet. Add one, set it, then BIND a parameter to a pad (a held punch), a knob (continuous) or a gesture. Shift+drag on the track marks a section where it engages by itself.</div>'
+      );
+    }
     t.fx.forEach((e, ei) => {
       const spec = fxSpec(e.kind);
       const hosted = isHostKind(e.kind);
@@ -551,9 +576,17 @@ export function createAssign(deps) {
       rows.push(`<div class="fx-entry${e.enabled ? '' : ' off'}" data-fx="${e.id}">${fxHead(t, e, ei)}${degraded}${params}</div>`);
     });
 
-    // VST chain (offline render through the sidecar).
-    rows.push('<div class="assign-sub">VST3</div>');
-    if (!vstStatus) {
+    // VST chain: live in a host that runs plugins, else rendered offline
+    // through the sidecar. A bus can only be live.
+    const liveHost = hostVstReady();
+    const live = liveHost && (isBus || t.vst.live !== false);
+    const liveChip = liveHost && !isBus
+      ? `<button class="chip${live ? ' on' : ''}" data-vst-live style="margin-left:auto" title="${live ? 'The plugins play as the track plays. Click to play rendered files instead.' : 'The track plays the files RENDER wrote. Click to play the plugins live.'}">LIVE</button>`
+      : '';
+    rows.push(`<div class="assign-sub">VST3${liveChip}</div>`);
+    if (isBus && !liveHost) {
+      rows.push(`<div class="assign-note">The ${esc(t.name.toLowerCase())} plays through VST3 plugins live inside theDAW. Open this project in theDAW’s SWAY tab to add them.</div>`);
+    } else if (!vstStatus) {
       rows.push('<div class="assign-note">Checking for a pedalboard host...</div>');
       refreshVst();
     } else if (!vstStatus.ok) {
@@ -563,13 +596,27 @@ export function createAssign(deps) {
       t.vst.plugins.forEach((p, pi) => {
         const builtin = p.path.startsWith('builtin:');
         const open = vstParamsOpen && vstParamsOpen.track === t.id && vstParamsOpen.index === pi;
+        const node = live ? transport.vstNode(t.id, p.id) : null;
+        const st = node ? node.status() : null;
         rows.push(
           `<div class="vst-row"><span class="nm" title="${esc(p.path)}">${esc(p.name)}</span>` +
+            (st ? liveBadge(st) : '') +
             `<button class="chip${open ? ' on' : ''}" data-vst-params="${pi}" title="Set the plugin’s parameters here">PARAMS</button>` +
-            (builtin ? '' : `<button class="chip" data-vst-edit="${pi}" title="Open the plugin’s own window; its state is kept when it closes">EDIT</button>`) +
+            (builtin ? '' : `<button class="chip" data-vst-edit="${pi}" title="${node ? 'Open the plugin’s own window; what you set there plays at once and is kept' : 'Open the plugin’s own window; its state is kept when it closes'}">EDIT</button>`) +
             `<button class="chip" data-vst-del="${pi}">✕</button></div>`
         );
-        if (open) {
+        if (open && node) {
+          // The running plugin's own parameter list, normalized 0..1, with
+          // the plugin's words for each value.
+          const list = node.params().filter((x) => !x.hidden && !x.readOnly);
+          if (st.state !== 'live' && !list.length) rows.push('<div class="assign-note">starting the plugin...</div>');
+          else if (!list.length) rows.push('<div class="assign-note">this plugin exposes no parameters</div>');
+          for (const x of list) {
+            const step = x.steps > 0 ? 1 / x.steps : 0.001;
+            const shown = x.text || Number(x.value).toFixed(2);
+            rows.push(`<div class="fx-param"><span title="${esc(x.name)}">${esc(x.name)}</span><input type="range" data-vst-lp="${pi}:${x.index}" min="0" max="1" step="${step}" value="${x.value}"><b>${esc(shown)}</b></div>`);
+          }
+        } else if (open) {
           if (!vstParamsOpen.rows) rows.push('<div class="assign-note">reading parameters...</div>');
           else if (!vstParamsOpen.rows.length) rows.push('<div class="assign-note">this plugin exposes no parameters</div>');
           for (const row of vstParamsOpen.rows || []) {
@@ -580,14 +627,30 @@ export function createAssign(deps) {
         }
       });
       if (t.vst.plugins.length) {
-        const rendered = Object.keys(t.vst.renders).length;
-        const need = new Set(t.clips.map((c) => c.media)).size;
         const bound = boundBy(t, 'vst', 'mix');
         const armed = pendingBind && pendingBind.fx === 'vst' && pendingBind.track === t.id;
-        rows.push(`<div class="assign-row"><span></span><button class="chip" data-vst-render>${vstBusy ? esc(vstBusy) : rendered >= need && need ? 'RE-RENDER' : 'RENDER'}</button><span style="min-width:0">${need ? `${rendered} of ${need} stems rendered` : 'no clips on this track yet'}</span></div>`);
-        rows.push(`<div class="fx-param"><span>wet / dry</span><input type="range" data-vst-mix min="0" max="1" step="0.005" value="${t.vst.mix}"><b class="${bound.length ? 'bound' : ''}">${t.vst.mix.toFixed(2)}</b><button class="chip${armed ? ' armed' : ''}" data-bind="vst:mix">${bound.length ? '●' : 'BIND'}</button></div>`);
-        rows.push('<div class="assign-note">A VST chain is rendered, not live: RENDER writes each stem through the plugins once, and the wet / dry mix is what you play from a pad, a knob or a section.</div>');
+        const mixRow = `<div class="fx-param"><span>wet / dry</span><input type="range" data-vst-mix min="0" max="1" step="0.005" value="${t.vst.mix}"><b class="${bound.length ? 'bound' : ''}">${t.vst.mix.toFixed(2)}</b><button class="chip${armed ? ' armed' : ''}" data-bind="vst:mix">${bound.length ? '●' : 'BIND'}</button></div>`;
+        if (live) {
+          rows.push(mixRow);
+          const wait = Math.round(transport.latency() * 1000);
+          rows.push(
+            isBus
+              ? `<div class="assign-note">The plugins play live as the ${esc(t.name.toLowerCase())} plays, and what you set in a plugin’s window is kept with the project.</div>`
+              : `<div class="assign-note">The plugins play live as the track plays, and what you set in a plugin’s window is kept with the project.${wait > 0 ? ` Every track waits ${wait} ms for the slowest plugin chain, so the stems stay together.` : ''}</div>`
+          );
+        } else {
+          const rendered = Object.keys(t.vst.renders).length;
+          const need = new Set(t.clips.map((c) => c.media)).size;
+          rows.push(`<div class="assign-row"><span></span><button class="chip" data-vst-render>${vstBusy ? esc(vstBusy) : rendered >= need && need ? 'RE-RENDER' : 'RENDER'}</button><span style="min-width:0">${need ? `${rendered} of ${need} stems rendered` : 'no clips on this track yet'}</span></div>`);
+          rows.push(mixRow);
+          rows.push('<div class="assign-note">A VST chain is rendered, not live: RENDER writes each stem through the plugins once, and the wet / dry mix is what you play from a pad, a knob or a section.</div>');
+        }
       }
+    }
+
+    if (isBus) {
+      body.innerHTML = rows.join('');
+      return;
     }
 
     // Sections.
@@ -884,7 +947,10 @@ export function createAssign(deps) {
       }
       if (el.matches('[data-vst-add]')) {
         const p = (vstList || []).find((x) => x.path === el.value);
-        if (p) tr.vst.plugins.push({ path: p.path, name: p.name, params: {}, rawState: null });
+        if (p) {
+          tr.vst.plugins.push({ id: uid('vst'), path: p.path, name: p.name, params: {}, rawState: null, stateHost: null });
+          transport.refreshVst(tr.id);
+        }
         return changed(true);
       }
       return;
@@ -964,6 +1030,22 @@ export function createAssign(deps) {
       if (b) b.textContent = Number(el.value).toFixed(2);
       return;
     }
+    if (el.matches('[data-vst-lp]') && selected && selected.startsWith('track:')) {
+      // A live plugin's parameter: straight to the running plugin, whose
+      // state the next capture keeps.
+      const trackId = ctlParts(selected).key;
+      const tr = trackOf(trackId);
+      const [pi, index] = el.dataset.vstLp.split(':').map(Number);
+      const row = tr && tr.vst.plugins[pi];
+      const node = row && transport.vstNode(trackId, row.id);
+      if (node) {
+        node.setParam(index, Number(el.value));
+        if (Object.keys(tr.vst.renders).length) tr.vst.renders = {}; // the sound changed; renders are stale
+        onChanged && onChanged();
+      }
+      if (b) b.textContent = Number(el.value).toFixed(2);
+      return;
+    }
     if (el.matches('[data-rg-value]')) {
       if (b) b.textContent = fmt(sliderValue(el));
       return;
@@ -972,6 +1054,11 @@ export function createAssign(deps) {
   });
 
   body.addEventListener('click', async (e) => {
+    const busOpen = e.target.closest('[data-bus-open]');
+    if (busOpen) {
+      deps.onSelectTrack && deps.onSelectTrack(busOpen.dataset.busOpen);
+      return;
+    }
     if (!selected) return;
     const t = ctlParts(selected);
     if (e.target.closest('[data-pad-trig]')) {
@@ -1048,11 +1135,18 @@ export function createAssign(deps) {
         return refreshVst(true);
       }
       if (e.target.closest('[data-vst-rescan]')) return refreshVst(true);
+      if (e.target.closest('[data-vst-live]')) {
+        transport.setVstLive(tr.id, tr.vst.live === false);
+        vstParamsOpen = null;
+        return changed(true);
+      }
       const vdel = e.target.closest('[data-vst-del]');
       if (vdel) {
-        tr.vst.plugins.splice(Number(vdel.dataset.vstDel), 1);
+        const [gone] = tr.vst.plugins.splice(Number(vdel.dataset.vstDel), 1);
         tr.vst.renders = {};
         vstParamsOpen = null;
+        transport.refreshVst(tr.id);
+        if (gone && gone.id) hostVstForget(gone.id);
         return changed(true);
       }
       const vpar = e.target.closest('[data-vst-params]');
@@ -1063,6 +1157,11 @@ export function createAssign(deps) {
           return renderBody();
         }
         const p = tr.vst.plugins[pi];
+        if (p && transport.vstNode(tr.id, p.id)) {
+          // A live plugin lists its own parameters; nothing to fetch.
+          vstParamsOpen = { track: tr.id, index: pi, rows: [] };
+          return renderBody();
+        }
         vstParamsOpen = { track: tr.id, index: pi, rows: null };
         renderBody();
         try {
@@ -1080,6 +1179,13 @@ export function createAssign(deps) {
       if (vedit) {
         const p = tr.vst.plugins[Number(vedit.dataset.vstEdit)];
         if (!p) return;
+        const node = transport.vstNode(tr.id, p.id);
+        if (node) {
+          // The running plugin's own window, in theDAW: what is set there is
+          // heard at once and comes back as the row's state.
+          node.openWindow();
+          return;
+        }
         vstBusy = 'EDITING...';
         renderBody();
         try {
@@ -1152,6 +1258,19 @@ export function createAssign(deps) {
     };
   }
 
+  // Whether a control in the panel is held (see refreshLive).
+  let holding = false;
+  let redrawOnRelease = false;
+  body.addEventListener('pointerdown', () => {
+    holding = true;
+  });
+  window.addEventListener('pointerup', () => {
+    holding = false;
+    if (!redrawOnRelease) return;
+    redrawOnRelease = false;
+    renderBody();
+  });
+
   renderHeader();
   renderBody();
 
@@ -1173,6 +1292,17 @@ export function createAssign(deps) {
       return follow;
     },
     refresh() {
+      renderBody();
+    },
+    // A live plugin on the shown track changed (status, latency, parameter
+    // list). Redrawn unless a control in the panel is being held, which a
+    // redraw would pull out from under the pointer; then once it is let go.
+    refreshLive(trackId) {
+      if (!selected || selected !== `track:${trackId}`) return;
+      if (holding) {
+        redrawOnRelease = true;
+        return;
+      }
       renderBody();
     },
     cancelBind() {
